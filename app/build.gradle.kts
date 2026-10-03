@@ -37,6 +37,11 @@ android {
         }
     }
 
+    lint {
+        // Lifecycle 2.8's detector crashes under Kotlin 2 UAST (IncompatibleClassChangeError); Pastille uses no LiveData.
+        disable += "NullSafeMutableLiveData"
+    }
+
     buildFeatures {
         compose = true
     }

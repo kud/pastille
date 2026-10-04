@@ -2,30 +2,54 @@ package app.pastille.ime
 
 import android.graphics.Bitmap
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -41,33 +65,36 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.BrokenImage
 import androidx.compose.material.icons.outlined.ContentPaste
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.EditNote
+import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Keyboard
 import androidx.compose.material.icons.outlined.PushPin
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.TextFields
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
@@ -78,7 +105,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -95,7 +121,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
@@ -106,263 +132,276 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import app.pastille.images.ImageThumbnail
 import app.pastille.model.CategoryRecord
 import app.pastille.model.SnippetRecord
+import app.pastille.settings.KeyboardMode
+import app.pastille.settings.KeyboardStyle
+import app.pastille.settings.TOOLBAR_HEIGHT_DP
+import app.pastille.settings.imageColumns
+import app.pastille.settings.snippetColumns
+import app.pastille.share.isMeaningfulImageName
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
-private val PANEL_CONTENT_HEIGHT = 320.dp
+data class KeyboardUiState(
+    val mode: KeyboardMode = KeyboardMode.Snippets,
+    val snippets: List<SnippetRecord> = emptyList(),
+    val categories: List<CategoryRecord> = emptyList(),
+    val folderId: Long? = null,
+    val imageSources: List<ImageSource> = emptyList(),
+    val sourceId: Long? = null,
+    val images: List<ImageItem> = emptyList(),
+    val hasImagePermission: Boolean = false,
+    val panelState: PanelState = PanelState.Browse,
+    val addSources: AddSources? = null,
+    val strip: StatusStrip? = null,
+    val highlightedSnippetId: Long? = null,
+    val pickerStyle: KeyboardStyle = KeyboardStyle.Auto,
+    val darkTheme: Boolean = true,
+)
+
+interface KeyboardActions {
+    fun onModeChange(mode: KeyboardMode) {}
+    fun onOpenFolder(categoryId: Long?) {}
+    fun onBack() {}
+    fun onOpenAdd() {}
+    fun onOpenApp() {}
+    fun onSwitchKeyboard() {}
+    fun onSnippetTap(snippet: SnippetRecord) {}
+    fun onSnippetLongPress(snippet: SnippetRecord) {}
+    fun onSelectSource(bucketId: Long) {}
+    fun onImageTap(image: ImageItem) {}
+    fun onImageLongPress(image: ImageItem) {}
+    fun onAddFrom(source: AddSource, categoryId: Long?) {}
+    fun onWriteInApp(categoryId: Long?) {}
+    fun onPinToggle(snippet: SnippetRecord) {}
+    fun onEditSnippet(snippet: SnippetRecord) {}
+    fun onDeleteSnippet(snippet: SnippetRecord) {}
+    fun onMoveToCategory(snippetId: Long, categoryId: Long?) {}
+    fun onStripDismiss(key: Long) {}
+    fun onHighlightShown() {}
+    fun onPickStyle(style: KeyboardStyle) {}
+    fun onStyleDone() {}
+    fun onStyleNotNow() {}
+}
+
+object NoKeyboardActions : KeyboardActions
 
 @Composable
 fun KeyboardPanel(
-    snippets: List<SnippetRecord>,
-    categories: List<CategoryRecord>,
-    selectedCategoryId: Long?,
-    openCount: Int,
-    screenshots: List<ScreenshotItem>,
-    hasScreenshotPermission: Boolean,
-    panelState: PanelState,
-    addSources: AddSources?,
-    strip: StatusStrip?,
-    highlightedSnippetId: Long?,
-    onBack: () -> Unit,
-    onOpenAdd: () -> Unit,
-    onSelectCategory: (Long?) -> Unit,
-    onOpenApp: () -> Unit,
-    onOpenPermissions: () -> Unit,
-    onSwitchKeyboard: () -> Unit,
-    onSnippetTap: (SnippetRecord) -> Unit,
-    onSnippetLongPress: (SnippetRecord) -> Unit,
-    onScreenshotTap: (ScreenshotItem) -> Unit,
-    onAddFrom: (AddSource, Long?) -> Unit,
-    onWriteInApp: (Long?) -> Unit,
-    onPinToggle: (SnippetRecord) -> Unit,
-    onEditSnippet: (SnippetRecord) -> Unit,
-    onDeleteSnippet: (SnippetRecord) -> Unit,
-    onMoveToCategory: (Long, Long?) -> Unit,
-    onStripDismiss: (Long) -> Unit,
-    onHighlightShown: () -> Unit,
-    onHighlightNotInFilter: () -> Unit,
+    state: KeyboardUiState,
+    actions: KeyboardActions,
+    contentHeight: Dp,
+    modifier: Modifier = Modifier,
+    previewMode: Boolean = false,
 ) {
-    val selectedCategory = categories.find { it.id == selectedCategoryId }
-    val visible = if (selectedCategory == null) snippets else snippets.filter { it.categoryId == selectedCategory.id }
-    val chipState = rememberLazyListState()
-    val actionsSnippet = (panelState as? PanelState.Actions)?.let { action ->
-        snippets.find { it.id == action.snippetId }
+    val palette = LocalKeyboardPalette.current
+    val actionsSnippet = (state.panelState as? PanelState.Actions)?.let { action ->
+        state.snippets.find { it.id == action.snippetId }
     }
-    val toolbarTitle = when (panelState) {
+    val title = when (val panel = state.panelState) {
         PanelState.Browse -> null
         PanelState.Add -> "New snippet"
-        is PanelState.Actions -> actionsTitle(actionsSnippet)
-        PanelState.ChooseAlbum -> "Choose album"
+        is PanelState.Actions -> actionsSnippet?.let { displayTitle(it.title, it.text).ifBlank { "Image" } }.orEmpty()
+        is PanelState.Preview -> previewTitle(panel.image, state.imageSources.find { it.bucketId == state.sourceId })
+        PanelState.Style -> "Keyboard style"
     }
 
-    LaunchedEffect(openCount, selectedCategoryId, categories) {
-        if (categories.isEmpty()) return@LaunchedEffect
-        val index = if (selectedCategoryId == null) {
-            0
-        } else {
-            categories.indexOfFirst { it.id == selectedCategoryId } + 1
-        }
-        chipState.scrollToItem(index.coerceAtLeast(0))
-    }
-
-    LaunchedEffect(strip?.key) {
-        val current = strip ?: return@LaunchedEffect
+    LaunchedEffect(state.strip?.key) {
+        val current = state.strip ?: return@LaunchedEffect
         delay(if (current.actionLabel != null) 6_000 else 4_000)
-        onStripDismiss(current.key)
+        actions.onStripDismiss(current.key)
     }
 
     Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        contentColor = MaterialTheme.colorScheme.onSurface,
+        modifier = modifier.fillMaxWidth(),
+        color = palette.tray,
+        contentColor = palette.label,
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .windowInsetsPadding(
-                    WindowInsets.navigationBars.union(WindowInsets.displayCutout)
-                        .only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom),
-                )
-                .padding(top = 8.dp, bottom = 8.dp),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().height(48.dp).padding(end = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                if (panelState == PanelState.Browse) {
-                    Box(modifier = Modifier.weight(1f)) {
-                        if (categories.isNotEmpty()) {
-                            LazyRow(
-                                state = chipState,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp),
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                item(key = "all") {
-                                    FilterToggleChip(
-                                        label = "All",
-                                        selected = selectedCategoryId == null,
-                                        onClick = { onSelectCategory(null) },
-                                    )
-                                }
-                                items(categories, key = { it.id }) { category ->
-                                    FilterToggleChip(
-                                        label = category.name,
-                                        selected = selectedCategoryId == category.id,
-                                        onClick = { onSelectCategory(category.id) },
-                                    )
-                                }
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.CenterEnd)
-                                    .width(16.dp)
-                                    .fillMaxHeight()
-                                    .background(
-                                        Brush.horizontalGradient(
-                                            listOf(
-                                                Color.Transparent,
-                                                MaterialTheme.colorScheme.surfaceContainer,
-                                            ),
-                                        ),
-                                    ),
-                            )
-                        }
-                    }
-                    AssistChip(
-                        onClick = onOpenAdd,
-                        label = { Text("New") },
-                        leadingIcon = {
-                            Icon(
-                                Icons.Filled.Add,
-                                contentDescription = null,
-                                modifier = Modifier.size(AssistChipDefaults.IconSize),
-                            )
-                        },
-                        colors = AssistChipDefaults.assistChipColors(
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            labelColor = MaterialTheme.colorScheme.onPrimary,
-                            leadingIconContentColor = MaterialTheme.colorScheme.onPrimary,
-                        ),
-                        border = null,
-                    )
-                } else {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.AutoMirrored.Outlined.ArrowBack,
-                            contentDescription = "Back",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Text(
-                        text = toolbarTitle.orEmpty(),
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-                ToolbarAction(
-                    icon = Icons.AutoMirrored.Outlined.OpenInNew,
-                    label = "Open Pastille",
-                    onClick = onOpenApp,
-                )
-                ToolbarAction(
-                    icon = Icons.Outlined.Keyboard,
-                    label = "Switch keyboard",
-                    onClick = onSwitchKeyboard,
-                )
-            }
-
-            Column(modifier = Modifier.height(PANEL_CONTENT_HEIGHT)) {
-                if (strip != null) {
-                    StatusStripRow(strip = strip, onDismiss = onStripDismiss)
-                }
-                val slideOffset = with(LocalDensity.current) { 8.dp.roundToPx() }
-                AnimatedContent(
-                    targetState = panelState,
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                    transitionSpec = {
-                        (fadeIn(tween(150)) + slideInVertically(tween(150)) { slideOffset }) togetherWith
-                            fadeOut(tween(150))
-                    },
-                    label = "panel",
-                ) { state ->
-                    when (state) {
-                        PanelState.Browse -> BrowseContent(
-                            snippets = snippets,
-                            visible = visible,
-                            selectedCategory = selectedCategory,
-                            selectedCategoryId = selectedCategoryId,
-                            screenshots = screenshots,
-                            hasScreenshotPermission = hasScreenshotPermission,
-                            highlightedSnippetId = highlightedSnippetId,
-                            onOpenAdd = onOpenAdd,
-                            onOpenPermissions = onOpenPermissions,
-                            onSnippetTap = onSnippetTap,
-                            onSnippetLongPress = onSnippetLongPress,
-                            onPinToggle = onPinToggle,
-                            onEditSnippet = onEditSnippet,
-                            onDeleteSnippet = onDeleteSnippet,
-                            onScreenshotTap = onScreenshotTap,
-                            onHighlightShown = onHighlightShown,
-                            onHighlightNotInFilter = onHighlightNotInFilter,
-                        )
-                        PanelState.Add -> AddContent(
-                            sources = addSources,
-                            categories = categories,
-                            initialCategoryId = selectedCategoryId,
-                            onAddFrom = onAddFrom,
-                            onWriteInApp = onWriteInApp,
-                            onOpenApp = onOpenApp,
-                        )
-                        is PanelState.Actions -> ActionsContent(
-                            snippet = snippets.find { it.id == state.snippetId },
-                            categories = categories,
-                            onBack = onBack,
-                            onPinToggle = onPinToggle,
-                            onEditSnippet = onEditSnippet,
-                            onDeleteSnippet = onDeleteSnippet,
-                            onMoveToCategory = { categoryId ->
-                                onMoveToCategory(state.snippetId, categoryId)
-                            },
-                        )
-                        PanelState.ChooseAlbum -> Box(modifier = Modifier.fillMaxSize())
-                    }
+        val insets = if (previewMode) {
+            Modifier
+        } else {
+            Modifier.windowInsetsPadding(
+                WindowInsets.navigationBars.union(WindowInsets.displayCutout)
+                    .only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom),
+            )
+        }
+        Column(modifier = Modifier.fillMaxWidth().then(insets)) {
+            Toolbar(state = state, actions = actions, title = title)
+            Column(modifier = Modifier.fillMaxWidth().height(contentHeight).clipToBounds()) {
+                StatusStripArea(strip = state.strip, actions = actions)
+                Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    PanelContent(state = state, actions = actions, actionsSnippet = actionsSnippet)
                 }
             }
         }
     }
 }
 
-private fun actionsTitle(snippet: SnippetRecord?): String {
-    if (snippet == null) return ""
-    val base = displayTitle(snippet.title, snippet.text)
-    if (base.isNotBlank()) return base
-    return if (snippet.isImage) "Image" else ""
+private fun previewTitle(image: ImageItem, source: ImageSource?): String {
+    if (isMeaningfulImageName(image.displayName)) return image.displayName.substringBeforeLast('.')
+    val label = when {
+        source == null -> "Image"
+        source.isScreenshots -> "Screenshot"
+        else -> source.name
+    }
+    if (image.dateAddedSeconds <= 0) return label
+    val time = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(image.dateAddedSeconds * 1000))
+    return "$label · $time"
+}
+
+@Composable
+private fun Toolbar(state: KeyboardUiState, actions: KeyboardActions, title: String?) {
+    val palette = LocalKeyboardPalette.current
+    val reduceMotion = LocalReduceMotion.current
+    Row(
+        modifier = Modifier.fillMaxWidth().height(TOOLBAR_HEIGHT_DP.dp).background(palette.strip),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(modifier = Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.CenterStart) {
+            AnimatedContent(
+                targetState = title,
+                transitionSpec = {
+                    if (reduceMotion) {
+                        EnterTransition.None togetherWith ExitTransition.None
+                    } else {
+                        fadeIn(tween(150, delayMillis = 60)) togetherWith fadeOut(tween(90))
+                    }
+                },
+                contentAlignment = Alignment.CenterStart,
+                label = "toolbarLeading",
+            ) { current ->
+                if (current == null) {
+                    ModeSwitch(mode = state.mode, onChange = actions::onModeChange)
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = actions::onBack) {
+                            Icon(
+                                Icons.AutoMirrored.Outlined.ArrowBack,
+                                contentDescription = "Back",
+                                tint = palette.icon,
+                            )
+                        }
+                        Text(
+                            text = current,
+                            style = MaterialTheme.typography.titleSmall,
+                            color = palette.label,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+        }
+        Row(
+            modifier = Modifier.weight(1f),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (state.mode == KeyboardMode.Snippets) {
+                ToolbarAction(icon = Icons.Outlined.Add, label = "New snippet", onClick = actions::onOpenAdd)
+            }
+            ToolbarAction(icon = Icons.Outlined.Settings, label = "Open Pastille", onClick = actions::onOpenApp)
+            ToolbarAction(icon = Icons.Outlined.Keyboard, label = "Switch keyboard", onClick = actions::onSwitchKeyboard)
+        }
+    }
+}
+
+@Composable
+private fun ModeSwitch(mode: KeyboardMode, onChange: (KeyboardMode) -> Unit) {
+    Row(
+        modifier = Modifier.padding(start = 8.dp).selectableGroup(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ModeTab(label = "Snippets", selected = mode == KeyboardMode.Snippets) { onChange(KeyboardMode.Snippets) }
+        ModeTab(label = "Images", selected = mode == KeyboardMode.Images) { onChange(KeyboardMode.Images) }
+    }
+}
+
+@Composable
+private fun ModeTab(label: String, selected: Boolean, onClick: () -> Unit) {
+    val palette = LocalKeyboardPalette.current
+    val background by animateColorAsState(
+        targetValue = if (selected) palette.stripButton else Color.Transparent,
+        animationSpec = tween(120),
+        label = "modePill",
+    )
+    Box(
+        modifier = Modifier
+            .height(32.dp)
+            .clip(RoundedCornerShape(50))
+            .background(background)
+            .selectable(selected = selected, role = Role.Tab, onClick = onClick)
+            .padding(horizontal = 12.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            color = if (selected) palette.label else palette.icon,
+            maxLines = 1,
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ToolbarAction(icon: ImageVector, label: String, onClick: () -> Unit) {
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        tooltip = { PlainTooltip { Text(label) } },
+        state = rememberTooltipState(),
+    ) {
+        IconButton(onClick = onClick) {
+            Icon(icon, contentDescription = label, tint = LocalKeyboardPalette.current.icon)
+        }
+    }
+}
+
+@Composable
+private fun StatusStripArea(strip: StatusStrip?, actions: KeyboardActions) {
+    val reduceMotion = LocalReduceMotion.current
+    var shown by remember { mutableStateOf(strip) }
+    if (strip != null) shown = strip
+    AnimatedVisibility(
+        visible = strip != null,
+        enter = if (reduceMotion) {
+            EnterTransition.None
+        } else {
+            expandVertically(tween(180, easing = PastilleMotion.EmphasizedDecelerate)) + fadeIn(tween(180))
+        },
+        exit = if (reduceMotion) ExitTransition.None else shrinkVertically(tween(120)) + fadeOut(tween(120)),
+    ) {
+        shown?.let { StatusStripRow(strip = it, onDismiss = actions::onStripDismiss) }
+    }
 }
 
 @Composable
 private fun StatusStripRow(strip: StatusStrip, onDismiss: (Long) -> Unit) {
+    val palette = LocalKeyboardPalette.current
     Row(
-        modifier = Modifier.fillMaxWidth().height(40.dp)
-            .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+        modifier = Modifier.fillMaxWidth().height(40.dp).background(palette.key),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             text = strip.message,
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface,
+            color = palette.label,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f).padding(start = 16.dp),
@@ -374,126 +413,552 @@ private fun StatusStripRow(strip: StatusStrip, onDismiss: (Long) -> Unit) {
                     onDismiss(strip.key)
                 },
             ) {
-                Text(strip.actionLabel, color = MaterialTheme.colorScheme.primary)
+                Text(strip.actionLabel, color = palette.accent)
+            }
+        }
+    }
+}
+
+// Every content swap stays inside the fixed content height: no size animation.
+private fun <S> AnimatedContentTransitionScope<S>.noSizeChange(transform: ContentTransform): ContentTransform =
+    transform using SizeTransform(clip = false) { _, _ -> snap() }
+
+@Composable
+private fun PanelContent(
+    state: KeyboardUiState,
+    actions: KeyboardActions,
+    actionsSnippet: SnippetRecord?,
+) {
+    val reduceMotion = LocalReduceMotion.current
+    val rise = with(LocalDensity.current) { 24.dp.roundToPx() }
+    AnimatedContent(
+        targetState = state.panelState,
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.TopStart,
+        transitionSpec = {
+            val enterFade = fadeIn(
+                tween(PastilleMotion.ENTER_MS - PastilleMotion.FADE_IN_DELAY_MS, delayMillis = PastilleMotion.FADE_IN_DELAY_MS),
+            )
+            val transform = when {
+                reduceMotion -> EnterTransition.None togetherWith ExitTransition.None
+                targetState != PanelState.Browse ->
+                    (slideInVertically(tween(PastilleMotion.ENTER_MS, easing = PastilleMotion.EmphasizedDecelerate)) { rise } + enterFade) togetherWith
+                        fadeOut(tween(90))
+                else ->
+                    enterFade togetherWith (
+                        slideOutVertically(tween(PastilleMotion.EXIT_MS + 30, easing = PastilleMotion.EmphasizedAccelerate)) { rise } +
+                            fadeOut(tween(PastilleMotion.EXIT_MS + 30))
+                        )
+            }
+            noSizeChange(transform)
+        },
+        label = "panel",
+    ) { panel ->
+        when (panel) {
+            PanelState.Browse -> BrowseContent(state = state, actions = actions)
+            PanelState.Add -> AddContent(
+                sources = state.addSources,
+                categories = state.categories,
+                initialCategoryId = state.folderId,
+                actions = actions,
+            )
+            is PanelState.Actions -> ActionsContent(
+                snippet = actionsSnippet,
+                categories = state.categories,
+                actions = actions,
+            )
+            is PanelState.Preview -> PreviewContent(image = panel.image, actions = actions)
+            PanelState.Style -> StylePickerContent(state = state, actions = actions)
+        }
+    }
+}
+
+@Composable
+private fun BrowseContent(state: KeyboardUiState, actions: KeyboardActions) {
+    val reduceMotion = LocalReduceMotion.current
+    val offset = with(LocalDensity.current) { 32.dp.roundToPx() }
+    AnimatedContent(
+        targetState = state.mode,
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.TopStart,
+        transitionSpec = {
+            val dir = if (targetState == KeyboardMode.Images) 1 else -1
+            val transform = if (reduceMotion) {
+                EnterTransition.None togetherWith ExitTransition.None
+            } else {
+                (
+                    slideInHorizontally(tween(PastilleMotion.ENTER_MS, easing = PastilleMotion.EmphasizedDecelerate)) { dir * offset } +
+                        fadeIn(tween(PastilleMotion.ENTER_MS - PastilleMotion.FADE_IN_DELAY_MS, delayMillis = PastilleMotion.FADE_IN_DELAY_MS))
+                    ) togetherWith (
+                    slideOutHorizontally(tween(PastilleMotion.EXIT_MS, easing = PastilleMotion.EmphasizedAccelerate)) { -dir * offset } +
+                        fadeOut(tween(PastilleMotion.EXIT_MS))
+                    )
+            }
+            noSizeChange(transform)
+        },
+        label = "mode",
+    ) { mode ->
+        when (mode) {
+            KeyboardMode.Snippets -> FolderContent(state = state, actions = actions)
+            KeyboardMode.Images -> ImagesContent(state = state, actions = actions)
+        }
+    }
+}
+
+@Composable
+private fun FolderContent(state: KeyboardUiState, actions: KeyboardActions) {
+    val reduceMotion = LocalReduceMotion.current
+    val folderId = state.folderId?.takeIf { id -> state.categories.any { it.id == id } }
+    AnimatedContent(
+        targetState = folderId,
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.TopStart,
+        transitionSpec = {
+            val opening = targetState != null && initialState == null
+            val enterFade = fadeIn(
+                tween(PastilleMotion.ENTER_MS - PastilleMotion.FADE_IN_DELAY_MS, delayMillis = PastilleMotion.FADE_IN_DELAY_MS),
+            )
+            val enterScale = if (opening) 0.92f else 1.04f
+            val exitScale = if (opening) 1.04f else 0.92f
+            val transform = if (reduceMotion) {
+                EnterTransition.None togetherWith ExitTransition.None
+            } else {
+                (scaleIn(tween(PastilleMotion.ENTER_MS, easing = PastilleMotion.EmphasizedDecelerate), initialScale = enterScale) + enterFade) togetherWith
+                    (
+                        scaleOut(tween(PastilleMotion.EXIT_MS, easing = PastilleMotion.EmphasizedAccelerate), targetScale = exitScale) +
+                            fadeOut(tween(PastilleMotion.EXIT_MS))
+                        )
+            }
+            noSizeChange(transform)
+        },
+        label = "folder",
+    ) { openFolderId ->
+        SnippetsPage(state = state, folderId = openFolderId, actions = actions)
+    }
+}
+
+@Composable
+private fun SnippetsPage(state: KeyboardUiState, folderId: Long?, actions: KeyboardActions) {
+    val haptics = LocalHapticFeedback.current
+    val folder = state.categories.find { it.id == folderId }
+    val folders = if (folder == null) state.categories.sortedBy { it.name.lowercase() } else emptyList()
+    val items = state.snippets.filter { it.categoryId == folder?.id }
+    val gridState = rememberLazyGridState()
+
+    LaunchedEffect(state.highlightedSnippetId, items) {
+        val id = state.highlightedSnippetId ?: return@LaunchedEffect
+        val index = items.indexOfFirst { it.id == id }
+        if (index == -1) return@LaunchedEffect
+        // Let the return-to-Browse transition settle before the flash.
+        delay(PastilleMotion.ENTER_MS.toLong())
+        gridState.animateScrollToItem(folders.size + index)
+        delay(650)
+        actions.onHighlightShown()
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        if (folder != null) {
+            FolderBar(name = folder.name, count = items.size, onBack = { actions.onOpenFolder(null) })
+        }
+        when {
+            folder != null && items.isEmpty() -> EmptyState(
+                message = "Nothing in ${folder.name} yet",
+                button = "New snippet",
+                onClick = actions::onOpenAdd,
+            )
+            folder == null && folders.isEmpty() && items.isEmpty() -> EmptyState(
+                message = "No snippets yet",
+                button = "Add a snippet",
+                onClick = actions::onOpenAdd,
+            )
+            else -> BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(snippetColumns(maxWidth.value.toInt())),
+                    state = gridState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(folders, key = { "folder-${it.id}" }) { category ->
+                        FolderKey(
+                            name = category.name,
+                            count = state.snippets.count { it.categoryId == category.id },
+                            onClick = { actions.onOpenFolder(category.id) },
+                        )
+                    }
+                    items(items, key = { it.id }) { snippet ->
+                        SnippetKey(
+                            snippet = snippet,
+                            highlighted = snippet.id == state.highlightedSnippetId,
+                            onTap = { actions.onSnippetTap(snippet) },
+                            onLongPress = {
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                actions.onSnippetLongPress(snippet)
+                            },
+                            actions = actions,
+                        )
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun BrowseContent(
-    snippets: List<SnippetRecord>,
-    visible: List<SnippetRecord>,
-    selectedCategory: CategoryRecord?,
-    selectedCategoryId: Long?,
-    screenshots: List<ScreenshotItem>,
-    hasScreenshotPermission: Boolean,
-    highlightedSnippetId: Long?,
-    onOpenAdd: () -> Unit,
-    onOpenPermissions: () -> Unit,
-    onSnippetTap: (SnippetRecord) -> Unit,
-    onSnippetLongPress: (SnippetRecord) -> Unit,
-    onPinToggle: (SnippetRecord) -> Unit,
-    onEditSnippet: (SnippetRecord) -> Unit,
-    onDeleteSnippet: (SnippetRecord) -> Unit,
-    onScreenshotTap: (ScreenshotItem) -> Unit,
-    onHighlightShown: () -> Unit,
-    onHighlightNotInFilter: () -> Unit,
-) {
-    val gridState = rememberLazyGridState()
-    val haptics = LocalHapticFeedback.current
-
-    LaunchedEffect(highlightedSnippetId, snippets, selectedCategoryId) {
-        val id = highlightedSnippetId ?: return@LaunchedEffect
-        val current = snippets.find { it.id == id } ?: return@LaunchedEffect
-        if (selectedCategoryId != null && current.categoryId != selectedCategoryId) {
-            onHighlightNotInFilter()
-            return@LaunchedEffect
+private fun FolderBar(name: String, count: Int, onBack: () -> Unit) {
+    val palette = LocalKeyboardPalette.current
+    Row(
+        modifier = Modifier.fillMaxWidth().height(40.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(onClick = onBack) {
+            Icon(
+                Icons.AutoMirrored.Outlined.ArrowBack,
+                contentDescription = "Back to all snippets",
+                tint = palette.icon,
+            )
         }
-        val index = visible.indexOfFirst { it.id == id }
-        if (index == -1) return@LaunchedEffect
-        gridState.animateScrollToItem(index)
-        delay(650)
-        onHighlightShown()
+        Text(
+            text = name,
+            style = MaterialTheme.typography.titleSmall,
+            color = palette.label,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false),
+        )
+        Text(
+            text = " · $count",
+            style = MaterialTheme.typography.labelMedium,
+            color = palette.icon,
+        )
     }
+}
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        if (hasScreenshotPermission) {
-            if (screenshots.isNotEmpty()) {
+@Composable
+private fun EmptyState(message: String, button: String, onClick: () -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(
+            text = message,
+            style = MaterialTheme.typography.bodyMedium,
+            color = LocalKeyboardPalette.current.icon,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(12.dp))
+        FilledTonalButton(onClick = onClick) {
+            Text(button)
+        }
+    }
+}
+
+// Gboard-style key: flat, no ripple, a colour change on press; Expressive palettes also morph the corners.
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun KeyButton(
+    onClick: () -> Unit,
+    onLongClick: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+    highlighted: Boolean = false,
+    container: Color? = null,
+    content: @Composable RowScope.() -> Unit,
+) {
+    val palette = LocalKeyboardPalette.current
+    val reduceMotion = LocalReduceMotion.current
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val color by animateColorAsState(
+        targetValue = container ?: if (pressed) palette.keyPressed else palette.key,
+        animationSpec = tween(60),
+        label = "keyColour",
+    )
+    val flash by animateFloatAsState(
+        targetValue = if (highlighted) 0.25f else 0f,
+        animationSpec = if (reduceMotion) snap() else tween(600),
+        label = "keyFlash",
+    )
+    val corner by animateDpAsState(
+        targetValue = if (pressed && !reduceMotion) 8.dp else 16.dp,
+        animationSpec = spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessMediumLow),
+        label = "keyCorner",
+    )
+    val shape = if (palette.expressive) RoundedCornerShape(corner) else RoundedCornerShape(50)
+    Row(
+        modifier = modifier
+            .height(44.dp)
+            .clip(shape)
+            .background(color)
+            .background(palette.accent.copy(alpha = flash))
+            .combinedClickable(
+                interactionSource = interaction,
+                indication = null,
+                onLongClick = onLongClick,
+                onClick = onClick,
+            )
+            .padding(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+        content = content,
+    )
+}
+
+@Composable
+private fun KeyLabel(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text = text,
+        fontSize = 14.sp,
+        fontWeight = FontWeight.Medium,
+        color = LocalKeyboardPalette.current.label,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = modifier,
+    )
+}
+
+@Composable
+private fun FolderKey(name: String, count: Int, onClick: () -> Unit) {
+    val palette = LocalKeyboardPalette.current
+    KeyButton(onClick = onClick, onLongClick = null) {
+        Icon(
+            Icons.Outlined.Folder,
+            contentDescription = null,
+            tint = palette.icon,
+            modifier = Modifier.size(18.dp),
+        )
+        Spacer(Modifier.width(8.dp))
+        KeyLabel(text = name, modifier = Modifier.weight(1f, fill = false))
+        Spacer(Modifier.width(6.dp))
+        Text(text = count.toString(), fontSize = 12.sp, color = palette.labelSecondary, maxLines = 1)
+    }
+}
+
+@Composable
+private fun SnippetKey(
+    snippet: SnippetRecord,
+    highlighted: Boolean,
+    onTap: () -> Unit,
+    onLongPress: () -> Unit,
+    actions: KeyboardActions,
+) {
+    val palette = LocalKeyboardPalette.current
+    val title = displayTitle(snippet.title, snippet.text).ifBlank { if (snippet.isImage) "Image" else "" }
+    KeyButton(
+        onClick = onTap,
+        onLongClick = onLongPress,
+        highlighted = highlighted,
+        modifier = Modifier.semantics(mergeDescendants = true) {
+            contentDescription = "Insert $title"
+            customActions = listOf(
+                CustomAccessibilityAction(if (snippet.pinned) "Unpin" else "Pin") {
+                    actions.onPinToggle(snippet)
+                    true
+                },
+                CustomAccessibilityAction("Edit") {
+                    actions.onEditSnippet(snippet)
+                    true
+                },
+                CustomAccessibilityAction("Delete") {
+                    actions.onDeleteSnippet(snippet)
+                    true
+                },
+            )
+        },
+    ) {
+        if (snippet.pinned) {
+            Icon(
+                Icons.Filled.PushPin,
+                contentDescription = null,
+                tint = palette.accent,
+                modifier = Modifier.size(14.dp),
+            )
+            Spacer(Modifier.width(6.dp))
+        }
+        if (snippet.isImage) {
+            Icon(
+                Icons.Outlined.Image,
+                contentDescription = null,
+                tint = palette.icon,
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(Modifier.width(6.dp))
+        }
+        KeyLabel(text = title, modifier = Modifier.weight(1f, fill = false))
+    }
+}
+
+@Composable
+private fun ImagesContent(state: KeyboardUiState, actions: KeyboardActions) {
+    val haptics = LocalHapticFeedback.current
+    if (!state.hasImagePermission) {
+        EmptyState(
+            message = "Allow photo access in Pastille to see your images here",
+            button = "Open Pastille",
+            onClick = actions::onOpenApp,
+        )
+        return
+    }
+    val preferred = orderForChips(state.imageSources, maxOthers = 0)
+    val sources = preferred + state.imageSources.filter { source -> preferred.none { it.bucketId == source.bucketId } }
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(imageColumns(maxWidth.value.toInt())),
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            item(key = "sources", span = { GridItemSpan(maxLineSpan) }) {
                 LazyRow(
-                    contentPadding = PaddingValues(horizontal = 12.dp),
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    items(screenshots, key = { it.uri.toString() }) { item ->
-                        ScreenshotThumb(item = item, onTap = { onScreenshotTap(item) })
+                    items(sources, key = { it.bucketId }) { source ->
+                        FilterToggleChip(
+                            label = source.name,
+                            selected = source.bucketId == state.sourceId,
+                            onClick = { actions.onSelectSource(source.bucketId) },
+                        )
                     }
                 }
-                Spacer(Modifier.height(8.dp))
             }
-        } else {
-            TextButton(
-                onClick = onOpenPermissions,
-                modifier = Modifier.padding(horizontal = 12.dp),
-            ) {
-                Text("Allow photo access for screenshots")
-            }
-        }
-
-        if (snippets.isEmpty()) {
-            Column(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp, horizontal = 12.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Text(
-                    text = "No snippets yet",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(12.dp))
-                FilledTonalButton(onClick = onOpenAdd) {
-                    Text("Add a snippet")
-                }
-            }
-        } else if (visible.isEmpty()) {
-            Column(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp, horizontal = 12.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Text(
-                    text = "Nothing in ${selectedCategory?.name.orEmpty()} yet",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                )
-                Spacer(Modifier.height(12.dp))
-                OutlinedButton(onClick = onOpenAdd) {
-                    Text("New snippet")
-                }
-            }
-        } else {
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
-                state = gridState,
-                modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(horizontal = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                items(visible, key = { it.id }) { snippet ->
-                    SnippetCard(
-                        snippet = snippet,
-                        highlighted = snippet.id == highlightedSnippetId,
-                        onTap = { onSnippetTap(snippet) },
-                        onLongPress = {
-                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onSnippetLongPress(snippet)
-                        },
-                        onPinToggle = { onPinToggle(snippet) },
-                        onEdit = { onEditSnippet(snippet) },
-                        onDelete = { onDeleteSnippet(snippet) },
+            if (state.images.isEmpty()) {
+                item(key = "empty", span = { GridItemSpan(maxLineSpan) }) {
+                    Text(
+                        text = "No images here yet",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = LocalKeyboardPalette.current.icon,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
                     )
                 }
             }
+            items(state.images, key = { it.uri.toString() }) { image ->
+                ImageTile(
+                    image = image,
+                    onTap = { actions.onImageTap(image) },
+                    onLongPress = {
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        actions.onImageLongPress(image)
+                    },
+                )
+            }
+        }
+    }
+}
+
+private sealed interface ThumbState {
+    data object Loading : ThumbState
+    data object Failed : ThumbState
+    data class Loaded(val bitmap: Bitmap) : ThumbState
+}
+
+@Composable
+private fun rememberThumb(image: ImageItem, sizePx: Int): ThumbState {
+    val resolver = LocalContext.current.contentResolver
+    var state by remember(image.uri, sizePx) { mutableStateOf<ThumbState>(ThumbState.Loading) }
+    LaunchedEffect(image.uri, sizePx) {
+        val bitmap = withContext(Dispatchers.IO) {
+            ImageSourceReader.loadThumbnail(resolver, image.uri, sizePx)
+        }
+        state = if (bitmap != null) ThumbState.Loaded(bitmap) else ThumbState.Failed
+    }
+    return state
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun ImageTile(image: ImageItem, onTap: () -> Unit, onLongPress: () -> Unit) {
+    val state = rememberThumb(image, 256)
+    Box(
+        modifier = Modifier
+            .aspectRatio(1f)
+            .clip(RoundedCornerShape(8.dp))
+            .combinedClickable(
+                onClickLabel = "Insert image",
+                onLongClickLabel = "Preview",
+                onLongClick = onLongPress,
+                onClick = onTap,
+            ),
+    ) {
+        Crossfade(targetState = state, animationSpec = tween(150), label = "thumb") { current ->
+            when (current) {
+                is ThumbState.Loading -> ThumbPlaceholder(shimmer = true)
+                is ThumbState.Loaded -> Image(
+                    bitmap = current.bitmap.asImageBitmap(),
+                    contentDescription = image.displayName,
+                    contentScale = ContentScale.Crop,
+                    alignment = Alignment.TopCenter,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                is ThumbState.Failed -> ThumbPlaceholder(shimmer = false) {
+                    Icon(
+                        Icons.Outlined.BrokenImage,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = LocalKeyboardPalette.current.icon,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ThumbPlaceholder(shimmer: Boolean, content: @Composable () -> Unit = {}) {
+    val alpha = if (shimmer && !LocalReduceMotion.current) {
+        val pulse by rememberInfiniteTransition(label = "shimmer").animateFloat(
+            initialValue = 0.6f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(animation = tween(900), repeatMode = RepeatMode.Reverse),
+            label = "alpha",
+        )
+        pulse
+    } else {
+        1f
+    }
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .graphicsLayer { this.alpha = alpha }
+            .background(LocalKeyboardPalette.current.key),
+        contentAlignment = Alignment.Center,
+    ) {
+        content()
+    }
+}
+
+@Composable
+private fun PreviewContent(image: ImageItem, actions: KeyboardActions) {
+    val state = rememberThumb(image, 1024)
+    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 8.dp)) {
+        Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+            when (state) {
+                is ThumbState.Loaded -> Image(
+                    bitmap = state.bitmap.asImageBitmap(),
+                    contentDescription = image.displayName,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                is ThumbState.Loading -> Box(Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp))) {
+                    ThumbPlaceholder(shimmer = true)
+                }
+                is ThumbState.Failed -> Icon(
+                    Icons.Outlined.BrokenImage,
+                    contentDescription = null,
+                    tint = LocalKeyboardPalette.current.icon,
+                )
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        FilledTonalButton(
+            onClick = { actions.onImageTap(image) },
+            modifier = Modifier.align(Alignment.CenterHorizontally),
+        ) {
+            Text("Insert")
         }
     }
 }
@@ -503,14 +968,11 @@ private fun AddContent(
     sources: AddSources?,
     categories: List<CategoryRecord>,
     initialCategoryId: Long?,
-    onAddFrom: (AddSource, Long?) -> Unit,
-    onWriteInApp: (Long?) -> Unit,
-    onOpenApp: () -> Unit,
+    actions: KeyboardActions,
 ) {
     var addCategoryId by remember { mutableStateOf(initialCategoryId) }
     Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         val field = sources?.field
-        val fieldEnabled = field is HostRead.Text
         SourceRow(
             icon = Icons.Outlined.TextFields,
             headline = if ((field as? HostRead.Text)?.fromSelection == true) "From selection" else "From text field",
@@ -520,11 +982,10 @@ private fun AddContent(
                 HostRead.Sensitive -> "Not available in this field"
                 HostRead.Unavailable, null -> "This app doesn't share its text"
             },
-            enabled = fieldEnabled,
-            onClick = { onAddFrom(AddSource.Field, addCategoryId) },
+            enabled = field is HostRead.Text,
+            onClick = { actions.onAddFrom(AddSource.Field, addCategoryId) },
         )
         val clip = sources?.clip
-        val clipEnabled = clip is ClipRead.Text
         SourceRow(
             icon = Icons.Outlined.ContentPaste,
             headline = "From clipboard",
@@ -532,30 +993,31 @@ private fun AddContent(
                 is ClipRead.Text -> if (clip.sensitive) "Sensitive content" else previewOf(clip.text)
                 ClipRead.Empty, null -> "Clipboard is empty"
             },
-            enabled = clipEnabled,
-            onClick = { onAddFrom(AddSource.Clipboard, addCategoryId) },
+            enabled = clip is ClipRead.Text,
+            onClick = { actions.onAddFrom(AddSource.Clipboard, addCategoryId) },
         )
         SourceRow(
             icon = Icons.Outlined.EditNote,
             headline = "Write in Pastille app",
             supporting = null,
             enabled = true,
-            onClick = { onWriteInApp(addCategoryId) },
+            onClick = { actions.onWriteInApp(addCategoryId) },
             trailing = {
                 Icon(
                     Icons.AutoMirrored.Outlined.OpenInNew,
                     contentDescription = null,
+                    tint = LocalKeyboardPalette.current.icon,
                     modifier = Modifier.size(18.dp),
                 )
             },
         )
         if (categories.isNotEmpty()) {
-            CategoryChipsRow(
+            FolderChipsRow(
                 categories = categories,
                 selectedId = addCategoryId,
                 onSelect = { addCategoryId = it },
                 trailingNewInApp = true,
-                onOpenApp = onOpenApp,
+                onOpenApp = actions::onOpenApp,
             )
         }
     }
@@ -570,20 +1032,18 @@ private fun SourceRow(
     onClick: () -> Unit,
     trailing: @Composable (() -> Unit)? = null,
 ) {
-    val disabled = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+    val palette = LocalKeyboardPalette.current
+    val disabled = palette.label.copy(alpha = 0.38f)
     ListItem(
         headlineContent = {
-            Text(
-                headline,
-                color = if (enabled) MaterialTheme.colorScheme.onSurface else disabled,
-            )
+            Text(headline, color = if (enabled) palette.label else disabled)
         },
         supportingContent = if (supporting != null) {
             {
                 Text(
                     supporting,
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (enabled) MaterialTheme.colorScheme.onSurfaceVariant else disabled,
+                    color = if (enabled) palette.icon else disabled,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -592,11 +1052,7 @@ private fun SourceRow(
             null
         },
         leadingContent = {
-            Icon(
-                icon,
-                contentDescription = null,
-                tint = if (enabled) MaterialTheme.colorScheme.onSurfaceVariant else disabled,
-            )
+            Icon(icon, contentDescription = null, tint = if (enabled) palette.icon else disabled)
         },
         trailingContent = trailing,
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
@@ -605,22 +1061,21 @@ private fun SourceRow(
 }
 
 @Composable
-private fun CategoryChipsRow(
+private fun FolderChipsRow(
     categories: List<CategoryRecord>,
     selectedId: Long?,
     onSelect: (Long?) -> Unit,
     trailingNewInApp: Boolean = false,
     onOpenApp: () -> Unit = {},
 ) {
+    val palette = LocalKeyboardPalette.current
     Column {
-        HorizontalDivider()
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+        HorizontalDivider(color = palette.key)
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = "Category",
+                text = "Folder",
                 style = MaterialTheme.typography.labelMedium,
+                color = palette.icon,
                 modifier = Modifier.padding(start = 16.dp),
             )
             LazyRow(
@@ -631,12 +1086,12 @@ private fun CategoryChipsRow(
             ) {
                 item(key = "none") {
                     FilterToggleChip(
-                        label = "None",
+                        label = "None (top level)",
                         selected = selectedId == null,
                         onClick = { onSelect(null) },
                     )
                 }
-                items(categories, key = { it.id }) { category ->
+                items(categories.sortedBy { it.name.lowercase() }, key = { it.id }) { category ->
                     FilterToggleChip(
                         label = category.name,
                         selected = selectedId == category.id,
@@ -667,42 +1122,40 @@ private fun CategoryChipsRow(
 private fun ActionsContent(
     snippet: SnippetRecord?,
     categories: List<CategoryRecord>,
-    onBack: () -> Unit,
-    onPinToggle: (SnippetRecord) -> Unit,
-    onEditSnippet: (SnippetRecord) -> Unit,
-    onDeleteSnippet: (SnippetRecord) -> Unit,
-    onMoveToCategory: (Long?) -> Unit,
+    actions: KeyboardActions,
 ) {
     if (snippet == null) {
-        LaunchedEffect(Unit) { onBack() }
+        LaunchedEffect(Unit) { actions.onBack() }
         Box(modifier = Modifier.fillMaxSize())
         return
     }
+    val palette = LocalKeyboardPalette.current
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Box(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                .background(palette.key)
                 .padding(horizontal = 16.dp, vertical = 8.dp),
         ) {
-            if (snippet.isImage) {
-                snippet.imageFile?.let { fileName ->
-                    ImageThumbnail(
-                        fileName = fileName,
-                        contentDescription = snippet.title.ifBlank { "Image snippet" },
-                        modifier = Modifier.fillMaxWidth().height(96.dp).clip(RoundedCornerShape(8.dp)),
-                        targetPx = 256,
-                        contentScale = ContentScale.Crop,
-                    )
-                }
+            val imageFile = snippet.imageFile
+            if (imageFile != null) {
+                ImageThumbnail(
+                    fileName = imageFile,
+                    contentDescription = snippet.title.ifBlank { "Image snippet" },
+                    modifier = Modifier.fillMaxWidth().height(96.dp).clip(RoundedCornerShape(8.dp)),
+                    targetPx = 256,
+                    contentScale = ContentScale.Crop,
+                )
             } else {
                 Text(
-                    text = snippet.text.ifBlank { snippet.title },
+                    text = snippet.text,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = palette.icon,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -715,31 +1168,29 @@ private fun ActionsContent(
             PanelActionButton(
                 icon = if (snippet.pinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
                 label = if (snippet.pinned) "Unpin" else "Pin",
-                onClick = { onPinToggle(snippet) },
+                onClick = { actions.onPinToggle(snippet) },
                 modifier = Modifier.weight(1f),
             )
             PanelActionButton(
                 icon = Icons.Outlined.Edit,
-                label = "Edit",
-                onClick = { onEditSnippet(snippet) },
+                label = "Edit in app",
+                onClick = { actions.onEditSnippet(snippet) },
                 modifier = Modifier.weight(1f),
             )
             PanelActionButton(
                 icon = Icons.Outlined.Delete,
                 label = "Delete",
-                onClick = { onDeleteSnippet(snippet) },
+                onClick = { actions.onDeleteSnippet(snippet) },
                 modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.filledTonalButtonColors(
-                    containerColor = MaterialTheme.colorScheme.errorContainer,
-                    contentColor = MaterialTheme.colorScheme.onErrorContainer,
-                ),
+                container = MaterialTheme.colorScheme.errorContainer,
+                tint = MaterialTheme.colorScheme.onErrorContainer,
             )
         }
         if (categories.isNotEmpty()) {
-            CategoryChipsRow(
+            FolderChipsRow(
                 categories = categories,
                 selectedId = snippet.categoryId,
-                onSelect = onMoveToCategory,
+                onSelect = { actions.onMoveToCategory(snippet.id, it) },
             )
         }
     }
@@ -751,23 +1202,26 @@ private fun PanelActionButton(
     label: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    colors = ButtonDefaults.filledTonalButtonColors(),
+    container: Color? = null,
+    tint: Color? = null,
 ) {
-    FilledTonalButton(
+    val contentColor = tint ?: LocalKeyboardPalette.current.label
+    KeyButton(
         onClick = onClick,
-        modifier = modifier.heightIn(min = 64.dp),
-        contentPadding = PaddingValues(8.dp),
-        colors = colors,
+        onLongClick = null,
+        container = container,
+        modifier = modifier.height(64.dp),
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(icon, contentDescription = null, modifier = Modifier.size(24.dp))
-            Text(label, style = MaterialTheme.typography.labelMedium)
+            Icon(icon, contentDescription = null, tint = contentColor, modifier = Modifier.size(24.dp))
+            Text(label, style = MaterialTheme.typography.labelMedium, color = contentColor, maxLines = 1)
         }
     }
 }
 
 @Composable
 private fun FilterToggleChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    val palette = LocalKeyboardPalette.current
     FilterChip(
         selected = selected,
         onClick = onClick,
@@ -785,192 +1239,164 @@ private fun FilterToggleChip(label: String, selected: Boolean, onClick: () -> Un
         },
         colors = FilterChipDefaults.filterChipColors(
             containerColor = Color.Transparent,
-            labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
-            selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer,
-            selectedLeadingIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            labelColor = palette.icon,
+            selectedContainerColor = palette.stripButton,
+            selectedLabelColor = palette.label,
+            selectedLeadingIconColor = palette.label,
         ),
         border = FilterChipDefaults.filterChipBorder(
             enabled = true,
             selected = selected,
-            borderColor = MaterialTheme.colorScheme.outlineVariant,
+            borderColor = palette.key,
             selectedBorderColor = Color.Transparent,
         ),
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ToolbarAction(icon: ImageVector, label: String, onClick: () -> Unit) {
-    TooltipBox(
-        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
-        tooltip = { PlainTooltip { Text(label) } },
-        state = rememberTooltipState(),
-    ) {
-        IconButton(onClick = onClick) {
-            Icon(icon, contentDescription = label, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
+private fun StylePickerContent(state: KeyboardUiState, actions: KeyboardActions) {
+    val palette = LocalKeyboardPalette.current
+    val available = materialYouAvailable()
+    val choices = buildList {
+        if (available) add(KeyboardStyle.MaterialYou)
+        add(KeyboardStyle.GboardDark)
+        add(KeyboardStyle.GboardLight)
     }
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun SnippetCard(
-    snippet: SnippetRecord,
-    highlighted: Boolean,
-    onTap: () -> Unit,
-    onLongPress: () -> Unit,
-    onPinToggle: () -> Unit,
-    onEdit: () -> Unit,
-    onDelete: () -> Unit,
-) {
-    val container by animateColorAsState(
-        targetValue = if (highlighted) {
-            MaterialTheme.colorScheme.secondaryContainer
+    val selected = resolveStyle(state.pickerStyle, available).let {
+        if (it == KeyboardStyle.Auto) {
+            if (state.darkTheme) KeyboardStyle.GboardDark else KeyboardStyle.GboardLight
         } else {
-            MaterialTheme.colorScheme.surfaceContainerHighest
-        },
-        animationSpec = tween(600),
-        label = "highlight",
-    )
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = container,
-        ),
-        modifier = Modifier.heightIn(min = 56.dp).combinedClickable(onClick = onTap, onLongClick = onLongPress)
-            .semantics {
-                customActions = listOf(
-                    CustomAccessibilityAction(if (snippet.pinned) "Unpin" else "Pin") {
-                        onPinToggle()
-                        true
-                    },
-                    CustomAccessibilityAction("Edit") {
-                        onEdit()
-                        true
-                    },
-                    CustomAccessibilityAction("Delete") {
-                        onDelete()
-                        true
-                    },
-                )
-            },
-    ) {
-        Column(Modifier.padding(12.dp)) {
-            if (snippet.isImage) {
-                snippet.imageFile?.let { fileName ->
-                    ImageThumbnail(
-                        fileName = fileName,
-                        contentDescription = snippet.title.ifBlank { "Image snippet" },
-                        modifier = Modifier.fillMaxWidth().height(56.dp).clip(RoundedCornerShape(8.dp)),
-                        targetPx = 256,
-                        contentScale = ContentScale.Crop,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                }
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (snippet.pinned) {
-                    Icon(
-                        Icons.Filled.PushPin,
-                        contentDescription = "Pinned",
-                        modifier = Modifier.size(14.dp),
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                    Spacer(Modifier.width(4.dp))
-                }
-                Text(
-                    text = if (snippet.isImage) snippet.title.ifBlank { "Image" } else snippet.title.ifBlank { snippet.text },
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+            it
+        }
+    }
+    Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(top = 12.dp)) {
+        Text(
+            text = "Match your keyboard",
+            style = MaterialTheme.typography.titleSmall,
+            color = palette.label,
+            modifier = Modifier.padding(horizontal = 16.dp),
+        )
+        Text(
+            text = "Pick the look closest to your usual keyboard. You can change it later in Pastille settings.",
+            style = MaterialTheme.typography.bodySmall,
+            color = palette.labelSecondary,
+            modifier = Modifier.padding(horizontal = 16.dp),
+        )
+        Spacer(Modifier.height(12.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).selectableGroup(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            choices.forEach { style ->
+                StyleTile(
+                    style = style,
+                    selected = style == selected,
+                    darkTheme = state.darkTheme,
+                    onClick = { actions.onPickStyle(style) },
+                    modifier = Modifier.weight(1f),
                 )
             }
-            if (!snippet.isImage && snippet.title.isNotBlank()) {
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = snippet.text,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TextButton(onClick = actions::onStyleNotNow) {
+                Text("Not now", color = palette.label)
+            }
+            Spacer(Modifier.weight(1f))
+            FilledTonalButton(onClick = actions::onStyleDone) {
+                Text("Done")
             }
         }
     }
 }
 
-private sealed interface ThumbState {
-    data object Loading : ThumbState
-    data object Failed : ThumbState
-    data class Loaded(val bitmap: Bitmap) : ThumbState
+private fun styleName(style: KeyboardStyle): String = when (style) {
+    KeyboardStyle.MaterialYou -> "Material You"
+    KeyboardStyle.GboardDark -> "Dark"
+    KeyboardStyle.GboardLight -> "Light"
+    KeyboardStyle.Auto -> "Auto"
 }
 
 @Composable
-private fun ScreenshotThumb(item: ScreenshotItem, onTap: () -> Unit) {
-    val resolver = LocalContext.current.contentResolver
-    var state by remember(item.uri) { mutableStateOf<ThumbState>(ThumbState.Loading) }
-    LaunchedEffect(item.uri) {
-        val bitmap = withContext(Dispatchers.IO) {
-            ScreenshotReader.loadThumbnail(resolver, item.uri)
-        }
-        state = if (bitmap != null) ThumbState.Loaded(bitmap) else ThumbState.Failed
-    }
-    Box(
-        modifier = Modifier
-            .size(72.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .clickable(onClickLabel = "Insert screenshot", onClick = onTap),
+private fun StyleTile(
+    style: KeyboardStyle,
+    selected: Boolean,
+    darkTheme: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    val current = LocalKeyboardPalette.current
+    val tile = remember(style, darkTheme) { keyboardPalette(context, style, darkTheme) }
+    val name = styleName(style)
+    val shape = RoundedCornerShape(12.dp)
+    Column(
+        modifier = modifier
+            .height(112.dp)
+            .clip(shape)
+            .border(
+                width = if (selected) 2.dp else 1.dp,
+                color = if (selected) current.accent else current.key,
+                shape = shape,
+            )
+            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
+            .semantics { contentDescription = "$name style" },
     ) {
-        Crossfade(targetState = state, animationSpec = tween(150), label = "thumb") { current ->
-            when (current) {
-                is ThumbState.Loading -> ThumbPlaceholder(shimmer = true)
-                is ThumbState.Loaded -> {
-                    Image(
-                        bitmap = current.bitmap.asImageBitmap(),
-                        contentDescription = item.displayName,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
-                    )
+        Box(modifier = Modifier.weight(1f).fillMaxWidth().background(tile.tray)) {
+            Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth().height(16.dp).background(tile.strip),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    repeat(3) {
+                        Box(Modifier.size(4.dp).clip(CircleShape).background(tile.icon))
+                    }
                 }
-                is ThumbState.Failed -> {
-                    ThumbPlaceholder(shimmer = false) {
-                        Icon(
-                            Icons.Outlined.BrokenImage,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                Column(
+                    modifier = Modifier.padding(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    repeat(2) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .height(14.dp)
+                                .clip(RoundedCornerShape(50))
+                                .background(tile.key),
                         )
                     }
                 }
             }
+            if (selected) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 20.dp, end = 4.dp)
+                        .size(18.dp)
+                        .clip(CircleShape)
+                        .background(current.accent),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Filled.Check,
+                        contentDescription = null,
+                        tint = current.onAccent,
+                        modifier = Modifier.size(12.dp),
+                    )
+                }
+            }
         }
-    }
-}
-
-@Composable
-private fun ThumbPlaceholder(shimmer: Boolean, content: @Composable () -> Unit = {}) {
-    val alpha = if (shimmer) {
-        val pulse by rememberInfiniteTransition(label = "shimmer").animateFloat(
-            initialValue = 0.6f,
-            targetValue = 1f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(900),
-                repeatMode = RepeatMode.Reverse,
-            ),
-            label = "alpha",
+        Text(
+            text = name,
+            style = MaterialTheme.typography.labelMedium,
+            color = current.label,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
         )
-        pulse
-    } else {
-        1f
-    }
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .graphicsLayer { this.alpha = alpha }
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh),
-        contentAlignment = Alignment.Center,
-    ) {
-        content()
     }
 }

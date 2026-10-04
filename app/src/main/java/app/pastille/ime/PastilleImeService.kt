@@ -10,10 +10,14 @@ import android.net.Uri
 import android.os.Build
 import android.view.KeyEvent
 import android.view.View
+import android.view.WindowManager
+import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.ExtractedTextRequest
 import android.view.inputmethod.InputMethodManager
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -21,10 +25,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.neverEqualPolicy
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.inputmethod.EditorInfoCompat
 import androidx.core.view.inputmethod.InputConnectionCompat
 import androidx.core.view.inputmethod.InputContentInfoCompat
@@ -44,10 +52,12 @@ import app.pastille.data.SnippetRepository
 import app.pastille.images.ImageStore
 import app.pastille.images.mimeTypeForFile
 import app.pastille.model.SnippetRecord
+import app.pastille.settings.KeyboardMode
+import app.pastille.settings.KeyboardStyle
 import app.pastille.settings.PastilleSettings
+import app.pastille.settings.TOOLBAR_HEIGHT_DP
+import app.pastille.settings.panelHeightDp
 import app.pastille.share.MAX_TEXT_CHARS
-import app.pastille.share.autoTitle
-import app.pastille.ui.theme.PastilleTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -63,7 +73,8 @@ class PastilleImeService :
     InputMethodService(),
     LifecycleOwner,
     SavedStateRegistryOwner,
-    ViewModelStoreOwner {
+    ViewModelStoreOwner,
+    KeyboardActions {
 
     private val lifecycleRegistry = LifecycleRegistry(this)
     private val savedStateController = SavedStateRegistryController.create(this)
@@ -73,7 +84,7 @@ class PastilleImeService :
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var refreshJob: Job? = null
 
-    // Bumped each time the keyboard opens, so the screenshot row picks up new ones.
+    // Bumped each time the keyboard opens, so the image grid picks up new ones.
     private val openCount = mutableIntStateOf(0)
 
     // Mirrors the service configuration, so the panel follows dark mode and wallpaper colours without recreating the view.
@@ -84,6 +95,11 @@ class PastilleImeService :
     private val settings by lazy { PastilleSettings.forContext(this) }
 
     private val panelState = mutableStateOf<PanelState>(PanelState.Browse)
+    private val mode = mutableStateOf(KeyboardMode.Snippets)
+    private val folderId = mutableStateOf<Long?>(null)
+    private val sourceId = mutableStateOf<Long?>(null)
+    private val pickerStyle = mutableStateOf(KeyboardStyle.Auto)
+    private val reduceMotion = mutableStateOf(false)
     private val addSources = mutableStateOf<AddSources?>(null)
     private val strip = mutableStateOf<StatusStrip?>(null)
     private val highlightedSnippetId = mutableStateOf<Long?>(null)
@@ -111,6 +127,9 @@ class PastilleImeService :
     override fun onCreate() {
         super.onCreate()
         configuration.value = Configuration(resources.configuration)
+        mode.value = settings.keyboardMode
+        folderId.value = settings.keyboardCategoryId
+        sourceId.value = settings.imageSourceBucketId
         savedStateController.performAttach()
         savedStateController.performRestore(null)
         moveLifecycleTo(Lifecycle.State.CREATED)
@@ -130,20 +149,21 @@ class PastilleImeService :
             view.setViewTreeViewModelStoreOwner(this)
         }
         view.setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
-        view.setContent {
-            val nightMode = configuration.value.uiMode and Configuration.UI_MODE_NIGHT_MASK
-            PastilleTheme(darkTheme = nightMode == Configuration.UI_MODE_NIGHT_YES) {
-                PanelHost()
-            }
-        }
+        view.setContent { PanelHost() }
         return view
     }
 
-    override fun onStartInputView(info: android.view.inputmethod.EditorInfo?, restarting: Boolean) {
+    override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
         openCount.intValue++
+        reduceMotion.value = PastilleMotion.reduceMotion()
         if (!restarting) {
-            panelState.value = PanelState.Browse
+            if (settings.keyboardStyleChosen) {
+                panelState.value = PanelState.Browse
+            } else {
+                pickerStyle.value = settings.keyboardStyle
+                panelState.value = PanelState.Style
+            }
         }
         hasSelection = info != null &&
             info.initialSelStart >= 0 &&
@@ -153,9 +173,21 @@ class PastilleImeService :
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
-        if (keyCode == KeyEvent.KEYCODE_BACK && isInputViewShown && panelState.value != PanelState.Browse) {
-            panelState.value = PanelState.Browse
-            return true
+        if (keyCode == KeyEvent.KEYCODE_BACK && isInputViewShown) {
+            when {
+                panelState.value == PanelState.Style -> {
+                    onStyleNotNow()
+                    return true
+                }
+                panelState.value != PanelState.Browse -> {
+                    panelState.value = PanelState.Browse
+                    return true
+                }
+                mode.value == KeyboardMode.Snippets && folderId.value != null -> {
+                    onOpenFolder(null)
+                    return true
+                }
+            }
         }
         return super.onKeyDown(keyCode, event)
     }
@@ -207,6 +239,19 @@ class PastilleImeService :
         viewModelStoreHolder.clear()
         serviceScope.cancel()
         super.onDestroy()
+    }
+
+    // Gboard paints the gesture-bar area with its tray colour; do the same so there's no black band.
+    private fun applyNavigationBar(palette: KeyboardPalette) {
+        val window = window.window ?: return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+            WindowCompat.setDecorFitsSystemWindows(window, false)
+        } else {
+            window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
+            @Suppress("DEPRECATION")
+            window.navigationBarColor = palette.tray.toArgb()
+        }
+        WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightNavigationBars = palette.isLight
     }
 
     private fun showStrip(message: String, actionLabel: String? = null, onAction: (() -> Unit)? = null) {
@@ -267,13 +312,38 @@ class PastilleImeService :
         }
     }
 
-    private fun openAdd() {
+    private fun showSnippet(id: Long, categoryId: Long?) {
+        mode.value = KeyboardMode.Snippets
+        settings.keyboardMode = KeyboardMode.Snippets
+        onOpenFolder(categoryId)
+        highlightedSnippetId.value = id
+    }
+
+    override fun onModeChange(mode: KeyboardMode) {
+        this.mode.value = mode
+        settings.keyboardMode = mode
+    }
+
+    override fun onOpenFolder(categoryId: Long?) {
+        folderId.value = categoryId
+        settings.keyboardCategoryId = categoryId
+    }
+
+    override fun onBack() {
+        if (panelState.value == PanelState.Style) {
+            onStyleNotNow()
+        } else {
+            panelState.value = PanelState.Browse
+        }
+    }
+
+    override fun onOpenAdd() {
         refreshJob?.cancel()
         panelState.value = PanelState.Add
         addSources.value = AddSources(readHostText(), readClipboard())
     }
 
-    private fun saveFrom(source: AddSource, categoryId: Long?) {
+    override fun onAddFrom(source: AddSource, categoryId: Long?) {
         val raw = when (source) {
             AddSource.Field -> (readHostText() as? HostRead.Text)?.text
             AddSource.Clipboard -> (readClipboard() as? ClipRead.Text)?.text
@@ -292,18 +362,18 @@ class PastilleImeService :
                     showStrip(
                         message = "Already saved as \"${displayTitle(duplicate.title, duplicate.text)}\"",
                         actionLabel = "Show",
-                        onAction = { highlightedSnippetId.value = duplicate.id },
+                        onAction = { showSnippet(duplicate.id, duplicate.categoryId) },
                     )
                 }
                 return@launch
             }
-            val title = autoTitle(raw)
-            val id = repository.upsert(SnippetRecord(title = title, text = raw, categoryId = categoryId))
+            val id = repository.upsert(SnippetRecord(text = raw, categoryId = categoryId))
+            val title = repository.get(id)?.title.orEmpty()
             withContext(Dispatchers.Main) {
                 if (destroyed) return@withContext
                 panelState.value = PanelState.Browse
                 showStrip(
-                    message = "Saved \"${displayTitle(title, raw)}\"",
+                    message = "Saved \"$title\"",
                     actionLabel = "Undo",
                     onAction = {
                         serviceScope.launch {
@@ -315,12 +385,12 @@ class PastilleImeService :
                         }
                     },
                 )
-                highlightedSnippetId.value = id
+                showSnippet(id, categoryId)
             }
         }
     }
 
-    private fun togglePin(snippet: SnippetRecord) {
+    override fun onPinToggle(snippet: SnippetRecord) {
         serviceScope.launch {
             SnippetRepository.forContext(this@PastilleImeService).setPinned(listOf(snippet.id), !snippet.pinned)
             withContext(Dispatchers.Main) {
@@ -330,12 +400,15 @@ class PastilleImeService :
         }
     }
 
-    private fun editSnippet(snippet: SnippetRecord) {
-        openSnippetInEditor(snippet)
+    override fun onEditSnippet(snippet: SnippetRecord) {
+        val intent = Intent(this, MainActivity::class.java)
+            .putExtra(MainActivity.EXTRA_EDIT_SNIPPET_ID, snippet.id)
+            .addFlags(MainActivity.LAUNCH_FLAGS)
+        startActivity(intent)
         panelState.value = PanelState.Browse
     }
 
-    private fun deleteSnippet(snippet: SnippetRecord) {
+    override fun onDeleteSnippet(snippet: SnippetRecord) {
         serviceScope.launch {
             SnippetRepository.forContext(this@PastilleImeService).delete(snippet.id)
             withContext(Dispatchers.Main) {
@@ -354,91 +427,133 @@ class PastilleImeService :
         }
     }
 
-    private fun moveSnippet(id: Long, categoryId: Long?) {
+    override fun onMoveToCategory(snippetId: Long, categoryId: Long?) {
         serviceScope.launch {
             val repository = SnippetRepository.forContext(this@PastilleImeService)
-            repository.setCategory(listOf(id), categoryId)
-            val name = categoryId?.let { repository.getCategories().find { it.id == categoryId }?.name }
+            repository.setCategory(listOf(snippetId), categoryId)
+            val name = categoryId?.let { id -> repository.getCategories().find { it.id == id }?.name }
             withContext(Dispatchers.Main) {
                 if (destroyed) return@withContext
-                showStrip(if (name != null) "Moved to $name" else "Moved to All")
+                showStrip(if (name != null) "Moved to $name" else "Moved to the top level")
             }
         }
+    }
+
+    override fun onSnippetLongPress(snippet: SnippetRecord) {
+        panelState.value = PanelState.Actions(snippet.id)
+    }
+
+    override fun onSelectSource(bucketId: Long) {
+        sourceId.value = bucketId
+        settings.imageSourceBucketId = bucketId
+    }
+
+    override fun onImageLongPress(image: ImageItem) {
+        panelState.value = PanelState.Preview(image)
+    }
+
+    override fun onStripDismiss(key: Long) {
+        if (strip.value?.key == key) strip.value = null
+    }
+
+    override fun onHighlightShown() {
+        highlightedSnippetId.value = null
+    }
+
+    override fun onPickStyle(style: KeyboardStyle) {
+        pickerStyle.value = style
+    }
+
+    override fun onStyleDone() {
+        settings.keyboardStyle = pickerStyle.value
+        settings.keyboardStyleChosen = true
+        panelState.value = PanelState.Browse
+    }
+
+    override fun onStyleNotNow() {
+        settings.keyboardStyle = KeyboardStyle.Auto
+        settings.keyboardStyleChosen = true
+        panelState.value = PanelState.Browse
     }
 
     @Composable
     private fun PanelHost() {
         val context = LocalContext.current
         val repository = remember { SnippetRepository.forContext(context) }
-        val flow = remember { repository.observeSnippets() }
-        val snippets by flow.collectAsState(initial = emptyList())
+        val snippetsFlow = remember { repository.observeSnippets() }
+        val snippets by snippetsFlow.collectAsState(initial = emptyList())
         val categoriesFlow = remember { repository.observeCategories() }
         val categories by categoriesFlow.collectAsState(initial = emptyList())
-        var selectedCategoryId by remember { mutableStateOf(settings.keyboardCategoryId) }
-        val effectiveCategoryId = selectedCategoryId?.takeIf { id -> categories.any { it.id == id } }
-        var screenshots by remember { mutableStateOf(emptyList<ScreenshotItem>()) }
-        var canReadScreenshots by remember {
-            mutableStateOf(ScreenshotReader.hasPermission(context))
-        }
+        val settingsFlow = remember { settings.changes() }
+        val settingsTick by settingsFlow.collectAsState(initial = Unit)
+        var imageSources by remember { mutableStateOf(emptyList<ImageSource>()) }
+        var images by remember { mutableStateOf(emptyList<ImageItem>()) }
+        var hasImagePermission by remember { mutableStateOf(ImageSourceReader.hasPermission(context)) }
 
-        LaunchedEffect(openCount.intValue) {
-            val items = withContext(Dispatchers.IO) {
-                runCatching { ScreenshotReader.readRecent(context) }.getOrDefault(emptyList())
+        val config = configuration.value
+        val darkTheme = config.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+        val landscape = config.orientation == Configuration.ORIENTATION_LANDSCAPE
+        val savedStyle = remember(settingsTick) { settings.keyboardStyle }
+        val heightPreset = remember(settingsTick, landscape) {
+            if (landscape) settings.panelHeightLandscape else settings.panelHeightPortrait
+        }
+        val style = if (panelState.value == PanelState.Style) pickerStyle.value else savedStyle
+        val palette = remember(style, darkTheme, config) { keyboardPalette(context, style, darkTheme) }
+        val totalHeight = panelHeightDp(heightPreset, landscape, config.screenHeightDp)
+
+        SideEffect { applyNavigationBar(palette) }
+
+        LaunchedEffect(openCount.intValue, mode.value) {
+            if (mode.value != KeyboardMode.Images) return@LaunchedEffect
+            hasImagePermission = ImageSourceReader.hasPermission(context)
+            imageSources = withContext(Dispatchers.IO) {
+                runCatching { ImageSourceReader.listSources(context) }.getOrDefault(emptyList())
             }
-            screenshots = items
-            canReadScreenshots = ScreenshotReader.hasPermission(context)
+            val resolved = resolveSource(imageSources, sourceId.value)
+            if (resolved?.bucketId != sourceId.value) sourceId.value = resolved?.bucketId
         }
 
-        LaunchedEffect(categories, selectedCategoryId) {
-            if (selectedCategoryId != null && categories.isNotEmpty() &&
-                categories.none { it.id == selectedCategoryId }
-            ) {
-                selectedCategoryId = null
-                settings.keyboardCategoryId = null
+        LaunchedEffect(openCount.intValue, mode.value, sourceId.value) {
+            if (mode.value != KeyboardMode.Images) return@LaunchedEffect
+            val bucket = sourceId.value ?: return@LaunchedEffect
+            images = withContext(Dispatchers.IO) {
+                runCatching { ImageSourceReader.readRecent(context, bucket) }.getOrDefault(emptyList())
             }
         }
 
-        KeyboardPanel(
+        LaunchedEffect(categories, folderId.value) {
+            val current = folderId.value ?: return@LaunchedEffect
+            if (categories.isNotEmpty() && categories.none { it.id == current }) onOpenFolder(null)
+        }
+
+        val state = KeyboardUiState(
+            mode = mode.value,
             snippets = snippets,
             categories = categories,
-            selectedCategoryId = effectiveCategoryId,
-            openCount = openCount.intValue,
-            screenshots = screenshots,
-            hasScreenshotPermission = canReadScreenshots,
+            folderId = folderId.value,
+            imageSources = imageSources,
+            sourceId = sourceId.value,
+            images = images,
+            hasImagePermission = hasImagePermission,
             panelState = panelState.value,
             addSources = addSources.value,
             strip = strip.value,
             highlightedSnippetId = highlightedSnippetId.value,
-            onBack = { panelState.value = PanelState.Browse },
-            onOpenAdd = { openAdd() },
-            onSelectCategory = {
-                selectedCategoryId = it
-                settings.keyboardCategoryId = it
-            },
-            onOpenApp = ::openApp,
-            onOpenPermissions = ::openApp,
-            onSwitchKeyboard = ::switchKeyboard,
-            onSnippetTap = ::pasteSnippet,
-            onSnippetLongPress = { panelState.value = PanelState.Actions(it.id) },
-            onScreenshotTap = ::shareScreenshot,
-            onAddFrom = ::saveFrom,
-            onWriteInApp = ::openNewSnippet,
-            onPinToggle = ::togglePin,
-            onEditSnippet = ::editSnippet,
-            onDeleteSnippet = ::deleteSnippet,
-            onMoveToCategory = ::moveSnippet,
-            onStripDismiss = { key ->
-                if (strip.value?.key == key) strip.value = null
-            },
-            onHighlightShown = { highlightedSnippetId.value = null },
-            onHighlightNotInFilter = {
-                selectedCategoryId = null
-                settings.keyboardCategoryId = null
-            },
+            pickerStyle = pickerStyle.value,
+            darkTheme = darkTheme,
         )
+        KeyboardTheme(palette = palette) {
+            CompositionLocalProvider(LocalReduceMotion provides reduceMotion.value) {
+                KeyboardPanel(
+                    state = state,
+                    actions = this@PastilleImeService,
+                    contentHeight = (totalHeight - TOOLBAR_HEIGHT_DP).dp,
+                )
+            }
+        }
     }
 
-    private fun pasteSnippet(snippet: SnippetRecord) {
+    override fun onSnippetTap(snippet: SnippetRecord) {
         if (snippet.isImage) {
             insertImageSnippet(snippet)
             return
@@ -469,14 +584,7 @@ class PastilleImeService :
         insertImage(uri, mimeTypeForFile(name), snippet.title.ifBlank { "Pastille image" })
     }
 
-    private fun openSnippetInEditor(snippet: SnippetRecord) {
-        val intent = Intent(this, MainActivity::class.java)
-            .putExtra(MainActivity.EXTRA_EDIT_SNIPPET_ID, snippet.id)
-            .addFlags(MainActivity.LAUNCH_FLAGS)
-        startActivity(intent)
-    }
-
-    private fun openNewSnippet(categoryId: Long?) {
+    override fun onWriteInApp(categoryId: Long?) {
         val intent = Intent(this, MainActivity::class.java)
             .putExtra(MainActivity.EXTRA_NEW_SNIPPET, true)
             .addFlags(MainActivity.LAUNCH_FLAGS)
@@ -484,27 +592,29 @@ class PastilleImeService :
             intent.putExtra(MainActivity.EXTRA_CATEGORY_ID, categoryId)
         }
         startActivity(intent)
+        panelState.value = PanelState.Browse
     }
 
-    private fun shareScreenshot(item: ScreenshotItem) {
+    override fun onImageTap(image: ImageItem) {
         serviceScope.launch {
             val mimeType = try {
-                contentResolver.getType(item.uri)
+                contentResolver.getType(image.uri)
             } catch (_: Exception) {
                 null
             } ?: "image/png"
             val contentUri = try {
-                copyToSharedCache(item, mimeType)
+                copyToSharedCache(image, mimeType)
             } catch (_: Exception) {
                 null
             }
             withContext(Dispatchers.Main) {
                 if (destroyed) return@withContext
                 if (contentUri == null) {
-                    showStrip("Couldn't read that screenshot")
+                    showStrip("Couldn't read that image")
                     return@withContext
                 }
-                insertImage(contentUri, mimeType, "Pastille screenshot")
+                if (panelState.value is PanelState.Preview) panelState.value = PanelState.Browse
+                insertImage(contentUri, mimeType, "Pastille image")
             }
         }
     }
@@ -543,29 +653,29 @@ class PastilleImeService :
         showStrip("Copied, long-press to paste")
     }
 
-    private fun copyToSharedCache(item: ScreenshotItem, mimeType: String): Uri {
+    private fun copyToSharedCache(image: ImageItem, mimeType: String): Uri {
         val dir = File(cacheDir, "shared").apply { mkdirs() }
         val extension = if (mimeType == "image/jpeg") "jpg" else mimeType.substringAfter('/')
-        val out = File(dir, "screenshot-${System.currentTimeMillis()}.$extension")
-        val input = contentResolver.openInputStream(item.uri)
-            ?: throw IOException("Cannot open ${item.uri}")
+        val out = File(dir, "image-${System.currentTimeMillis()}.$extension")
+        val input = contentResolver.openInputStream(image.uri)
+            ?: throw IOException("Cannot open ${image.uri}")
         input.use { stream ->
             out.outputStream().use { output -> stream.copyTo(output) }
         }
         return FileProvider.getUriForFile(this, "$packageName.fileprovider", out)
     }
 
-    private fun openApp() {
+    override fun onOpenApp() {
         val intent = Intent(this, MainActivity::class.java)
             .addFlags(MainActivity.LAUNCH_FLAGS)
         startActivity(intent)
     }
 
     private fun returnToPreviousKeyboardIfWanted() {
-        if (settings.returnToPreviousKeyboard) switchKeyboard()
+        if (settings.returnToPreviousKeyboard) onSwitchKeyboard()
     }
 
-    private fun switchKeyboard() {
+    override fun onSwitchKeyboard() {
         if (destroyed) return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             switchToPreviousInputMethod()

@@ -73,7 +73,10 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import sh.calvin.reorderable.ReorderableItem
+import sh.calvin.reorderable.rememberReorderableLazyGridState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.SwapVert
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.PhotoCamera
 import androidx.compose.material.icons.rounded.Screenshot
@@ -218,6 +221,8 @@ interface KeyboardActions {
     fun onSetReturn(image: Boolean, enabled: Boolean) {}
     fun onOpenImageFolders() {}
     fun onSetModeEnabled(mode: KeyboardMode, enabled: Boolean) {}
+    fun onOpenReorder() {}
+    fun onReorderSnippets(shown: List<SnippetRecord>, newOrder: List<Long>) {}
     fun onSetShownSources(bucketIds: Set<Long>) {}
 }
 
@@ -243,6 +248,7 @@ fun KeyboardPanel(
         PanelState.Style -> "Keyboard style"
         PanelState.Settings -> "Keyboard settings"
         PanelState.ImageFolders -> "Image folders"
+        PanelState.Reorder -> "Hold and drag to reorder"
     }
 
     LaunchedEffect(state.strip?.key) {
@@ -499,6 +505,7 @@ private fun PanelContent(
             PanelState.Style -> StylePickerContent(state = state, actions = actions)
             PanelState.Settings -> SettingsContent(state = state, actions = actions)
             PanelState.ImageFolders -> ImageFoldersContent(state = state, actions = actions)
+            PanelState.Reorder -> ReorderContent(state = state, actions = actions)
         }
     }
 }
@@ -793,13 +800,14 @@ private fun SnippetTile(
     onLongPress: () -> Unit,
     actions: KeyboardActions,
     modifier: Modifier = Modifier,
+    interactive: Boolean = true,
 ) {
     val palette = LocalKeyboardPalette.current
     val title = displayTitle(snippet.title, snippet.text).ifBlank { if (snippet.isImage) "Image" else "" }
     val imageFile = snippet.imageFile
     Tile(
-        onClick = onTap,
-        onLongClick = onLongPress,
+        onClick = if (interactive) onTap else ({}),
+        onLongClick = if (interactive) onLongPress else null,
         highlighted = highlighted,
         modifier = modifier.semantics(mergeDescendants = true) {
             contentDescription = "Insert $title"
@@ -1224,6 +1232,7 @@ private fun ActionsContent(
                 .padding(horizontal = 12.dp)
                 .clip(RoundedCornerShape(12.dp))
                 .background(palette.key)
+                .clickable(onClickLabel = "Edit in app") { actions.onEditSnippet(snippet) }
                 .padding(horizontal = 16.dp, vertical = 8.dp),
         ) {
             val imageFile = snippet.imageFile
@@ -1253,6 +1262,12 @@ private fun ActionsContent(
                 icon = Icons.Rounded.Edit,
                 label = "Edit in app",
                 onClick = { actions.onEditSnippet(snippet) },
+                modifier = Modifier.weight(1f),
+            )
+            PanelActionButton(
+                icon = Icons.Rounded.SwapVert,
+                label = "Reorder",
+                onClick = actions::onOpenReorder,
                 modifier = Modifier.weight(1f),
             )
             PanelActionButton(
@@ -1663,4 +1678,51 @@ private fun sourceIcon(source: ImageSource): ImageVector = when {
     source.name.equals("Camera", ignoreCase = true) -> Icons.Rounded.PhotoCamera
     source.name.startsWith("Download", ignoreCase = true) -> Icons.Rounded.Download
     else -> Icons.Rounded.PhotoLibrary
+}
+
+@Composable
+private fun ReorderContent(state: KeyboardUiState, actions: KeyboardActions) {
+    val haptics = LocalHapticFeedback.current
+    val folderId = state.folderId?.takeIf { id -> state.categories.any { it.id == id } }
+    val shown = if (folderId == null) state.snippets else state.snippets.filter { it.categoryId == folderId }
+    var order by remember(shown) { mutableStateOf(shown) }
+    val gridState = rememberLazyGridState()
+    val reorderState = rememberReorderableLazyGridState(gridState) { from, to ->
+        val fromIndex = order.indexOfFirst { it.id == from.key }
+        val toIndex = order.indexOfFirst { it.id == to.key }
+        if (fromIndex >= 0 && toIndex >= 0) order = order.toMutableList().apply { add(toIndex, removeAt(fromIndex)) }
+    }
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(tileColumns(maxWidth.value.toInt())),
+            state = gridState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 6.dp, end = 6.dp, top = 8.dp, bottom = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            items(order, key = { it.id }) { snippet ->
+                ReorderableItem(reorderState, key = snippet.id) { dragging ->
+                    val scale by animateFloatAsState(if (dragging) 1.04f else 1f, label = "dragScale")
+                    SnippetTile(
+                        snippet = snippet,
+                        highlighted = dragging,
+                        onTap = {},
+                        onLongPress = {},
+                        actions = actions,
+                        interactive = false,
+                        modifier = Modifier
+                            .graphicsLayer { scaleX = scale; scaleY = scale }
+                            .longPressDraggableHandle(
+                                onDragStarted = { haptics.performHapticFeedback(HapticFeedbackType.LongPress) },
+                                onDragStopped = {
+                                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    actions.onReorderSnippets(shown, order.map { it.id })
+                                },
+                            ),
+                    )
+                }
+            }
+        }
+    }
 }

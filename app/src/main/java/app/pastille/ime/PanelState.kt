@@ -8,4 +8,5 @@ sealed interface PanelState {
     data object Style : PanelState
     data object Settings : PanelState
     data object ImageFolders : PanelState
+    data object Reorder : PanelState
 }

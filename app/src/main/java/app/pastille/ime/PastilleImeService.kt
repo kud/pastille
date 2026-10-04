@@ -507,6 +507,14 @@ class PastilleImeService :
         }
     }
 
+    override fun onOpenReorder() {
+        panelState.value = PanelState.Reorder
+    }
+
+    override fun onReorderSnippets(shown: List<SnippetRecord>, newOrder: List<Long>) {
+        serviceScope.launch { SnippetRepository.forContext(this@PastilleImeService).setSnippetOrder(shown, newOrder) }
+    }
+
     override fun onOpenImageFolders() {
         panelState.value = PanelState.ImageFolders
     }

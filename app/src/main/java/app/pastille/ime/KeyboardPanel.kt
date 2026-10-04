@@ -1521,18 +1521,18 @@ private fun SettingsContent(state: KeyboardUiState, actions: KeyboardActions) {
             }
         }
         SettingsHeading("Show in the keyboard")
-        SettingsSwitchRow(
-            headline = "Snippets",
-            checked = state.snippetsEnabled,
-            enabled = state.imagesEnabled,
-            onChange = { actions.onSetModeEnabled(KeyboardMode.Snippets, it) },
-        )
-        SettingsSwitchRow(
-            headline = "Images",
-            checked = state.imagesEnabled,
-            enabled = state.snippetsEnabled,
-            onChange = { actions.onSetModeEnabled(KeyboardMode.Images, it) },
-        )
+        ChipLine {
+            FilterToggleChip(
+                label = "Snippets",
+                selected = state.snippetsEnabled,
+                onClick = { if (state.imagesEnabled) actions.onSetModeEnabled(KeyboardMode.Snippets, !state.snippetsEnabled) },
+            )
+            FilterToggleChip(
+                label = "Images",
+                selected = state.imagesEnabled,
+                onClick = { if (state.snippetsEnabled) actions.onSetModeEnabled(KeyboardMode.Images, !state.imagesEnabled) },
+            )
+        }
         SettingsHeading("After inserting")
         SettingsSwitchRow(
             headline = "Return after a snippet",

@@ -59,6 +59,7 @@ import app.pastille.settings.PastilleSettings
 import app.pastille.settings.TOOLBAR_HEIGHT_DP
 import app.pastille.settings.panelHeightDp
 import app.pastille.settings.effectiveMode
+import app.pastille.settings.returnKeyboardTarget
 import app.pastille.share.MAX_TEXT_CHARS
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -399,6 +400,7 @@ class PastilleImeService :
     override fun onEditSnippet(snippet: SnippetRecord) {
         val intent = Intent(this, MainActivity::class.java)
             .putExtra(MainActivity.EXTRA_EDIT_SNIPPET_ID, snippet.id)
+            .putExtra(MainActivity.EXTRA_FROM_KEYBOARD, true)
             .addFlags(MainActivity.LAUNCH_FLAGS)
         startActivity(intent)
         panelState.value = PanelState.Browse
@@ -481,6 +483,7 @@ class PastilleImeService :
         val intent = Intent(this, MainActivity::class.java)
             .addFlags(MainActivity.LAUNCH_FLAGS)
             .putExtra(MainActivity.EXTRA_OPEN_SETTINGS, true)
+            .putExtra(MainActivity.EXTRA_FROM_KEYBOARD, true)
         panelState.value = PanelState.Browse
         startActivity(intent)
         requestHideSelf(0)
@@ -649,6 +652,7 @@ class PastilleImeService :
     override fun onWriteInApp(categoryId: Long?) {
         val intent = Intent(this, MainActivity::class.java)
             .putExtra(MainActivity.EXTRA_NEW_SNIPPET, true)
+            .putExtra(MainActivity.EXTRA_FROM_KEYBOARD, true)
             .addFlags(MainActivity.LAUNCH_FLAGS)
         if (categoryId != null) {
             intent.putExtra(MainActivity.EXTRA_CATEGORY_ID, categoryId)
@@ -740,6 +744,15 @@ class PastilleImeService :
 
     override fun onSwitchKeyboard() {
         if (destroyed) return
+        val others = getSystemService(InputMethodManager::class.java)
+            ?.enabledInputMethodList
+            ?.filter { it.packageName != packageName }
+            ?.map { it.id }
+            .orEmpty()
+        val target = returnKeyboardTarget(settings.returnKeyboardId, others)
+        if (target != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            runCatching { switchInputMethod(target) }.onSuccess { return }
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             switchToPreviousInputMethod()
         } else {

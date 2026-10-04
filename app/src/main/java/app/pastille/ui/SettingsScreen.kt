@@ -37,6 +37,12 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.MultiChoiceSegmentedButtonRow
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.clickable
+import android.view.inputmethod.InputMethodManager
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -195,22 +201,14 @@ fun SettingsScreen(onBack: () -> Unit) {
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp),
             )
-            ToggleRow(
-                headline = "Snippets",
-                supporting = "Your saved text.",
-                checked = snippetsOn,
-                enabled = imagesOn,
-                onChange = {
+            ModesRow(
+                snippetsOn = snippetsOn,
+                imagesOn = imagesOn,
+                onSnippets = {
                     snippetsOn = it
                     settings.snippetsEnabled = it
                 },
-            )
-            ToggleRow(
-                headline = "Images",
-                supporting = "Recent images from the folders you choose.",
-                checked = imagesOn,
-                enabled = snippetsOn,
-                onChange = {
+                onImages = {
                     imagesOn = it
                     settings.imagesEnabled = it
                 },
@@ -239,6 +237,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                     settings.returnAfterImage = it
                 },
             )
+            ReturnKeyboardRow(settings)
             PhotoAccessRow()
             Text(
                 text = "Quick Settings tile",
@@ -396,4 +395,75 @@ private fun ToggleRow(
         trailingContent = { Switch(checked = checked, onCheckedChange = null, enabled = enabled) },
         modifier = Modifier.toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onChange),
     )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ModesRow(
+    snippetsOn: Boolean,
+    imagesOn: Boolean,
+    onSnippets: (Boolean) -> Unit,
+    onImages: (Boolean) -> Unit,
+) {
+    MultiChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+        SegmentedButton(
+            checked = snippetsOn,
+            onCheckedChange = { if (it || imagesOn) onSnippets(it) },
+            shape = SegmentedButtonDefaults.itemShape(0, 2),
+            icon = { SegmentedButtonDefaults.Icon(active = snippetsOn) },
+            label = { Text("Snippets") },
+        )
+        SegmentedButton(
+            checked = imagesOn,
+            onCheckedChange = { if (it || snippetsOn) onImages(it) },
+            shape = SegmentedButtonDefaults.itemShape(1, 2),
+            icon = { SegmentedButtonDefaults.Icon(active = imagesOn) },
+            label = { Text("Images") },
+        )
+    }
+}
+
+@Composable
+private fun ReturnKeyboardRow(settings: PastilleSettings) {
+    val context = LocalContext.current
+    val keyboards = remember {
+        val manager = context.getSystemService(InputMethodManager::class.java)
+        manager?.enabledInputMethodList
+            ?.filter { it.packageName != context.packageName }
+            ?.map { it.id to it.loadLabel(context.packageManager).toString() }
+            .orEmpty()
+    }
+    var chosen by remember { mutableStateOf(settings.returnKeyboardId) }
+    var open by remember { mutableStateOf(false) }
+    val mainName = keyboards.firstOrNull()?.second
+    val current = when {
+        chosen == PastilleSettings.PREVIOUS_KEYBOARD -> "Previous keyboard"
+        chosen != null && keyboards.any { it.first == chosen } -> keyboards.first { it.first == chosen }.second
+        else -> mainName?.let { "Main keyboard ($it)" } ?: "Main keyboard"
+    }
+    fun choose(value: String?) {
+        chosen = value
+        settings.returnKeyboardId = value
+        open = false
+    }
+    Box {
+        ListItem(
+            headlineContent = { Text("Switch back to") },
+            supportingContent = { Text(current) },
+            modifier = Modifier.clickable { open = true },
+        )
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(
+                text = { Text(mainName?.let { "Main keyboard ($it)" } ?: "Main keyboard") },
+                onClick = { choose(null) },
+            )
+            keyboards.forEach { (id, name) ->
+                DropdownMenuItem(text = { Text(name) }, onClick = { choose(id) })
+            }
+            DropdownMenuItem(
+                text = { Text("Previous keyboard") },
+                onClick = { choose(PastilleSettings.PREVIOUS_KEYBOARD) },
+            )
+        }
+    }
 }

@@ -28,3 +28,15 @@ class EffectiveModeTest {
         org.junit.Assert.assertEquals(KeyboardMode.Images, effectiveMode(KeyboardMode.Images, snippetsEnabled = true, imagesEnabled = true))
     }
 }
+
+class ReturnKeyboardTargetTest {
+
+    @org.junit.Test
+    fun `defaults to the main keyboard, honours a choice, and can fall back to previous`() {
+        val others = listOf("gboard/.Ime", "passwords/.Ime")
+        org.junit.Assert.assertEquals("gboard/.Ime", returnKeyboardTarget(null, others))
+        org.junit.Assert.assertEquals("passwords/.Ime", returnKeyboardTarget("passwords/.Ime", others))
+        org.junit.Assert.assertEquals("gboard/.Ime", returnKeyboardTarget("uninstalled/.Ime", others))
+        org.junit.Assert.assertNull(returnKeyboardTarget(PastilleSettings.PREVIOUS_KEYBOARD, others))
+    }
+}

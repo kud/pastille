@@ -81,6 +81,11 @@ class PastilleSettings private constructor(private val prefs: SharedPreferences)
         awaitClose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
     }.conflate()
 
+    // null means the main keyboard (the first other one the system lists); PREVIOUS_KEYBOARD keeps Android's "previous" behaviour.
+    var returnKeyboardId: String?
+        get() = prefs.getString(KEY_RETURN_KEYBOARD_ID, null)
+        set(value) = prefs.edit().apply { if (value == null) remove(KEY_RETURN_KEYBOARD_ID) else putString(KEY_RETURN_KEYBOARD_ID, value) }.apply()
+
     var previousImeId: String?
         get() = prefs.getString(KEY_PREVIOUS_IME_ID, null)
         set(value) = prefs.edit().putString(KEY_PREVIOUS_IME_ID, value).apply()
@@ -88,6 +93,8 @@ class PastilleSettings private constructor(private val prefs: SharedPreferences)
     companion object {
         private const val PREFS_NAME = "pastille_settings"
         private const val KEY_PREVIOUS_IME_ID = "previous_ime_id"
+        private const val KEY_RETURN_KEYBOARD_ID = "return_keyboard_id"
+        const val PREVIOUS_KEYBOARD = "previous"
         private const val KEY_RETURN_TO_PREVIOUS_KEYBOARD = "return_to_previous_keyboard"
         private const val KEY_RETURN_AFTER_SNIPPET = "return_after_snippet"
         private const val KEY_RETURN_AFTER_IMAGE = "return_after_image"
@@ -113,3 +120,9 @@ class PastilleSettings private constructor(private val prefs: SharedPreferences)
 // One switch used to cover both; an upgrade keeps whatever it was set to. Fresh installs return
 // after a snippet but stay for images, so several can go in a row.
 fun returnDefault(legacy: Boolean?, image: Boolean): Boolean = legacy ?: !image
+
+fun returnKeyboardTarget(chosen: String?, otherKeyboardIds: List<String>): String? = when {
+    chosen == PastilleSettings.PREVIOUS_KEYBOARD -> null
+    chosen != null && chosen in otherKeyboardIds -> chosen
+    else -> otherKeyboardIds.firstOrNull()
+}

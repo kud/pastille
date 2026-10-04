@@ -48,18 +48,25 @@ fun Intent?.toLaunchRequest(): LaunchRequest? {
 class MainActivity : ComponentActivity() {
 
     private var launchRequest by mutableStateOf<LaunchRequest?>(null)
+    private var fromKeyboard by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         if (savedInstanceState == null) {
             launchRequest = intent.toLaunchRequest()
+            fromKeyboard = intent.getBooleanExtra(EXTRA_FROM_KEYBOARD, false)
         }
         setContent {
             PastilleTheme {
                 PastilleApp(
                     launchRequest = launchRequest,
                     onLaunchRequestHandled = { launchRequest = null },
+                    fromKeyboard = fromKeyboard,
+                    onReturnToKeyboard = {
+                        fromKeyboard = false
+                        finish()
+                    },
                 )
             }
         }
@@ -69,6 +76,7 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         launchRequest = intent.toLaunchRequest()
+        fromKeyboard = intent.getBooleanExtra(EXTRA_FROM_KEYBOARD, false)
     }
 
     companion object {
@@ -76,6 +84,7 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_NEW_SNIPPET = "app.pastille.EXTRA_NEW_SNIPPET"
         const val EXTRA_CATEGORY_ID = "app.pastille.EXTRA_CATEGORY_ID"
         const val EXTRA_OPEN_SETTINGS = "app.pastille.EXTRA_OPEN_SETTINGS"
+        const val EXTRA_FROM_KEYBOARD = "app.pastille.EXTRA_FROM_KEYBOARD"
         val LAUNCH_FLAGS = Intent.FLAG_ACTIVITY_NEW_TASK or
             Intent.FLAG_ACTIVITY_CLEAR_TOP or
             Intent.FLAG_ACTIVITY_SINGLE_TOP
@@ -86,6 +95,8 @@ class MainActivity : ComponentActivity() {
 private fun PastilleApp(
     launchRequest: LaunchRequest?,
     onLaunchRequestHandled: () -> Unit,
+    fromKeyboard: Boolean,
+    onReturnToKeyboard: () -> Unit,
 ) {
     var editingId: Long? by rememberSaveable { mutableStateOf<Long?>(null) }
     var creating: Boolean by rememberSaveable { mutableStateOf(false) }
@@ -120,29 +131,31 @@ private fun PastilleApp(
         onLaunchRequestHandled()
     }
 
+    fun closeEditor() {
+        editingId = null
+        creating = false
+        newCategoryId = null
+        if (fromKeyboard) onReturnToKeyboard()
+    }
+
+    fun closeSettings() {
+        showingSettings = false
+        if (fromKeyboard) onReturnToKeyboard()
+    }
+
     BackHandler(enabled = editingId != null || creating || showingSettings) {
-        if (editingId != null || creating) {
-            editingId = null
-            creating = false
-            newCategoryId = null
-        } else if (showingSettings) {
-            showingSettings = false
-        }
+        if (editingId != null || creating) closeEditor() else if (showingSettings) closeSettings()
     }
 
     if (editingId != null || creating) {
         SnippetEditorScreen(
             snippetId = editingId,
             repository = repository,
-            onDone = {
-                editingId = null
-                creating = false
-                newCategoryId = null
-            },
+            onDone = ::closeEditor,
             initialCategoryId = newCategoryId,
         )
     } else if (showingSettings) {
-        SettingsScreen(onBack = { showingSettings = false })
+        SettingsScreen(onBack = ::closeSettings)
     } else {
         SnippetListScreen(
             repository = repository,

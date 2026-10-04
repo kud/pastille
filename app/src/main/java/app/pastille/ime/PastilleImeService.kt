@@ -173,6 +173,10 @@ class PastilleImeService :
         val repository = remember { SnippetRepository.forContext(context) }
         val flow = remember { repository.observeSnippets() }
         val snippets by flow.collectAsState(initial = emptyList())
+        val categoriesFlow = remember { repository.observeCategories() }
+        val categories by categoriesFlow.collectAsState(initial = emptyList())
+        var selectedCategoryId by remember { mutableStateOf(settings.keyboardCategoryId) }
+        val effectiveCategoryId = selectedCategoryId?.takeIf { id -> categories.any { it.id == id } }
         var screenshots by remember { mutableStateOf(emptyList<ScreenshotItem>()) }
         var canReadScreenshots by remember {
             mutableStateOf(ScreenshotReader.hasPermission(context))
@@ -187,14 +191,30 @@ class PastilleImeService :
             clipboardHasText.value = readClipboardText() != null
         }
 
+        LaunchedEffect(categories, selectedCategoryId) {
+            if (selectedCategoryId != null && categories.isNotEmpty() &&
+                categories.none { it.id == selectedCategoryId }
+            ) {
+                selectedCategoryId = null
+                settings.keyboardCategoryId = null
+            }
+        }
+
         KeyboardPanel(
             snippets = snippets,
+            categories = categories,
+            selectedCategoryId = effectiveCategoryId,
+            openCount = openCount.intValue,
             screenshots = screenshots,
             hasScreenshotPermission = canReadScreenshots,
             clipboardHasText = clipboardHasText.value,
             statusMessage = statusMessage.value,
             onStatusShown = { statusMessage.value = null },
             onNewSnippet = ::openNewSnippet,
+            onSelectCategory = {
+                selectedCategoryId = it
+                settings.keyboardCategoryId = it
+            },
             onSaveClipboard = ::saveClipboardAsSnippet,
             onOpenApp = ::openApp,
             onOpenPermissions = ::openApp,
@@ -243,10 +263,13 @@ class PastilleImeService :
         startActivity(intent)
     }
 
-    private fun openNewSnippet() {
+    private fun openNewSnippet(categoryId: Long?) {
         val intent = Intent(this, MainActivity::class.java)
             .putExtra(MainActivity.EXTRA_NEW_SNIPPET, true)
             .addFlags(MainActivity.LAUNCH_FLAGS)
+        if (categoryId != null) {
+            intent.putExtra(MainActivity.EXTRA_CATEGORY_ID, categoryId)
+        }
         startActivity(intent)
     }
 

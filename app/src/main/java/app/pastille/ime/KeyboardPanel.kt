@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -37,6 +38,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
@@ -74,6 +76,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
@@ -83,6 +86,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import app.pastille.images.ImageThumbnail
+import app.pastille.model.CategoryRecord
 import app.pastille.model.SnippetRecord
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -91,12 +96,16 @@ import kotlinx.coroutines.withContext
 @Composable
 fun KeyboardPanel(
     snippets: List<SnippetRecord>,
+    categories: List<CategoryRecord>,
+    selectedCategoryId: Long?,
+    openCount: Int,
     screenshots: List<ScreenshotItem>,
     hasScreenshotPermission: Boolean,
     clipboardHasText: Boolean,
     statusMessage: String?,
     onStatusShown: () -> Unit,
-    onNewSnippet: () -> Unit,
+    onNewSnippet: (Long?) -> Unit,
+    onSelectCategory: (Long?) -> Unit,
     onSaveClipboard: () -> Unit,
     onOpenApp: () -> Unit,
     onOpenPermissions: () -> Unit,
@@ -105,8 +114,19 @@ fun KeyboardPanel(
     onSnippetLongPress: (SnippetRecord) -> Unit,
     onScreenshotTap: (ScreenshotItem) -> Unit,
 ) {
-    var showPinnedOnly by remember { mutableStateOf(false) }
-    val visible = if (showPinnedOnly) snippets.filter { it.pinned } else snippets
+    val selectedCategory = categories.find { it.id == selectedCategoryId }
+    val visible = if (selectedCategory == null) snippets else snippets.filter { it.categoryId == selectedCategory.id }
+    val chipState = rememberLazyListState()
+
+    LaunchedEffect(openCount, selectedCategoryId, categories) {
+        if (categories.isEmpty()) return@LaunchedEffect
+        val index = if (selectedCategoryId == null) {
+            0
+        } else {
+            categories.indexOfFirst { it.id == selectedCategoryId } + 1
+        }
+        chipState.scrollToItem(index.coerceAtLeast(0))
+    }
 
     LaunchedEffect(statusMessage) {
         if (statusMessage != null) {
@@ -130,23 +150,50 @@ fun KeyboardPanel(
                 .padding(top = 8.dp, bottom = 8.dp),
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth().height(48.dp).padding(horizontal = 12.dp),
+                modifier = Modifier.fillMaxWidth().height(48.dp).padding(end = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                FilterToggleChip(
-                    label = "All",
-                    selected = !showPinnedOnly,
-                    onClick = { showPinnedOnly = false },
-                )
-                Spacer(Modifier.width(8.dp))
-                FilterToggleChip(
-                    label = "Pinned",
-                    selected = showPinnedOnly,
-                    onClick = { showPinnedOnly = true },
-                )
-                Spacer(Modifier.weight(1f))
+                Box(modifier = Modifier.weight(1f)) {
+                    if (categories.isNotEmpty()) {
+                        LazyRow(
+                            state = chipState,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            item(key = "all") {
+                                FilterToggleChip(
+                                    label = "All",
+                                    selected = selectedCategoryId == null,
+                                    onClick = { onSelectCategory(null) },
+                                )
+                            }
+                            items(categories, key = { it.id }) { category ->
+                                FilterToggleChip(
+                                    label = category.name,
+                                    selected = selectedCategoryId == category.id,
+                                    onClick = { onSelectCategory(category.id) },
+                                )
+                            }
+                        }
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .width(16.dp)
+                                .fillMaxHeight()
+                                .background(
+                                    Brush.horizontalGradient(
+                                        listOf(
+                                            Color.Transparent,
+                                            MaterialTheme.colorScheme.surfaceContainer,
+                                        ),
+                                    ),
+                                ),
+                        )
+                    }
+                }
                 AssistChip(
-                    onClick = onNewSnippet,
+                    onClick = { onNewSnippet(selectedCategoryId) },
                     label = { Text("New") },
                     leadingIcon = {
                         Icon(
@@ -226,7 +273,7 @@ fun KeyboardPanel(
                         FilledTonalButton(onClick = onSaveClipboard, enabled = clipboardHasText) {
                             Text("Save clipboard")
                         }
-                        OutlinedButton(onClick = onNewSnippet) {
+                        OutlinedButton(onClick = { onNewSnippet(selectedCategoryId) }) {
                             Text("New snippet")
                         }
                     }
@@ -237,11 +284,15 @@ fun KeyboardPanel(
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Text(
-                        text = "No pinned snippets. Long-press a snippet to pin it.",
+                        text = "Nothing in ${selectedCategory?.name.orEmpty()} yet",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
                     )
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedButton(onClick = { onNewSnippet(selectedCategoryId) }) {
+                        Text("New snippet")
+                    }
                 }
             } else {
                 LazyVerticalGrid(
@@ -325,6 +376,18 @@ private fun SnippetCard(
         modifier = Modifier.heightIn(min = 56.dp).combinedClickable(onClick = onTap, onLongClick = onLongPress),
     ) {
         Column(Modifier.padding(12.dp)) {
+            if (snippet.isImage) {
+                snippet.imageFile?.let { fileName ->
+                    ImageThumbnail(
+                        fileName = fileName,
+                        contentDescription = snippet.title.ifBlank { "Image snippet" },
+                        modifier = Modifier.fillMaxWidth().height(56.dp).clip(RoundedCornerShape(8.dp)),
+                        targetPx = 256,
+                        contentScale = ContentScale.Crop,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                }
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (snippet.pinned) {
                     Icon(
@@ -336,14 +399,14 @@ private fun SnippetCard(
                     Spacer(Modifier.width(4.dp))
                 }
                 Text(
-                    text = snippet.title.ifBlank { snippet.text },
+                    text = if (snippet.isImage) snippet.title.ifBlank { "Image" } else snippet.title.ifBlank { snippet.text },
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            if (snippet.title.isNotBlank()) {
+            if (!snippet.isImage && snippet.title.isNotBlank()) {
                 Spacer(Modifier.height(2.dp))
                 Text(
                     text = snippet.text,

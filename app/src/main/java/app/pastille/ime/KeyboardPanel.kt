@@ -636,7 +636,7 @@ private fun SnippetsPage(state: KeyboardUiState, folderId: Long?, actions: Keybo
                 columns = GridCells.Fixed(tileColumns(maxWidth.value.toInt())),
                 state = gridState,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 6.dp, end = 6.dp, bottom = 8.dp),
+                contentPadding = PaddingValues(start = 6.dp, end = 6.dp, top = 4.dp, bottom = 20.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
@@ -898,7 +898,7 @@ private fun ImagesContent(state: KeyboardUiState, actions: KeyboardActions) {
         LazyVerticalGrid(
             columns = GridCells.Fixed(tileColumns(maxWidth.value.toInt())),
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 6.dp, end = 6.dp, bottom = 8.dp),
+            contentPadding = PaddingValues(start = 6.dp, end = 6.dp, top = 4.dp, bottom = 20.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {

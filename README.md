@@ -1,26 +1,51 @@
+<div align="center">
+
+<img src="assets/icon.png" alt="Pastille icon" width="120" />
+
 # Pastille
 
-Pastille is an open-source Android keyboard for pasting your own text snippets and recent screenshots. It is not a keyboard for typing: you switch to it when you need to drop in a saved reply, address or screenshot, then hop back to your usual keyboard.
+**A keyboard you switch to only when you want to paste.**
 
-Pastille never connects to the network. The manifest requests no internet permission, there are no analytics and no network libraries. Snippets live in a local Room database on your device, and backup files only move through the Storage Access Framework when you ask for an export or import.
+[![CI](https://github.com/kud/pastille/actions/workflows/ci.yml/badge.svg)](https://github.com/kud/pastille/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/kud/pastille?include_prereleases)](https://github.com/kud/pastille/releases)
+[![Licence: MIT](https://img.shields.io/github/license/kud/pastille)](LICENSE)
+![Android 9+](https://img.shields.io/badge/Android-9%2B-3DDC84)
+![Kotlin](https://img.shields.io/badge/Kotlin-Compose-7F52FF)
+
+<img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1-snippet-list.jpg" alt="Snippet list" width="240" />
+<img src="fastlane/metadata/android/en-US/images/phoneScreenshots/2-keyboard-snippets.jpg" alt="Keyboard showing snippets" width="240" />
+<img src="fastlane/metadata/android/en-US/images/phoneScreenshots/3-keyboard-settings.jpg" alt="Keyboard settings" width="240" />
+
+</div>
+
+Pastille is an open-source Android keyboard for pasting, not typing. Tap a saved snippet or a recent image and it goes straight into the text field, then Pastille hands you back to your usual keyboard.
 
 ## Features
 
-- Paste keyboard (IME) with your snippets in a pinned-first grid; tapping one commits it to the current field and long-pressing opens it in the editor.
-- Six most recent screenshots in the panel; tap to paste into apps that accept images, otherwise the image is copied so you can long-press to paste.
-- Save the current clipboard contents as a snippet straight from the keyboard.
-- Snippet manager app: create, edit, pin, search and delete; JSON export and import (`{ "version": 1, "snippets": [...] }`) via the system file picker.
-- A setup card that only appears until the keyboard is enabled; photo access (including the Android 14 partial-access case) lives in Settings, and "Try the keyboard" in the menu opens a field to test it without leaving the app.
-- Material 3 with light and dark themes plus dynamic colour where available.
+- Your own snippets, written in the app or saved from the clipboard.
+- Folders for snippets, with an "All" view, and drag to reorder snippets and folders right in the keyboard.
+- Recent images from the folders you choose (Screenshots, Camera, Downloads and so on), inserted as images where the app accepts them and copied to the clipboard where it does not.
+- Share text or an image from any app to Pastille to keep it as a snippet.
+- Choose, separately for snippets and images, whether to return to your usual keyboard after inserting, and which keyboard that is.
+- Turn snippets or images off entirely if you only need one.
+- Gboard-style dark, light and Material You themes, with a choice of panel heights.
+- Back up and restore your snippets as a JSON file.
+
+## Install
+
+- **GitHub Releases:** download the latest APK from the [releases page](https://github.com/kud/pastille/releases) and open it on your phone. You may need to allow installs from your browser or file manager.
+- **F-Droid:** coming soon.
+
+Pastille needs Android 9 (API 28) or later.
 
 ## How to enable the keyboard
 
-1. Open the Pastille app and work through the setup card, or do it manually:
-2. Enable Pastille under Settings → System → Keyboard → On-screen keyboard (or `Settings.ACTION_INPUT_METHOD_SETTINGS`).
-3. Switch to Pastille from any text field with the keyboard switcher, or use "Try the keyboard" in the app's menu.
-4. Grant photo access in Pastille's Settings if you want recent screenshots in the panel.
+1. Open the Pastille app and follow the setup card, or do it by hand in the next steps.
+2. Enable Pastille under Settings → System → Keyboard → On-screen keyboard.
+3. In any text field, switch to Pastille with the keyboard switcher, or use "Try the keyboard" in the app's menu.
+4. Optionally, grant photo access in Pastille's Settings to see recent images in the panel.
 
-## Quick Settings tile
+### Quick Settings tile
 
 The Pastille Quick Settings tile opens the keyboard picker. To make it switch straight to Pastille and back, grant one permission over adb, once:
 
@@ -28,23 +53,34 @@ The Pastille Quick Settings tile opens the keyboard picker. To make it switch st
 adb shell pm grant app.pastille android.permission.WRITE_SECURE_SETTINGS
 ```
 
-Pastille must be enabled under Settings → System → Keyboards first. The grant survives updates and is removed when you uninstall. On Xiaomi/HyperOS, also enable "USB debugging (Security settings)" in Developer options, or `pm grant` fails. To revoke: `adb shell pm revoke app.pastille android.permission.WRITE_SECURE_SETTINGS`.
+Pastille must be enabled under Settings → System → Keyboards first. The grant survives updates and is removed when you uninstall. On Xiaomi/HyperOS, also enable "USB debugging (Security settings)" in Developer options, or `pm grant` fails. To revoke it:
+
+```sh
+adb shell pm revoke app.pastille android.permission.WRITE_SECURE_SETTINGS
+```
+
+## Privacy
+
+- Pastille requests no `INTERNET` permission and has no analytics or network libraries. Your snippets and images never leave your phone.
+- Snippets live in a local Room database on your device.
+- Backups only move when you ask: export and import go through the system file picker (Storage Access Framework), so you choose where the file is saved or read from.
+- Photo access is optional and only used to show recent images in the panel.
 
 ## Build
 
-- Android Studio: open this directory and run the `app` configuration on a device or emulator (minSdk 28).
-- CI builds every push and pull request to `main` with `gradle --no-daemon assembleDebug testDebugUnitTest lintDebug`.
-- There is no Gradle wrapper checked in yet (no `gradlew`, no wrapper jar), so command-line builds need a local Gradle 8.10+ install.
+Requires JDK 17 or later and the Android SDK. The Gradle wrapper is checked in.
 
-## Design notes
+```sh
+./gradlew assembleDebug testDebugUnitTest lintDebug
+```
+
+Or open the directory in Android Studio and run the `app` configuration on a device or emulator. CI runs the same three tasks on every push and pull request to `main`.
+
+## Documentation
 
 - [Design spec](docs/design-spec.md): how the keyboard and app look and behave.
 - [Architecture](docs/architecture.md): schema, storage, image handling and the Quick Settings tile mechanics.
 
-## Roadmap (out of v1)
-
-Typing keys, cloud sync and espanso import are deliberately out of v1. Everything stays local until sync is designed properly.
-
 ## Licence
 
-MIT, Copyright (c) 2026 Erwann Mest. See LICENSE.
+MIT, Copyright (c) 2026 Erwann Mest. See [LICENSE](LICENSE).

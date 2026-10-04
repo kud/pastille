@@ -143,10 +143,15 @@ fun SnippetListScreen(
         if (uri != null) {
             scope.launch {
                 runCatching {
+                    val result = repository.exportJson()
                     context.contentResolver.openOutputStream(uri)?.use { out ->
-                        out.write(repository.exportJson().toByteArray())
+                        out.write(result.json.toByteArray())
                     } ?: error("Could not open $uri")
-                    "Exported ${snippets.size} snippets"
+                    if (result.skippedImages > 0) {
+                        "Exported ${result.exported} snippets (${result.skippedImages} image snippets aren't included)"
+                    } else {
+                        "Exported ${result.exported} snippets"
+                    }
                 }.onSuccess { toast(context, it) }
                     .onFailure { toast(context, "Export failed: ${it.message}") }
             }
@@ -204,7 +209,7 @@ fun SnippetListScreen(
                 duration = SnackbarDuration.Short,
             )
             if (result == SnackbarResult.ActionPerformed) {
-                repository.upsert(snippet)
+                repository.restore(snippet)
             }
         }
     }

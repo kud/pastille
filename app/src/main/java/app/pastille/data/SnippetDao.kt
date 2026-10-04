@@ -8,10 +8,10 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface SnippetDao {
-    @Query("SELECT * FROM snippets ORDER BY pinned DESC, position ASC, lastUsedAt DESC")
+    @Query("SELECT * FROM snippets ORDER BY position ASC, lastUsedAt DESC")
     fun observeAll(): Flow<List<SnippetEntity>>
 
-    @Query("SELECT * FROM snippets ORDER BY pinned DESC, position ASC, lastUsedAt DESC")
+    @Query("SELECT * FROM snippets ORDER BY position ASC, lastUsedAt DESC")
     suspend fun getAll(): List<SnippetEntity>
 
     @Query("SELECT * FROM snippets WHERE id = :id")
@@ -37,9 +37,6 @@ interface SnippetDao {
 
     @Query("SELECT imageFile FROM snippets WHERE imageFile IS NOT NULL")
     suspend fun allImageFiles(): List<String>
-
-    @Query("UPDATE snippets SET pinned = :pinned WHERE id IN (:ids)")
-    suspend fun setPinned(ids: List<Long>, pinned: Boolean)
 
     @Query("UPDATE snippets SET categoryId = :categoryId WHERE id IN (:ids)")
     suspend fun setCategory(ids: List<Long>, categoryId: Long?)

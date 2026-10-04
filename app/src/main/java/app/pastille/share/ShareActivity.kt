@@ -37,7 +37,6 @@ class ShareActivity : ComponentActivity() {
                 ShareSheet(
                     state = state,
                     categories = categories,
-                    onTogglePin = shareViewModel::togglePin,
                     onSelectCategory = shareViewModel::selectCategory,
                     onUndo = shareViewModel::undo,
                     onEdit = {

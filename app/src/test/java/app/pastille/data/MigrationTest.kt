@@ -114,7 +114,7 @@ class MigrationTest {
 
         val db = helper.runMigrationsAndValidate(DB_NAME, 3, true, MIGRATION_2_3)
 
-        db.query("SELECT id FROM snippets ORDER BY pinned DESC, position ASC").use { cursor ->
+        db.query("SELECT id FROM snippets ORDER BY position ASC").use { cursor ->
             val ids = buildList { while (cursor.moveToNext()) add(cursor.getLong(0)) }
             assertEquals(listOf(1L, 3L, 2L), ids)
         }

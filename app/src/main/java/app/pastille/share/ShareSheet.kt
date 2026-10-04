@@ -23,9 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.outlined.Link
-import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -62,7 +60,6 @@ import kotlinx.coroutines.launch
 fun ShareSheet(
     state: ShareUiState,
     categories: List<CategoryRecord>,
-    onTogglePin: () -> Unit,
     onSelectCategory: (Long?) -> Unit,
     onUndo: () -> Unit,
     onEdit: () -> Unit,
@@ -137,33 +134,6 @@ fun ShareSheet(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        item {
-                            FilterChip(
-                                selected = state.pinned,
-                                onClick = onTogglePin,
-                                label = { Text("Pin") },
-                                leadingIcon = {
-                                    Icon(
-                                        if (state.pinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(FilterChipDefaults.IconSize),
-                                    )
-                                },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    containerColor = Color.Transparent,
-                                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
-                                    selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                                    selectedLeadingIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                                ),
-                                border = FilterChipDefaults.filterChipBorder(
-                                    enabled = true,
-                                    selected = state.pinned,
-                                    borderColor = MaterialTheme.colorScheme.outlineVariant,
-                                    selectedBorderColor = Color.Transparent,
-                                ),
-                            )
-                        }
                         if (categories.isNotEmpty()) {
                             item {
                                 Box(

@@ -59,7 +59,6 @@ data class ShareUiState(
     val imageAspect: Float? = null,
     val totalImages: Int = 0,
     val failureReason: String = "",
-    val pinned: Boolean = false,
     val selectedCategoryId: Long? = null,
     val canUndo: Boolean = false,
     val firstId: Long? = null,
@@ -98,15 +97,6 @@ class ShareViewModel(application: Application) : AndroidViewModel(application) {
             if (finishRequested) {
                 uiState = uiState.copy(shouldFinish = true)
             }
-        }
-    }
-
-    fun togglePin() {
-        if (allIds.isEmpty() || uiState.saving) return
-        val newValue = !uiState.pinned
-        uiState = uiState.copy(pinned = newValue)
-        viewModelScope.launch(Dispatchers.IO) {
-            repository.setPinned(allIds, newValue)
         }
     }
 
@@ -173,7 +163,6 @@ class ShareViewModel(application: Application) : AndroidViewModel(application) {
             uiState = uiState.copy(
                 saving = false,
                 status = ShareStatus.ALREADY,
-                pinned = duplicate.pinned,
                 selectedCategoryId = duplicate.categoryId,
                 firstId = duplicate.id,
             )
@@ -187,7 +176,6 @@ class ShareViewModel(application: Application) : AndroidViewModel(application) {
         uiState = uiState.copy(
             saving = false,
             status = ShareStatus.SAVED,
-            pinned = false,
             canUndo = true,
             firstId = id,
         )
@@ -258,7 +246,6 @@ class ShareViewModel(application: Application) : AndroidViewModel(application) {
         createdFiles = createdNames.toList()
         allIds = all.toList()
         val first = all.first()
-        val pinned = if (all.size == 1) repository.get(first)?.pinned ?: false else false
         val currentCategory = if (all.size == 1) {
             repository.get(first)?.categoryId ?: initialCategory
         } else {
@@ -270,7 +257,6 @@ class ShareViewModel(application: Application) : AndroidViewModel(application) {
             imageFiles = files.toList(),
             imageTitles = titles.toList(),
             imageAspect = aspect,
-            pinned = pinned,
             selectedCategoryId = currentCategory,
             canUndo = created.isNotEmpty(),
             firstId = first,

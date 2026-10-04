@@ -78,7 +78,6 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.BrokenImage
 import androidx.compose.material.icons.outlined.ContentPaste
@@ -89,7 +88,6 @@ import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.Keyboard
-import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.TextFields
 import androidx.compose.material3.AssistChip
@@ -199,7 +197,6 @@ interface KeyboardActions {
     fun onImageLongPress(image: ImageItem) {}
     fun onAddFrom(source: AddSource, categoryId: Long?) {}
     fun onWriteInApp(categoryId: Long?) {}
-    fun onPinToggle(snippet: SnippetRecord) {}
     fun onEditSnippet(snippet: SnippetRecord) {}
     fun onDeleteSnippet(snippet: SnippetRecord) {}
     fun onMoveToCategory(snippetId: Long, categoryId: Long?) {}
@@ -796,10 +793,6 @@ private fun SnippetTile(
         modifier = modifier.semantics(mergeDescendants = true) {
             contentDescription = "Insert $title"
             customActions = listOf(
-                CustomAccessibilityAction(if (snippet.pinned) "Unpin" else "Pin") {
-                    actions.onPinToggle(snippet)
-                    true
-                },
                 CustomAccessibilityAction("Edit") {
                     actions.onEditSnippet(snippet)
                     true
@@ -835,7 +828,7 @@ private fun SnippetTile(
                     color = Color.White,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(start = 12.dp, end = if (snippet.pinned) 30.dp else 12.dp),
+                    modifier = Modifier.padding(start = 12.dp, end = 12.dp),
                 )
             }
         } else {
@@ -844,7 +837,7 @@ private fun SnippetTile(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(start = 12.dp, top = 12.dp, bottom = 12.dp, end = if (snippet.pinned) 30.dp else 12.dp),
+                    .padding(start = 12.dp, top = 12.dp, bottom = 12.dp, end = 12.dp),
             ) {
                 Text(
                     text = title,
@@ -865,14 +858,6 @@ private fun SnippetTile(
                     )
                 }
             }
-        }
-        if (snippet.pinned) {
-            Icon(
-                Icons.Filled.PushPin,
-                contentDescription = null,
-                tint = palette.accent,
-                modifier = Modifier.align(Alignment.TopEnd).padding(8.dp).size(14.dp),
-            )
         }
     }
 }
@@ -1253,12 +1238,6 @@ private fun ActionsContent(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            PanelActionButton(
-                icon = if (snippet.pinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
-                label = if (snippet.pinned) "Unpin" else "Pin",
-                onClick = { actions.onPinToggle(snippet) },
-                modifier = Modifier.weight(1f),
-            )
             PanelActionButton(
                 icon = Icons.Outlined.Edit,
                 label = "Edit in app",

@@ -16,7 +16,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -61,7 +60,6 @@ fun SnippetEditorScreen(
     var existing by remember { mutableStateOf<SnippetRecord?>(null) }
     var title by remember { mutableStateOf("") }
     var text by remember { mutableStateOf("") }
-    var pinned by remember { mutableStateOf(false) }
     var categoryId by remember { mutableStateOf(initialCategoryId) }
     var categoryExpanded by remember { mutableStateOf(false) }
     var showCreateCategory by remember { mutableStateOf(false) }
@@ -76,7 +74,6 @@ fun SnippetEditorScreen(
                 existing = record
                 title = record.title
                 text = record.text
-                pinned = record.pinned
                 categoryId = record.categoryId
             }
             ready = true
@@ -129,7 +126,6 @@ fun SnippetEditorScreen(
                                     (existing ?: SnippetRecord(text = text)).copy(
                                         title = title,
                                         text = text,
-                                        pinned = pinned,
                                         categoryId = categoryId,
                                     ),
                                 )
@@ -225,10 +221,6 @@ fun SnippetEditorScreen(
                         },
                     )
                 }
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(checked = pinned, onCheckedChange = { pinned = it })
-                Text("Pinned")
             }
             Spacer(Modifier.height(8.dp))
         }

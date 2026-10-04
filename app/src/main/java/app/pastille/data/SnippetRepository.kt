@@ -7,7 +7,6 @@ import app.pastille.model.CategoryRecord
 import app.pastille.model.SnippetRecord
 import app.pastille.model.moveCategory as reorderCategories
 import app.pastille.model.sortSnippets
-import app.pastille.model.keepPinnedFirst
 import app.pastille.model.orderCategories
 import app.pastille.model.reassignPositions
 import app.pastille.model.uniqueTitle
@@ -54,7 +53,7 @@ class SnippetRepository private constructor(
 
     suspend fun setSnippetOrder(shown: List<SnippetRecord>, newOrder: List<Long>) {
         db.withTransaction {
-            val positions = reassignPositions(shown, keepPinnedFirst(shown, newOrder))
+            val positions = reassignPositions(shown, newOrder)
             shown.forEach { record ->
                 val position = positions[record.id] ?: return@forEach
                 if (position != record.position) dao.updatePosition(record.id, position)
@@ -119,11 +118,6 @@ class SnippetRepository private constructor(
             ),
             now,
         )
-
-    suspend fun setPinned(ids: List<Long>, pinned: Boolean) {
-        if (ids.isEmpty()) return
-        dao.setPinned(ids, pinned)
-    }
 
     suspend fun setCategory(ids: List<Long>, categoryId: Long?) {
         if (ids.isEmpty()) return

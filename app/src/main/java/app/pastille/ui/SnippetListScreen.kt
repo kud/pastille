@@ -57,7 +57,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.ShortText
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.ContentCopy
@@ -69,7 +68,6 @@ import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Keyboard
 import androidx.compose.material.icons.outlined.Link
-import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
@@ -228,12 +226,6 @@ fun SnippetListScreen(
         }
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
             scope.launch { snackbarHostState.showSnackbar("Copied") }
-        }
-    }
-
-    fun togglePin(snippet: SnippetRecord) {
-        scope.launch {
-            repository.upsert(snippet.copy(pinned = !snippet.pinned))
         }
     }
 
@@ -600,7 +592,6 @@ fun SnippetListScreen(
                                     categoryName = if (selectedTab == ALL_TAB) snippet.categoryId?.let { categoryNames[it] } else null,
                                     onEdit = { onEdit(snippet) },
                                     onCopy = { copySnippet(snippet) },
-                                    onTogglePin = { togglePin(snippet) },
                                     onDelete = { deleteSnippet(snippet) },
                                     folders = orderedFolders,
                                     onMove = { moveSnippet(snippet, it) },
@@ -668,7 +659,6 @@ fun SnippetListScreen(
                             categoryName = snippet.categoryId?.let { categoryNames[it] },
                             onEdit = { onEdit(snippet) },
                             onCopy = { copySnippet(snippet) },
-                            onTogglePin = { togglePin(snippet) },
                             onDelete = { deleteSnippet(snippet) },
                             folders = orderedFolders,
                             onMove = { moveSnippet(snippet, it) },
@@ -768,7 +758,6 @@ internal fun SnippetRow(
     categoryName: String? = null,
     onEdit: () -> Unit,
     onCopy: () -> Unit,
-    onTogglePin: () -> Unit,
     onDelete: () -> Unit,
     folders: List<CategoryRecord> = emptyList(),
     onMove: ((Long?) -> Unit)? = null,
@@ -888,19 +877,6 @@ internal fun SnippetRow(
                 }
             }
             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                DropdownMenuItem(
-                    text = { Text(if (snippet.pinned) "Unpin" else "Pin") },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = if (snippet.pinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
-                            contentDescription = null,
-                        )
-                    },
-                    onClick = {
-                        menuOpen = false
-                        onTogglePin()
-                    },
-                )
                 if (onMove != null && (folders.isNotEmpty() || snippet.categoryId != null)) {
                     DropdownMenuItem(
                         text = { Text("Move to folder") },
@@ -1066,15 +1042,6 @@ private fun SnippetMetaRow(snippet: SnippetRecord, categoryName: String?) {
                 text = categoryName,
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        if (snippet.pinned) {
-            Spacer(modifier = Modifier.width(8.dp))
-            Icon(
-                imageVector = Icons.Filled.PushPin,
-                contentDescription = "Pinned",
-                modifier = Modifier.size(14.dp),
-                tint = MaterialTheme.colorScheme.primary,
             )
         }
     }
@@ -1290,15 +1257,6 @@ private fun ReorderRow(snippet: SnippetRecord, handle: Modifier) {
         modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(start = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (snippet.pinned) {
-            Icon(
-                imageVector = Icons.Filled.PushPin,
-                contentDescription = "Pinned",
-                modifier = Modifier.size(16.dp),
-                tint = MaterialTheme.colorScheme.primary,
-            )
-            Spacer(Modifier.width(8.dp))
-        }
         Text(
             text = rowTitle(snippet.title, snippet.text).ifBlank { "Image" },
             style = MaterialTheme.typography.titleMedium,

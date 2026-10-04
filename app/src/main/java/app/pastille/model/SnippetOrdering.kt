@@ -2,8 +2,7 @@ package app.pastille.model
 
 fun sortSnippets(records: List<SnippetRecord>): List<SnippetRecord> =
     records.sortedWith(
-        compareByDescending<SnippetRecord> { it.pinned }
-            .thenBy { it.position }
+        compareBy<SnippetRecord> { it.position }
             .thenByDescending { it.lastUsedAt },
     )
 
@@ -19,8 +18,3 @@ fun reassignPositions(shown: List<SnippetRecord>, newOrder: List<Long>): Map<Lon
     return ordered.zip(slots).associate { (record, slot) -> record.id to slot }
 }
 
-// The new order keeps pinned snippets ahead of the rest, whatever the drag did.
-fun keepPinnedFirst(shown: List<SnippetRecord>, newOrder: List<Long>): List<Long> {
-    val pinned = shown.filter { it.pinned }.map { it.id }.toSet()
-    return newOrder.filter { it in pinned } + newOrder.filter { it !in pinned }
-}

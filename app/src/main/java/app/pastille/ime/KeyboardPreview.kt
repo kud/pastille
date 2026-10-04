@@ -39,7 +39,7 @@ import app.pastille.settings.panelHeightDp
 private val sampleState = KeyboardUiState(
     categories = listOf(CategoryRecord(id = 1, name = "Work")),
     snippets = listOf(
-        SnippetRecord(id = 2, title = "Wi-Fi password", text = "", pinned = true),
+        SnippetRecord(id = 2, title = "Wi-Fi password", text = ""),
         SnippetRecord(id = 3, title = "Home address", text = ""),
         SnippetRecord(id = 4, title = "Thanks!", text = ""),
         SnippetRecord(id = 5, title = "Sample", text = "", categoryId = 1),

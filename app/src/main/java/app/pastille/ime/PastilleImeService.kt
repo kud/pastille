@@ -395,16 +395,6 @@ class PastilleImeService :
         }
     }
 
-    override fun onPinToggle(snippet: SnippetRecord) {
-        serviceScope.launch {
-            SnippetRepository.forContext(this@PastilleImeService).setPinned(listOf(snippet.id), !snippet.pinned)
-            withContext(Dispatchers.Main) {
-                if (destroyed) return@withContext
-                showStrip(if (snippet.pinned) "Unpinned" else "Pinned")
-            }
-        }
-    }
-
     override fun onEditSnippet(snippet: SnippetRecord) {
         val intent = Intent(this, MainActivity::class.java)
             .putExtra(MainActivity.EXTRA_EDIT_SNIPPET_ID, snippet.id)

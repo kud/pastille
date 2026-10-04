@@ -16,13 +16,13 @@ enum class KeyboardStyle(val key: String) {
 // landscape ones are fractions of the window height.
 enum class PanelHeight(val key: String, val label: String, val portraitDp: Int, val landscapeFraction: Float) {
     Compact("compact", "Compact", 272, 0.38f),
-    Gboard("gboard", "Gboard", 320, 0.44f),
-    Comfortable("comfortable", "Comfortable", 368, 0.50f),
+    Standard("gboard", "Standard", 320, 0.44f),
+    Roomy("comfortable", "Roomy", 368, 0.50f),
     Tall("tall", "Tall", 432, 0.55f),
     ;
 
     companion object {
-        val Default = Comfortable
+        val Default = Roomy
 
         fun fromKey(key: String?): PanelHeight = entries.firstOrNull { it.key == key } ?: Default
     }

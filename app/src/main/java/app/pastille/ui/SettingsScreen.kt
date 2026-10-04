@@ -3,7 +3,10 @@ package app.pastille.ui
 import android.os.Build
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -12,6 +15,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -34,12 +38,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.pastille.ime.KeyboardHeightPreview
@@ -153,45 +160,26 @@ fun SettingsScreen(onBack: () -> Unit) {
                 style = selectedStyle,
                 height = if (previewLandscape) panelLandscape else panelPortrait,
                 landscape = previewLandscape,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
             )
-            SingleChoiceSegmentedButtonRow(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            ) {
-                PanelHeight.entries.forEachIndexed { index, height ->
-                    SegmentedButton(
-                        selected = height == panelPortrait,
-                        onClick = {
-                            panelPortrait = height
-                            settings.panelHeightPortrait = height
-                            previewLandscape = false
-                        },
-                        shape = SegmentedButtonDefaults.itemShape(index, PanelHeight.entries.size),
-                        label = { Text(height.label) },
-                    )
-                }
-            }
-            Text(
-                text = "Landscape",
-                style = MaterialTheme.typography.labelLarge,
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp),
+            HeightRow(
+                label = "Portrait",
+                selected = panelPortrait,
+                onSelect = { height ->
+                    panelPortrait = height
+                    settings.panelHeightPortrait = height
+                    previewLandscape = false
+                },
             )
-            SingleChoiceSegmentedButtonRow(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            ) {
-                PanelHeight.entries.forEachIndexed { index, height ->
-                    SegmentedButton(
-                        selected = height == panelLandscape,
-                        onClick = {
-                            panelLandscape = height
-                            settings.panelHeightLandscape = height
-                            previewLandscape = true
-                        },
-                        shape = SegmentedButtonDefaults.itemShape(index, PanelHeight.entries.size),
-                        label = { Text(height.label) },
-                    )
-                }
-            }
+            HeightRow(
+                label = "Landscape",
+                selected = panelLandscape,
+                onSelect = { height ->
+                    panelLandscape = height
+                    settings.panelHeightLandscape = height
+                    previewLandscape = true
+                },
+            )
             ListItem(
                 headlineContent = { Text("Return to previous keyboard after inserting") },
                 supportingContent = {
@@ -217,16 +205,31 @@ fun SettingsScreen(onBack: () -> Unit) {
                 text = "Add the Pastille tile to Quick Settings to change keyboard in one tap. Without extra permission it opens the keyboard picker. To switch straight to Pastille and back, grant one permission over adb, once:",
                 modifier = Modifier.padding(horizontal = 16.dp),
             )
-            ListItem(
-                headlineContent = { Text(command, fontFamily = FontFamily.Monospace) },
-                trailingContent = {
-                    IconButton(
-                        onClick = { clipboard.setText(AnnotatedString(command)) },
-                    ) {
-                        Icon(Icons.Filled.ContentCopy, contentDescription = "Copy command")
-                    }
-                },
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = command,
+                    fontFamily = FontFamily.Monospace,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    softWrap = false,
+                    modifier = Modifier
+                        .weight(1f)
+                        .horizontalScroll(rememberScrollState())
+                        .padding(start = 12.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
+                )
+                IconButton(
+                    onClick = { clipboard.setText(AnnotatedString(command)) },
+                ) {
+                    Icon(Icons.Filled.ContentCopy, contentDescription = "Copy command")
+                }
+            }
             ListItem(
                 headlineContent = { Text("One-tap switching") },
                 supportingContent = {
@@ -234,8 +237,41 @@ fun SettingsScreen(onBack: () -> Unit) {
                         if (granted) {
                             "Granted"
                         } else {
-                            "Not granted — the tile opens the keyboard picker"
+                            "Not granted. The tile opens the keyboard picker."
                         },
+                    )
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun HeightRow(
+    label: String,
+    selected: PanelHeight,
+    onSelect: (PanelHeight) -> Unit,
+) {
+    Text(
+        text = label,
+        style = MaterialTheme.typography.labelLarge,
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp),
+    )
+    SingleChoiceSegmentedButtonRow(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+    ) {
+        PanelHeight.entries.forEachIndexed { index, height ->
+            SegmentedButton(
+                selected = height == selected,
+                onClick = { onSelect(height) },
+                shape = SegmentedButtonDefaults.itemShape(index, PanelHeight.entries.size),
+                icon = {},
+                label = {
+                    Text(
+                        text = height.label,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 },
             )

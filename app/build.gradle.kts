@@ -16,8 +16,8 @@ android {
         applicationId = "app.pastille"
         minSdk = 28
         targetSdk = 35
-        versionCode = 8
-        versionName = "0.1.0-dev.8"
+        versionCode = 9
+        versionName = "0.1.0-dev.9"
     }
 
     buildTypes {

@@ -1,0 +1,107 @@
+package app.pastille.data
+
+import android.database.SQLException
+import androidx.room.Room
+import androidx.room.testing.MigrationTestHelper
+import androidx.test.core.app.ApplicationProvider
+import androidx.test.platform.app.InstrumentationRegistry
+import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+
+@RunWith(RobolectricTestRunner::class)
+class MigrationTest {
+
+    @get:Rule
+    val helper = MigrationTestHelper(
+        InstrumentationRegistry.getInstrumentation(),
+        PastilleDatabase::class.java,
+    )
+
+    private fun createVersion1WithTwoSnippets() {
+        helper.createDatabase(DB_NAME, 1).apply {
+            execSQL(
+                "INSERT INTO snippets (id, title, text, pinned, createdAt, updatedAt, lastUsedAt) " +
+                    "VALUES (1, 'greeting', 'hello there', 1, 10, 20, 30)",
+            )
+            execSQL(
+                "INSERT INTO snippets (id, title, text, pinned, createdAt, updatedAt, lastUsedAt) " +
+                    "VALUES (2, '', 'multi\nline', 0, 11, 21, 31)",
+            )
+            close()
+        }
+    }
+
+    @Test
+    fun migration1To2KeepsEverySnippet() {
+        createVersion1WithTwoSnippets()
+
+        val db = helper.runMigrationsAndValidate(DB_NAME, 2, true, MIGRATION_1_2)
+
+        db.query(
+            "SELECT id, title, text, pinned, createdAt, updatedAt, lastUsedAt, " +
+                "categoryId, imageFile, imageWidth, imageHeight FROM snippets ORDER BY id",
+        ).use { cursor ->
+            assertEquals(2, cursor.count)
+
+            assertTrue(cursor.moveToNext())
+            assertEquals(1L, cursor.getLong(0))
+            assertEquals("greeting", cursor.getString(1))
+            assertEquals("hello there", cursor.getString(2))
+            assertEquals(1, cursor.getInt(3))
+            assertEquals(10L, cursor.getLong(4))
+            assertEquals(20L, cursor.getLong(5))
+            assertEquals(30L, cursor.getLong(6))
+            (7..10).forEach { assertTrue("column $it should be null", cursor.isNull(it)) }
+
+            assertTrue(cursor.moveToNext())
+            assertEquals(2L, cursor.getLong(0))
+            assertEquals("multi\nline", cursor.getString(2))
+            assertEquals(0, cursor.getInt(3))
+            (7..10).forEach { assertTrue("column $it should be null", cursor.isNull(it)) }
+        }
+    }
+
+    @Test
+    fun categoryNamesAreUniqueIgnoringCase() {
+        createVersion1WithTwoSnippets()
+        val db = helper.runMigrationsAndValidate(DB_NAME, 2, true, MIGRATION_1_2)
+
+        db.execSQL("INSERT INTO categories (name, position, createdAt) VALUES ('Work', 0, 1)")
+        try {
+            db.execSQL("INSERT INTO categories (name, position, createdAt) VALUES ('work', 1, 2)")
+            fail("expected the unique NOCASE index to reject 'work'")
+        } catch (_: SQLException) {
+        }
+    }
+
+    @Test
+    fun roomOpensTheMigratedDatabase() {
+        createVersion1WithTwoSnippets()
+
+        val database = Room.databaseBuilder(
+            ApplicationProvider.getApplicationContext(),
+            PastilleDatabase::class.java,
+            DB_NAME,
+        ).addMigrations(MIGRATION_1_2).build()
+        helper.closeWhenFinished(database)
+
+        val snippets = runBlocking { database.snippets().getAll() }
+
+        assertEquals(listOf(1L, 2L), snippets.map { it.id })
+        assertTrue(snippets.first().pinned)
+        assertTrue(snippets.all { it.categoryId == null && it.imageFile == null })
+        assertNull(snippets.first().imageWidth)
+        assertTrue(runBlocking { database.categories().getAll() }.isEmpty())
+    }
+
+    private companion object {
+        const val DB_NAME = "migration-test.db"
+    }
+}

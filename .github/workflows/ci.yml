@@ -28,3 +28,7 @@ jobs:
           name: room-schemas
           path: app/schemas/
           if-no-files-found: error
+      - name: Room schemas match the committed ones
+        run: |
+          git diff --exit-code app/schemas
+          test -z "$(git status --porcelain app/schemas)"

@@ -66,7 +66,8 @@ import app.pastille.tile.ImeSwitcher
 fun SettingsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val settings = remember { PastilleSettings.forContext(context) }
-    var enabled by remember { mutableStateOf(settings.returnToPreviousKeyboard) }
+    var returnAfterSnippet by remember { mutableStateOf(settings.returnAfterSnippet) }
+    var returnAfterImage by remember { mutableStateOf(settings.returnAfterImage) }
     var selectedStyle by remember { mutableStateOf(settings.keyboardStyle) }
     var panelPortrait by remember { mutableStateOf(settings.panelHeightPortrait) }
     var panelLandscape by remember { mutableStateOf(settings.panelHeightLandscape) }
@@ -186,20 +187,29 @@ fun SettingsScreen(onBack: () -> Unit) {
                 },
             )
             TryItField(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp))
-            ListItem(
-                headlineContent = { Text("Return to previous keyboard after inserting") },
-                supportingContent = {
-                    Text("After you insert a snippet or a screenshot, switch back to the keyboard you were using.")
+            Text(
+                text = "After inserting",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp),
+            )
+            ToggleRow(
+                headline = "Return after a snippet",
+                supporting = "Switch back to the keyboard you were using.",
+                checked = returnAfterSnippet,
+                onChange = {
+                    returnAfterSnippet = it
+                    settings.returnAfterSnippet = it
                 },
-                trailingContent = { Switch(checked = enabled, onCheckedChange = null) },
-                modifier = Modifier.toggleable(
-                    value = enabled,
-                    role = Role.Switch,
-                    onValueChange = {
-                        enabled = it
-                        settings.returnToPreviousKeyboard = it
-                    },
-                ),
+            )
+            ToggleRow(
+                headline = "Return after an image",
+                supporting = "Leave it off to paste several images in a row.",
+                checked = returnAfterImage,
+                onChange = {
+                    returnAfterImage = it
+                    settings.returnAfterImage = it
+                },
             )
             PhotoAccessRow()
             Text(
@@ -343,3 +353,18 @@ private fun photoPermission(): String =
     } else {
         Manifest.permission.READ_EXTERNAL_STORAGE
     }
+
+@Composable
+private fun ToggleRow(
+    headline: String,
+    supporting: String,
+    checked: Boolean,
+    onChange: (Boolean) -> Unit,
+) {
+    ListItem(
+        headlineContent = { Text(headline) },
+        supportingContent = { Text(supporting) },
+        trailingContent = { Switch(checked = checked, onCheckedChange = null) },
+        modifier = Modifier.toggleable(value = checked, role = Role.Switch, onValueChange = onChange),
+    )
+}

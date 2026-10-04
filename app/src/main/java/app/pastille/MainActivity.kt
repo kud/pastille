@@ -25,10 +25,12 @@ import app.pastille.ui.theme.PastilleTheme
 sealed interface LaunchRequest {
     data class NewSnippet(val categoryId: Long? = null) : LaunchRequest
     data class Edit(val id: Long) : LaunchRequest
+    data object Settings : LaunchRequest
 }
 
 fun Intent?.toLaunchRequest(): LaunchRequest? {
     if (this == null) return null
+    if (getBooleanExtra(MainActivity.EXTRA_OPEN_SETTINGS, false)) return LaunchRequest.Settings
     if (getBooleanExtra(MainActivity.EXTRA_NEW_SNIPPET, false)) {
         val categoryId = if (hasExtra(MainActivity.EXTRA_CATEGORY_ID)) {
             getLongExtra(MainActivity.EXTRA_CATEGORY_ID, -1).takeIf { it >= 0 }
@@ -74,6 +76,7 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_EDIT_SNIPPET_ID = "app.pastille.EXTRA_EDIT_SNIPPET_ID"
         const val EXTRA_NEW_SNIPPET = "app.pastille.EXTRA_NEW_SNIPPET"
         const val EXTRA_CATEGORY_ID = "app.pastille.EXTRA_CATEGORY_ID"
+        const val EXTRA_OPEN_SETTINGS = "app.pastille.EXTRA_OPEN_SETTINGS"
         val LAUNCH_FLAGS = Intent.FLAG_ACTIVITY_NEW_TASK or
             Intent.FLAG_ACTIVITY_CLEAR_TOP or
             Intent.FLAG_ACTIVITY_SINGLE_TOP
@@ -104,6 +107,14 @@ private fun PastilleApp(
                 editingId = launchRequest.id
                 creating = false
                 newCategoryId = null
+            }
+            LaunchRequest.Settings -> {
+                editingId = null
+                creating = false
+                newCategoryId = null
+                showingSettings = true
+                onLaunchRequestHandled()
+                return@LaunchedEffect
             }
             null -> return@LaunchedEffect
         }

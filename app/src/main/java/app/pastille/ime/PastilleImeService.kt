@@ -54,6 +54,7 @@ import app.pastille.images.mimeTypeForFile
 import app.pastille.model.SnippetRecord
 import app.pastille.settings.KeyboardMode
 import app.pastille.settings.KeyboardStyle
+import app.pastille.settings.PanelHeight
 import app.pastille.settings.PastilleSettings
 import app.pastille.settings.TOOLBAR_HEIGHT_DP
 import app.pastille.settings.panelHeightDp
@@ -177,6 +178,10 @@ class PastilleImeService :
             when {
                 panelState.value == PanelState.Style -> {
                     onStyleNotNow()
+                    return true
+                }
+                panelState.value == PanelState.ImageFolders -> {
+                    panelState.value = PanelState.Settings
                     return true
                 }
                 panelState.value != PanelState.Browse -> {
@@ -330,10 +335,10 @@ class PastilleImeService :
     }
 
     override fun onBack() {
-        if (panelState.value == PanelState.Style) {
-            onStyleNotNow()
-        } else {
-            panelState.value = PanelState.Browse
+        when (panelState.value) {
+            PanelState.Style -> onStyleNotNow()
+            PanelState.ImageFolders -> panelState.value = PanelState.Settings
+            else -> panelState.value = PanelState.Browse
         }
     }
 
@@ -476,6 +481,42 @@ class PastilleImeService :
         panelState.value = PanelState.Browse
     }
 
+    override fun onOpenSettings() {
+        refreshJob?.cancel()
+        panelState.value = PanelState.Settings
+    }
+
+    override fun onOpenAllSettings() {
+        val intent = Intent(this, MainActivity::class.java)
+            .addFlags(MainActivity.LAUNCH_FLAGS)
+            .putExtra(MainActivity.EXTRA_OPEN_SETTINGS, true)
+        panelState.value = PanelState.Browse
+        startActivity(intent)
+        requestHideSelf(0)
+    }
+
+    override fun onSetStyle(style: KeyboardStyle) {
+        settings.keyboardStyle = style
+        settings.keyboardStyleChosen = true
+    }
+
+    override fun onSetHeight(height: PanelHeight) {
+        val landscape = configuration.value.orientation == Configuration.ORIENTATION_LANDSCAPE
+        if (landscape) settings.panelHeightLandscape = height else settings.panelHeightPortrait = height
+    }
+
+    override fun onSetReturn(image: Boolean, enabled: Boolean) {
+        if (image) settings.returnAfterImage = enabled else settings.returnAfterSnippet = enabled
+    }
+
+    override fun onOpenImageFolders() {
+        panelState.value = PanelState.ImageFolders
+    }
+
+    override fun onSetShownSources(bucketIds: Set<Long>) {
+        settings.enabledImageSources = bucketIds
+    }
+
     @Composable
     private fun PanelHost() {
         val context = LocalContext.current
@@ -503,13 +544,17 @@ class PastilleImeService :
 
         SideEffect { applyNavigationBar(palette) }
 
-        LaunchedEffect(openCount.intValue, mode.value) {
-            if (mode.value != KeyboardMode.Images) return@LaunchedEffect
+        val enabledSourceIds = remember(settingsTick) { settings.enabledImageSources }
+        val needsSources = mode.value == KeyboardMode.Images ||
+            panelState.value == PanelState.Settings ||
+            panelState.value == PanelState.ImageFolders
+        LaunchedEffect(openCount.intValue, needsSources, enabledSourceIds) {
+            if (!needsSources) return@LaunchedEffect
             hasImagePermission = ImageSourceReader.hasPermission(context)
             imageSources = withContext(Dispatchers.IO) {
                 runCatching { ImageSourceReader.listSources(context) }.getOrDefault(emptyList())
             }
-            val resolved = resolveSource(imageSources, sourceId.value)
+            val resolved = resolveSource(visibleSources(imageSources, enabledSourceIds), sourceId.value)
             if (resolved?.bucketId != sourceId.value) sourceId.value = resolved?.bucketId
         }
 
@@ -541,6 +586,12 @@ class PastilleImeService :
             highlightedSnippetId = highlightedSnippetId.value,
             pickerStyle = pickerStyle.value,
             darkTheme = darkTheme,
+            savedStyle = savedStyle,
+            heightPreset = heightPreset,
+            landscape = landscape,
+            returnAfterSnippet = remember(settingsTick) { settings.returnAfterSnippet },
+            returnAfterImage = remember(settingsTick) { settings.returnAfterImage },
+            enabledSourceIds = enabledSourceIds,
         )
         KeyboardTheme(palette = palette) {
             CompositionLocalProvider(LocalReduceMotion provides reduceMotion.value) {
@@ -560,7 +611,7 @@ class PastilleImeService :
         }
         val committed = currentInputConnection?.commitText(snippet.text, 1) == true
         serviceScope.launch { SnippetRepository.forContext(this@PastilleImeService).recordUse(snippet.id) }
-        if (committed) returnToPreviousKeyboardIfWanted()
+        if (committed) returnToPreviousKeyboardIfWanted(image = false)
     }
 
     private fun insertImageSnippet(snippet: SnippetRecord) {
@@ -641,7 +692,7 @@ class PastilleImeService :
                 false
             }
             if (committed) {
-                returnToPreviousKeyboardIfWanted()
+                returnToPreviousKeyboardIfWanted(image = true)
                 return
             }
         }
@@ -671,8 +722,9 @@ class PastilleImeService :
         startActivity(intent)
     }
 
-    private fun returnToPreviousKeyboardIfWanted() {
-        if (settings.returnToPreviousKeyboard) onSwitchKeyboard()
+    private fun returnToPreviousKeyboardIfWanted(image: Boolean) {
+        val wanted = if (image) settings.returnAfterImage else settings.returnAfterSnippet
+        if (wanted) onSwitchKeyboard()
     }
 
     override fun onSwitchKeyboard() {

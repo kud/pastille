@@ -66,7 +66,10 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
@@ -87,6 +90,7 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.EditNote
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.Keyboard
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Settings
@@ -102,6 +106,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Surface
@@ -146,6 +154,7 @@ import app.pastille.model.CategoryRecord
 import app.pastille.model.SnippetRecord
 import app.pastille.settings.KeyboardMode
 import app.pastille.settings.KeyboardStyle
+import app.pastille.settings.PanelHeight
 import app.pastille.settings.TOOLBAR_HEIGHT_DP
 import app.pastille.settings.tileColumns
 import app.pastille.share.isMeaningfulImageName
@@ -171,6 +180,12 @@ data class KeyboardUiState(
     val highlightedSnippetId: Long? = null,
     val pickerStyle: KeyboardStyle = KeyboardStyle.Auto,
     val darkTheme: Boolean = true,
+    val savedStyle: KeyboardStyle = KeyboardStyle.Auto,
+    val heightPreset: PanelHeight = PanelHeight.Default,
+    val landscape: Boolean = false,
+    val returnAfterSnippet: Boolean = true,
+    val returnAfterImage: Boolean = false,
+    val enabledSourceIds: Set<Long>? = null,
 )
 
 interface KeyboardActions {
@@ -196,6 +211,13 @@ interface KeyboardActions {
     fun onPickStyle(style: KeyboardStyle) {}
     fun onStyleDone() {}
     fun onStyleNotNow() {}
+    fun onOpenSettings() {}
+    fun onOpenAllSettings() {}
+    fun onSetStyle(style: KeyboardStyle) {}
+    fun onSetHeight(height: PanelHeight) {}
+    fun onSetReturn(image: Boolean, enabled: Boolean) {}
+    fun onOpenImageFolders() {}
+    fun onSetShownSources(bucketIds: Set<Long>) {}
 }
 
 object NoKeyboardActions : KeyboardActions
@@ -218,6 +240,8 @@ fun KeyboardPanel(
         is PanelState.Actions -> actionsSnippet?.let { displayTitle(it.title, it.text).ifBlank { "Image" } }.orEmpty()
         is PanelState.Preview -> previewTitle(panel.image, state.imageSources.find { it.bucketId == state.sourceId })
         PanelState.Style -> "Keyboard style"
+        PanelState.Settings -> "Keyboard settings"
+        PanelState.ImageFolders -> "Image folders"
     }
 
     LaunchedEffect(state.strip?.key) {
@@ -307,14 +331,16 @@ private fun Toolbar(state: KeyboardUiState, actions: KeyboardActions, title: Str
             }
         }
         Row(
-            modifier = Modifier.weight(1f),
-            horizontalArrangement = Arrangement.SpaceEvenly,
+            modifier = Modifier.padding(end = 4.dp),
+            horizontalArrangement = Arrangement.End,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (state.mode == KeyboardMode.Snippets) {
-                ToolbarAction(icon = Icons.Outlined.Add, label = "New snippet", onClick = actions::onOpenAdd)
+            Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                if (state.mode == KeyboardMode.Snippets) {
+                    ToolbarAction(icon = Icons.Outlined.Add, label = "New snippet", onClick = actions::onOpenAdd)
+                }
             }
-            ToolbarAction(icon = Icons.Outlined.Settings, label = "Open Pastille", onClick = actions::onOpenApp)
+            ToolbarAction(icon = Icons.Outlined.Settings, label = "Keyboard settings", onClick = actions::onOpenSettings)
             ToolbarAction(icon = Icons.Outlined.Keyboard, label = "Switch keyboard", onClick = actions::onSwitchKeyboard)
         }
     }
@@ -467,6 +493,8 @@ private fun PanelContent(
             )
             is PanelState.Preview -> PreviewContent(image = panel.image, actions = actions)
             PanelState.Style -> StylePickerContent(state = state, actions = actions)
+            PanelState.Settings -> SettingsContent(state = state, actions = actions)
+            PanelState.ImageFolders -> ImageFoldersContent(state = state, actions = actions)
         }
     }
 }
@@ -906,8 +934,15 @@ private fun ImagesContent(state: KeyboardUiState, actions: KeyboardActions) {
         )
         return
     }
-    val preferred = orderForChips(state.imageSources, maxOthers = 0)
-    val sources = preferred + state.imageSources.filter { source -> preferred.none { it.bucketId == source.bucketId } }
+    val sources = visibleSources(state.imageSources, state.enabledSourceIds)
+    if (sources.isEmpty() && state.imageSources.isNotEmpty()) {
+        EmptyState(
+            message = "No image folders chosen",
+            button = "Choose folders",
+            onClick = actions::onOpenImageFolders,
+        )
+        return
+    }
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         LazyVerticalGrid(
             columns = GridCells.Fixed(tileColumns(maxWidth.value.toInt())),
@@ -1506,4 +1541,171 @@ private fun StyleTile(
             modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
         )
     }
+}
+
+@Composable
+private fun SettingsContent(state: KeyboardUiState, actions: KeyboardActions) {
+    val styles = buildList {
+        add(KeyboardStyle.Auto)
+        if (materialYouAvailable()) add(KeyboardStyle.MaterialYou)
+        add(KeyboardStyle.GboardDark)
+        add(KeyboardStyle.GboardLight)
+    }
+    val shownFolders = visibleSources(state.imageSources, state.enabledSourceIds)
+    Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 8.dp)) {
+        SettingsHeading("Look")
+        ChipLine {
+            styles.forEach { style ->
+                FilterToggleChip(
+                    label = styleName(style),
+                    selected = style == state.savedStyle,
+                    onClick = { actions.onSetStyle(style) },
+                )
+            }
+        }
+        SettingsHeading(if (state.landscape) "Height in landscape" else "Height")
+        ChipLine {
+            PanelHeight.entries.forEach { height ->
+                FilterToggleChip(
+                    label = height.label,
+                    selected = height == state.heightPreset,
+                    onClick = { actions.onSetHeight(height) },
+                )
+            }
+        }
+        SettingsHeading("After inserting")
+        SettingsSwitchRow(
+            headline = "Return after a snippet",
+            checked = state.returnAfterSnippet,
+            onChange = { actions.onSetReturn(image = false, enabled = it) },
+        )
+        SettingsSwitchRow(
+            headline = "Return after an image",
+            checked = state.returnAfterImage,
+            onChange = { actions.onSetReturn(image = true, enabled = it) },
+        )
+        SourceRow(
+            icon = Icons.Outlined.PhotoLibrary,
+            headline = "Image folders",
+            supporting = shownFolders.joinToString { it.name }.ifEmpty { "None shown" },
+            enabled = true,
+            onClick = actions::onOpenImageFolders,
+            trailing = { ChevronIcon() },
+        )
+        SourceRow(
+            icon = Icons.Outlined.Settings,
+            headline = "All settings",
+            supporting = null,
+            enabled = true,
+            onClick = actions::onOpenAllSettings,
+            trailing = {
+                Icon(
+                    Icons.AutoMirrored.Outlined.OpenInNew,
+                    contentDescription = null,
+                    tint = LocalKeyboardPalette.current.icon,
+                )
+            },
+        )
+    }
+}
+
+@Composable
+private fun ImageFoldersContent(state: KeyboardUiState, actions: KeyboardActions) {
+    val palette = LocalKeyboardPalette.current
+    if (!state.hasImagePermission) {
+        EmptyState(
+            message = "Allow photo access in Pastille to choose folders",
+            button = "Open Pastille",
+            onClick = actions::onOpenApp,
+        )
+        return
+    }
+    val shown = visibleSources(state.imageSources, state.enabledSourceIds).map { it.bucketId }.toSet()
+    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 4.dp)) {
+        items(state.imageSources.sortedBy { it.name.lowercase() }, key = { it.bucketId }) { source ->
+            val checked = source.bucketId in shown
+            ListItem(
+                headlineContent = { Text(source.name, color = palette.label) },
+                supportingContent = {
+                    Text(
+                        if (source.count == 1) "1 image" else "${source.count} images",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = palette.icon,
+                    )
+                },
+                trailingContent = {
+                    Checkbox(
+                        checked = checked,
+                        onCheckedChange = null,
+                        colors = CheckboxDefaults.colors(
+                            checkedColor = palette.accent,
+                            checkmarkColor = palette.onAccent,
+                            uncheckedColor = palette.icon,
+                        ),
+                    )
+                },
+                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                modifier = Modifier
+                    .animateItem()
+                    .toggleable(
+                        value = checked,
+                        role = Role.Checkbox,
+                        onValueChange = { on -> actions.onSetShownSources(if (on) shown + source.bucketId else shown - source.bucketId) },
+                    ),
+            )
+        }
+    }
+}
+
+@Composable
+private fun SettingsHeading(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelLarge,
+        color = LocalKeyboardPalette.current.labelSecondary,
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
+    )
+}
+
+@Composable
+private fun ChipLine(content: @Composable () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        content()
+    }
+}
+
+@Composable
+private fun SettingsSwitchRow(headline: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    val palette = LocalKeyboardPalette.current
+    ListItem(
+        headlineContent = { Text(headline, color = palette.label) },
+        trailingContent = {
+            Switch(
+                checked = checked,
+                onCheckedChange = null,
+                colors = SwitchDefaults.colors(
+                    checkedTrackColor = palette.accent,
+                    checkedThumbColor = palette.onAccent,
+                    uncheckedTrackColor = palette.key,
+                    uncheckedThumbColor = palette.icon,
+                    uncheckedBorderColor = Color.Transparent,
+                ),
+            )
+        },
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        modifier = Modifier.toggleable(value = checked, role = Role.Switch, onValueChange = onChange),
+    )
+}
+
+@Composable
+private fun ChevronIcon() {
+    Icon(
+        Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+        contentDescription = null,
+        tint = LocalKeyboardPalette.current.icon,
+    )
 }

@@ -9,9 +9,16 @@ import kotlinx.coroutines.flow.conflate
 
 class PastilleSettings private constructor(private val prefs: SharedPreferences) {
 
-    var returnToPreviousKeyboard: Boolean
-        get() = prefs.getBoolean(KEY_RETURN_TO_PREVIOUS_KEYBOARD, true)
-        set(value) = prefs.edit().putBoolean(KEY_RETURN_TO_PREVIOUS_KEYBOARD, value).apply()
+    var returnAfterSnippet: Boolean
+        get() = prefs.getBoolean(KEY_RETURN_AFTER_SNIPPET, returnDefault(legacyReturn(), image = false))
+        set(value) = prefs.edit().putBoolean(KEY_RETURN_AFTER_SNIPPET, value).apply()
+
+    var returnAfterImage: Boolean
+        get() = prefs.getBoolean(KEY_RETURN_AFTER_IMAGE, returnDefault(legacyReturn(), image = true))
+        set(value) = prefs.edit().putBoolean(KEY_RETURN_AFTER_IMAGE, value).apply()
+
+    private fun legacyReturn(): Boolean? =
+        if (prefs.contains(KEY_RETURN_TO_PREVIOUS_KEYBOARD)) prefs.getBoolean(KEY_RETURN_TO_PREVIOUS_KEYBOARD, true) else null
 
     var appCategoryId: Long?
         get() = readCategoryId(KEY_APP_CATEGORY_ID)
@@ -52,6 +59,12 @@ class PastilleSettings private constructor(private val prefs: SharedPreferences)
         get() = readCategoryId(KEY_IMAGE_SOURCE_BUCKET_ID)
         set(value) = writeCategoryId(KEY_IMAGE_SOURCE_BUCKET_ID, value)
 
+    var enabledImageSources: Set<Long>?
+        get() = prefs.getStringSet(KEY_ENABLED_IMAGE_SOURCES, null)?.mapNotNull { it.toLongOrNull() }?.toSet()
+        set(value) = prefs.edit().apply {
+            if (value == null) remove(KEY_ENABLED_IMAGE_SOURCES) else putStringSet(KEY_ENABLED_IMAGE_SOURCES, value.map { it.toString() }.toSet())
+        }.apply()
+
     // Emits once on collection and again on every change, so the keyboard redraws when Settings changes.
     fun changes(): Flow<Unit> = callbackFlow {
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> trySend(Unit) }
@@ -68,6 +81,8 @@ class PastilleSettings private constructor(private val prefs: SharedPreferences)
         private const val PREFS_NAME = "pastille_settings"
         private const val KEY_PREVIOUS_IME_ID = "previous_ime_id"
         private const val KEY_RETURN_TO_PREVIOUS_KEYBOARD = "return_to_previous_keyboard"
+        private const val KEY_RETURN_AFTER_SNIPPET = "return_after_snippet"
+        private const val KEY_RETURN_AFTER_IMAGE = "return_after_image"
         private const val KEY_APP_CATEGORY_ID = "app_category_id"
         private const val KEY_KEYBOARD_CATEGORY_ID = "keyboard_category_id"
         private const val KEY_KEYBOARD_STYLE = "keyboard_style"
@@ -76,6 +91,7 @@ class PastilleSettings private constructor(private val prefs: SharedPreferences)
         private const val KEY_PANEL_HEIGHT_LANDSCAPE = "panel_height_landscape"
         private const val KEY_KEYBOARD_MODE = "keyboard_mode"
         private const val KEY_IMAGE_SOURCE_BUCKET_ID = "image_source_bucket_id"
+        private const val KEY_ENABLED_IMAGE_SOURCES = "enabled_image_sources"
 
         fun forContext(context: Context): PastilleSettings =
             PastilleSettings(
@@ -83,3 +99,7 @@ class PastilleSettings private constructor(private val prefs: SharedPreferences)
             )
     }
 }
+
+// One switch used to cover both; an upgrade keeps whatever it was set to. Fresh installs return
+// after a snippet but stay for images, so several can go in a row.
+fun returnDefault(legacy: Boolean?, image: Boolean): Boolean = legacy ?: !image

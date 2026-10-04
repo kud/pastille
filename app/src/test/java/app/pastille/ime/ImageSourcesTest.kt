@@ -36,4 +36,22 @@ class ImageSourcesTest {
         val ordered = orderForChips(groupSources(rows), maxOthers = 0)
         assertEquals(listOf(2L, 1L), ordered.map { it.bucketId })
     }
+
+    private val folders = groupSources(
+        rows + listOf(
+            SourceRow(bucketId = 4, name = "WhatsApp Images", dateAdded = 500, path = "WhatsApp/Media/"),
+            SourceRow(bucketId = 5, name = "Download", dateAdded = 50, path = "Download/"),
+        ),
+    )
+
+    @Test
+    fun `before any choice, only Screenshots, Camera and Download show`() {
+        assertEquals(listOf(2L, 1L, 5L), visibleSources(folders, enabledIds = null).map { it.bucketId })
+    }
+
+    @Test
+    fun `after a choice, only the ticked folders show, so new ones stay hidden`() {
+        assertEquals(listOf(4L), visibleSources(folders, enabledIds = setOf(4L, 99L)).map { it.bucketId })
+        assertEquals(emptyList<Long>(), visibleSources(folders, enabledIds = emptySet()).map { it.bucketId })
+    }
 }

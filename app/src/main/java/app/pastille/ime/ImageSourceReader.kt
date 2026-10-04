@@ -61,6 +61,20 @@ fun orderForChips(sources: List<ImageSource>, maxOthers: Int = 3): List<ImageSou
     return ordered
 }
 
+fun isDefaultSource(source: ImageSource): Boolean =
+    source.isScreenshots ||
+        source.name.equals("Camera", ignoreCase = true) ||
+        source.name.equals("Download", ignoreCase = true) ||
+        source.name.equals("Downloads", ignoreCase = true)
+
+// Until the user picks, only Screenshots, Camera and Download show; once they pick, only what they
+// ticked, so a folder that appears later stays hidden until chosen.
+fun visibleSources(sources: List<ImageSource>, enabledIds: Set<Long>?): List<ImageSource> {
+    val chosen = if (enabledIds == null) sources.filter(::isDefaultSource) else sources.filter { it.bucketId in enabledIds }
+    val preferred = orderForChips(chosen, maxOthers = 0)
+    return preferred + chosen.filter { source -> preferred.none { it.bucketId == source.bucketId } }
+}
+
 fun resolveSource(sources: List<ImageSource>, savedBucketId: Long?): ImageSource? {
     if (savedBucketId != null) {
         sources.find { it.bucketId == savedBucketId }?.let { return it }

@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import app.pastille.crash.CrashLog
 import app.pastille.data.DatabaseHolder
+import app.pastille.data.SnippetRepository
 import app.pastille.images.ImageStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -29,6 +30,9 @@ class PastilleApplication : Application() {
             } catch (_: Throwable) {
             }
             previous?.uncaughtException(thread, throwable)
+        }
+        startupScope.launch {
+            runCatching { SnippetRepository.forContext(this@PastilleApplication).backfillTitles() }
         }
         startupScope.launch {
             runCatching {

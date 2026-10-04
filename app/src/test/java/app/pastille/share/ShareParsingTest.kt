@@ -9,11 +9,19 @@ import org.junit.Test
 class ShareParsingTest {
 
     @Test
-    fun autoTitleBlankForShortSingleLine() {
-        assertEquals("", autoTitle("hello"))
-        assertEquals("", autoTitle("a".repeat(40)))
+    fun autoTitleKeepsShortSingleLineAsItsOwnTitle() {
+        assertEquals("hello", autoTitle("hello"))
+        assertEquals("a".repeat(40), autoTitle("a".repeat(40)))
         assertEquals("", autoTitle(""))
         assertEquals("", autoTitle("   "))
+    }
+
+    @Test
+    fun autoTitleCutsOnWordBoundary() {
+        assertEquals(
+            "The quick brown fox jumps over the lazy…",
+            autoTitle("The quick brown fox jumps over the lazy dog again"),
+        )
     }
 
     @Test

@@ -7,6 +7,8 @@ import app.pastille.model.CategoryRecord
 import app.pastille.model.SnippetRecord
 import app.pastille.model.moveCategory as reorderCategories
 import app.pastille.model.sortSnippets
+import app.pastille.model.uniqueTitle
+import app.pastille.share.autoTitle
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -30,7 +32,7 @@ class SnippetRepository private constructor(
     suspend fun upsert(record: SnippetRecord, now: Long = System.currentTimeMillis()): Long {
         val entity = SnippetEntity(
             id = record.id,
-            title = record.title,
+            title = resolveTitle(record),
             text = record.text,
             pinned = record.pinned,
             createdAt = if (record.id == 0L) now else record.createdAt,
@@ -42,6 +44,28 @@ class SnippetRepository private constructor(
             imageHeight = record.imageHeight,
         )
         return dao.upsert(entity)
+    }
+
+    // Every snippet carries a title: blank ones take the auto title, and a clash
+    // within the same folder gets a " 2", " 3" suffix.
+    private suspend fun resolveTitle(record: SnippetRecord): String {
+        val typed = record.title.trim()
+        val base = when {
+            typed.isNotEmpty() -> typed
+            record.isImage -> "Image"
+            else -> autoTitle(record.text)
+        }
+        if (base.isEmpty()) return base
+        return uniqueTitle(base, dao.titlesInCategory(record.categoryId, record.id))
+    }
+
+    suspend fun backfillTitles() {
+        db.withTransaction {
+            dao.getBlankTitled().forEach { entity ->
+                val title = resolveTitle(entity.toRecord().copy(title = ""))
+                if (title.isNotEmpty()) dao.setTitle(entity.id, title)
+            }
+        }
     }
 
     suspend fun restore(record: SnippetRecord): Long =
@@ -58,16 +82,7 @@ class SnippetRepository private constructor(
     }
 
     suspend fun saveClipboardText(text: String, now: Long = System.currentTimeMillis()): Long =
-        dao.upsert(
-            SnippetEntity(
-                title = "",
-                text = text,
-                pinned = false,
-                createdAt = now,
-                updatedAt = now,
-                lastUsedAt = now,
-            ),
-        )
+        upsert(SnippetRecord(text = text), now)
 
     suspend fun insertImage(
         title: String,
@@ -77,19 +92,16 @@ class SnippetRepository private constructor(
         categoryId: Long? = null,
         now: Long = System.currentTimeMillis(),
     ): Long =
-        dao.upsert(
-            SnippetEntity(
+        upsert(
+            SnippetRecord(
                 title = title,
                 text = "",
-                pinned = false,
-                createdAt = now,
-                updatedAt = now,
-                lastUsedAt = now,
                 categoryId = categoryId,
                 imageFile = imageFile,
                 imageWidth = width,
                 imageHeight = height,
             ),
+            now,
         )
 
     suspend fun setPinned(ids: List<Long>, pinned: Boolean) {
@@ -184,15 +196,16 @@ class SnippetRepository private constructor(
             var imported = 0
             contents.snippets.forEach { entry ->
                 if (dao.findTextDuplicate(entry.record.text) != null) return@forEach
+                val categoryId = entry.category?.let { nameToId[it.lowercase()] }
                 dao.upsert(
                     SnippetEntity(
-                        title = entry.record.title,
+                        title = resolveTitle(entry.record.copy(id = 0, categoryId = categoryId)),
                         text = entry.record.text,
                         pinned = entry.record.pinned,
                         createdAt = now,
                         updatedAt = now,
                         lastUsedAt = entry.record.lastUsedAt,
-                        categoryId = entry.category?.let { nameToId[it.lowercase()] },
+                        categoryId = categoryId,
                     ),
                 )
                 imported++

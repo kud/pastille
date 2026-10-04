@@ -16,6 +16,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import app.pastille.data.SnippetRepository
 import app.pastille.model.SnippetRecord
+import app.pastille.ui.FolderScreen
 import app.pastille.ui.SettingsScreen
 import app.pastille.ui.SnippetEditorScreen
 import app.pastille.ui.SnippetListScreen
@@ -88,6 +89,7 @@ private fun PastilleApp(
     var creating: Boolean by rememberSaveable { mutableStateOf(false) }
     var newCategoryId: Long? by rememberSaveable { mutableStateOf<Long?>(null) }
     var showingSettings by rememberSaveable { mutableStateOf(false) }
+    var openFolderId: Long? by rememberSaveable { mutableStateOf<Long?>(null) }
     val context = LocalContext.current
     val repository = remember { SnippetRepository.forContext(context) }
 
@@ -109,13 +111,15 @@ private fun PastilleApp(
         onLaunchRequestHandled()
     }
 
-    BackHandler(enabled = editingId != null || creating || showingSettings) {
+    BackHandler(enabled = editingId != null || creating || showingSettings || openFolderId != null) {
         if (editingId != null || creating) {
             editingId = null
             creating = false
             newCategoryId = null
-        } else {
+        } else if (showingSettings) {
             showingSettings = false
+        } else {
+            openFolderId = null
         }
     }
 
@@ -132,6 +136,17 @@ private fun PastilleApp(
         )
     } else if (showingSettings) {
         SettingsScreen(onBack = { showingSettings = false })
+    } else if (openFolderId != null) {
+        FolderScreen(
+            folderId = openFolderId!!,
+            repository = repository,
+            onBack = { openFolderId = null },
+            onCreate = { categoryId ->
+                creating = true
+                newCategoryId = categoryId
+            },
+            onEdit = { snippet: SnippetRecord -> editingId = snippet.id },
+        )
     } else {
         SnippetListScreen(
             repository = repository,
@@ -141,6 +156,7 @@ private fun PastilleApp(
             },
             onEdit = { snippet: SnippetRecord -> editingId = snippet.id },
             onOpenSettings = { showingSettings = true },
+            onOpenFolder = { openFolderId = it },
         )
     }
 }

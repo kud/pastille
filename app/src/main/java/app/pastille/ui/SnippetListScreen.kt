@@ -43,15 +43,16 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PushPin
-import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.FileUpload
+import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Keyboard
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Search
@@ -66,10 +67,10 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SearchBar
 import androidx.compose.material3.SearchBarDefaults
@@ -99,9 +100,6 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.selected
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -117,8 +115,7 @@ import app.pastille.crash.CrashLog
 import app.pastille.data.SnippetRepository
 import app.pastille.images.ImageStore
 import app.pastille.images.ImageThumbnail
-import app.pastille.ime.ScreenshotReader
-import app.pastille.model.CategoryRecord
+import app.pastille.ime.ImageSourceReader
 import app.pastille.model.SnippetRecord
 import app.pastille.settings.PastilleSettings
 import kotlinx.coroutines.launch
@@ -130,6 +127,7 @@ fun SnippetListScreen(
     onCreate: (Long?) -> Unit,
     onEdit: (SnippetRecord) -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenFolder: (Long) -> Unit,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -153,24 +151,7 @@ fun SnippetListScreen(
 
     val categories by remember { repository.observeCategories() }
         .collectAsStateWithLifecycle(initialValue = emptyList())
-    val settings = remember { PastilleSettings.forContext(context) }
-    var selectedCategoryId by rememberSaveable { mutableStateOf(settings.appCategoryId) }
-    var showCreateCategory by remember { mutableStateOf(false) }
-    var renameTarget by remember { mutableStateOf<CategoryRecord?>(null) }
-    var deleteTarget by remember { mutableStateOf<CategoryRecord?>(null) }
-    var tabMenuId by remember { mutableStateOf<Long?>(null) }
-
-    LaunchedEffect(categories) {
-        if (selectedCategoryId != null && categories.none { it.id == selectedCategoryId }) {
-            selectedCategoryId = null
-            settings.appCategoryId = null
-        }
-    }
-
-    fun selectCategory(id: Long?) {
-        selectedCategoryId = id
-        settings.appCategoryId = id
-    }
+    var showCreateFolder by remember { mutableStateOf(false) }
 
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json"),
@@ -272,21 +253,16 @@ fun SnippetListScreen(
             }
         }
     }
-    val tabVisible = remember(snippets, selectedCategoryId) {
-        val id = selectedCategoryId
-        if (id == null) {
-            snippets
-        } else {
-            snippets.filter { it.categoryId == id }
-        }
+    val sortedFolders = remember(categories) {
+        categories.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
+    }
+    val snippetCounts = remember(snippets) {
+        snippets.groupingBy { it.categoryId }.eachCount()
+    }
+    val topLevel = remember(snippets) {
+        snippets.filter { it.categoryId == null }
     }
     val categoryNames = remember(categories) { categories.associate { it.id to it.name } }
-    val emptyCategoryName = selectedCategoryId?.let { categoryNames[it] }
-    val selectedTabIndex = if (selectedCategoryId == null) {
-        0
-    } else {
-        categories.indexOfFirst { it.id == selectedCategoryId } + 1
-    }
 
     if (showCrashDialog) {
         val entries = remember(showCrashDialog) { CrashLog.forContext(context).entries() }
@@ -336,58 +312,16 @@ fun SnippetListScreen(
         query = ""
     }
 
-    if (showCreateCategory) {
+    if (showCreateFolder) {
         CategoryNameDialog(
             initialName = "",
-            title = "New category",
+            title = "New folder",
             confirmLabel = "Create",
             onConfirm = { name ->
-                val id = repository.createCategory(name)
-                selectCategory(id)
+                repository.createCategory(name)
                 null
             },
-            onDismiss = { showCreateCategory = false },
-        )
-    }
-    renameTarget?.let { target ->
-        CategoryNameDialog(
-            initialName = target.name,
-            title = "Rename category",
-            confirmLabel = "Rename",
-            onConfirm = { name ->
-                try {
-                    repository.renameCategory(target.id, name)
-                    null
-                } catch (e: IllegalArgumentException) {
-                    e.message
-                }
-            },
-            onDismiss = { renameTarget = null },
-        )
-    }
-    deleteTarget?.let { target ->
-        AlertDialog(
-            onDismissRequest = { deleteTarget = null },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        scope.launch {
-                            repository.deleteCategory(target.id)
-                            if (selectedCategoryId == target.id) selectCategory(null)
-                            deleteTarget = null
-                        }
-                    },
-                ) {
-                    Text("Delete")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { deleteTarget = null }) {
-                    Text("Cancel")
-                }
-            },
-            title = { Text("Delete ${target.name}?") },
-            text = { Text("Snippets in ${target.name} move to All.") },
+            onDismiss = { showCreateFolder = false },
         )
     }
 
@@ -406,15 +340,13 @@ fun SnippetListScreen(
                             Icon(Icons.Filled.MoreVert, contentDescription = "More options")
                         }
                         DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                            if (categories.isEmpty()) {
-                                DropdownMenuItem(
-                                    text = { Text("New category") },
-                                    onClick = {
-                                        showMenu = false
-                                        showCreateCategory = true
-                                    },
-                                )
-                            }
+                            DropdownMenuItem(
+                                text = { Text("New folder") },
+                                onClick = {
+                                    showMenu = false
+                                    showCreateFolder = true
+                                },
+                            )
                             DropdownMenuItem(
                                 text = { Text("Import snippets") },
                                 leadingIcon = {
@@ -481,7 +413,7 @@ fun SnippetListScreen(
             },
             floatingActionButton = {
                 ExtendedFloatingActionButton(
-                    onClick = { onCreate(selectedCategoryId) },
+                    onClick = { onCreate(null) },
                     expanded = fabExpanded,
                     text = { Text("New snippet") },
                     icon = { Icon(Icons.Filled.Add, contentDescription = null) },
@@ -494,69 +426,6 @@ fun SnippetListScreen(
                     .fillMaxSize()
                     .padding(padding),
             ) {
-                if (categories.isNotEmpty()) {
-                    PrimaryScrollableTabRow(
-                        selectedTabIndex = selectedTabIndex,
-                        edgePadding = 16.dp,
-                        containerColor = MaterialTheme.colorScheme.surface,
-                    ) {
-                        CategoryTab(
-                            label = "All",
-                            selected = selectedCategoryId == null,
-                            onClick = { selectCategory(null) },
-                        )
-                        categories.forEachIndexed { index, category ->
-                            Box {
-                                CategoryTab(
-                                    label = category.name,
-                                    selected = selectedCategoryId == category.id,
-                                    onClick = { selectCategory(category.id) },
-                                    onLongClick = { tabMenuId = category.id },
-                                )
-                                DropdownMenu(
-                                    expanded = tabMenuId == category.id,
-                                    onDismissRequest = { tabMenuId = null },
-                                ) {
-                                    DropdownMenuItem(
-                                        text = { Text("Rename") },
-                                        onClick = {
-                                            tabMenuId = null
-                                            renameTarget = category
-                                        },
-                                    )
-                                    if (index > 0) {
-                                        DropdownMenuItem(
-                                            text = { Text("Move left") },
-                                            onClick = {
-                                                tabMenuId = null
-                                                scope.launch { repository.moveCategory(category.id, -1) }
-                                            },
-                                        )
-                                    }
-                                    if (index < categories.lastIndex) {
-                                        DropdownMenuItem(
-                                            text = { Text("Move right") },
-                                            onClick = {
-                                                tabMenuId = null
-                                                scope.launch { repository.moveCategory(category.id, 1) }
-                                            },
-                                        )
-                                    }
-                                    DropdownMenuItem(
-                                        text = { Text("Delete") },
-                                        onClick = {
-                                            tabMenuId = null
-                                            deleteTarget = category
-                                        },
-                                    )
-                                }
-                            }
-                        }
-                        IconButton(onClick = { showCreateCategory = true }) {
-                            Icon(Icons.Outlined.Add, contentDescription = "New category")
-                        }
-                    }
-                }
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     state = listState,
@@ -564,7 +433,7 @@ fun SnippetListScreen(
                 ) {
                 item(key = "onboarding") {
                     Box(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        OnboardingCard(key = refreshTick)
+                        OnboardingCard(key = refreshTick, onOpenSettings = onOpenSettings)
                     }
                 }
                 if (snippets.isEmpty()) {
@@ -579,28 +448,27 @@ fun SnippetListScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             Spacer(Modifier.height(16.dp))
-                            FilledTonalButton(onClick = { onCreate(selectedCategoryId) }) {
+                            FilledTonalButton(onClick = { onCreate(null) }) {
                                 Text("Add your first snippet")
                             }
                         }
                     }
                 }
-                if (snippets.isNotEmpty() && tabVisible.isEmpty() && emptyCategoryName != null) {
-                    item(key = "category-empty") {
-                        Column(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 32.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
-                            Text(
-                                text = "Nothing in $emptyCategoryName yet",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                }
-                itemsIndexed(tabVisible, key = { _, snippet -> snippet.id }) { index, snippet ->
+                itemsIndexed(sortedFolders, key = { _, folder -> "folder-${folder.id}" }) { index, folder ->
                     if (index > 0) {
+                        HorizontalDivider(
+                            thickness = 1.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant,
+                        )
+                    }
+                    FolderRow(
+                        name = folder.name,
+                        count = snippetCounts[folder.id] ?: 0,
+                        onClick = { onOpenFolder(folder.id) },
+                    )
+                }
+                itemsIndexed(topLevel, key = { _, snippet -> snippet.id }) { index, snippet ->
+                    if (index > 0 || sortedFolders.isNotEmpty()) {
                         HorizontalDivider(
                             thickness = 1.dp,
                             color = MaterialTheme.colorScheme.outlineVariant,
@@ -608,11 +476,7 @@ fun SnippetListScreen(
                     }
                     SnippetRow(
                         snippet = snippet,
-                        categoryName = if (selectedCategoryId == null) {
-                            snippet.categoryId?.let { categoryNames[it] }
-                        } else {
-                            null
-                        },
+                        categoryName = null,
                         onEdit = { onEdit(snippet) },
                         onCopy = { copySnippet(snippet) },
                         onTogglePin = { togglePin(snippet) },
@@ -721,7 +585,7 @@ private fun Wordmark(collapsedFraction: Float) {
 }
 
 @Composable
-private fun OnboardingCard(key: Int) {
+private fun OnboardingCard(key: Int, onOpenSettings: () -> Unit) {
     val context = LocalContext.current
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -729,10 +593,11 @@ private fun OnboardingCard(key: Int) {
 
     val imeEnabled = remember(key) { isPastilleEnabled(context) }
     val current = remember(key) { isPastilleCurrent(context) }
-    val photosGranted = remember(key) { ScreenshotReader.hasPermission(context) }
-    val partialOnly = remember(key) { ScreenshotReader.hasOnlyPartialAccess(context) }
+    val photosGranted = remember(key) { ImageSourceReader.hasPermission(context) }
+    val partialOnly = remember(key) { ImageSourceReader.hasOnlyPartialAccess(context) }
+    val keyboardStyleChosen = remember(key) { PastilleSettings.forContext(context).keyboardStyleChosen }
 
-    if (imeEnabled && current && photosGranted) return
+    if (imeEnabled && current && photosGranted && keyboardStyleChosen) return
 
     OutlinedCard(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
@@ -775,6 +640,13 @@ private fun OnboardingCard(key: Int) {
                     },
                 )
             }
+            if (!keyboardStyleChosen) {
+                SetupRow(
+                    text = "4. Pick a keyboard style",
+                    button = "Choose",
+                    onClick = onOpenSettings,
+                )
+            }
         }
     }
 }
@@ -797,7 +669,7 @@ private fun SetupRow(text: String, button: String, onClick: () -> Unit) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun SnippetRow(
+internal fun SnippetRow(
     snippet: SnippetRecord,
     categoryName: String? = null,
     onEdit: () -> Unit,
@@ -919,35 +791,37 @@ private fun SnippetRow(
     }
 }
 
-// Not a material3 Tab: its selectable swallows the press, so a long-press never reaches an outer detector.
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun CategoryTab(
-    label: String,
-    selected: Boolean,
+private fun FolderRow(
+    name: String,
+    count: Int,
     onClick: () -> Unit,
-    onLongClick: (() -> Unit)? = null,
 ) {
-    Box(
-        modifier = Modifier
-            .heightIn(min = 48.dp)
-            .semantics { this.selected = selected }
-            .combinedClickable(
-                role = Role.Tab,
-                onLongClickLabel = if (onLongClick != null) "Manage category" else null,
-                onLongClick = onLongClick,
-                onClick = onClick,
+    ListItem(
+        headlineContent = {
+            Text(
+                text = name,
+                style = MaterialTheme.typography.titleMedium,
             )
-            .padding(horizontal = 16.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.titleSmall,
-            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-        )
-    }
+        },
+        supportingContent = {
+            Text(if (count == 1) "1 snippet" else "$count snippets")
+        },
+        leadingContent = {
+            Icon(
+                imageVector = Icons.Outlined.Folder,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        },
+        trailingContent = {
+            Icon(
+                imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                contentDescription = null,
+            )
+        },
+        modifier = Modifier.clickable(onClick = onClick),
+    )
 }
 
 @Composable
@@ -1035,7 +909,7 @@ fun CategoryNameDialog(
                     name = it
                     error = null
                 },
-                label = { Text("Category name") },
+                label = { Text("Folder name") },
                 singleLine = true,
                 isError = error != null,
                 supportingText = {

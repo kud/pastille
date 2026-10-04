@@ -44,6 +44,15 @@ interface SnippetDao {
     @Query("UPDATE snippets SET categoryId = :categoryId WHERE id IN (:ids)")
     suspend fun setCategory(ids: List<Long>, categoryId: Long?)
 
+    @Query("SELECT title FROM snippets WHERE categoryId IS :categoryId AND id != :excludeId")
+    suspend fun titlesInCategory(categoryId: Long?, excludeId: Long): List<String>
+
+    @Query("SELECT * FROM snippets WHERE TRIM(title) = ''")
+    suspend fun getBlankTitled(): List<SnippetEntity>
+
+    @Query("UPDATE snippets SET title = :title WHERE id = :id")
+    suspend fun setTitle(id: Long, title: String)
+
     @Query("DELETE FROM snippets WHERE id IN (:ids)")
     suspend fun deleteByIds(ids: List<Long>)
 }

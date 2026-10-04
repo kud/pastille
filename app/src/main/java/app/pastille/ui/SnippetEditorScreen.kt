@@ -23,6 +23,7 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -36,12 +37,15 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.pastille.data.SnippetRepository
 import app.pastille.images.ImageThumbnail
 import app.pastille.model.SnippetRecord
+import app.pastille.share.autoTitle
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -61,6 +65,7 @@ fun SnippetEditorScreen(
     var categoryId by remember { mutableStateOf(initialCategoryId) }
     var categoryExpanded by remember { mutableStateOf(false) }
     var showCreateCategory by remember { mutableStateOf(false) }
+    val contentFocus = remember { FocusRequester() }
     val categories by remember { repository.observeCategories() }
         .collectAsStateWithLifecycle(initialValue = emptyList())
 
@@ -77,8 +82,11 @@ fun SnippetEditorScreen(
             ready = true
         }
     }
+    LaunchedEffect(Unit) {
+        if (snippetId == null) contentFocus.requestFocus()
+    }
     val isImage = existing?.isImage == true
-    val selectedCategoryName = categories.firstOrNull { it.id == categoryId }?.name ?: "None"
+    val selectedCategoryName = categories.firstOrNull { it.id == categoryId }?.name ?: "None (top level)"
     val imageRatio = remember(existing?.imageWidth, existing?.imageHeight) {
         val width = existing?.imageWidth
         val height = existing?.imageHeight
@@ -141,13 +149,17 @@ fun SnippetEditorScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             OutlinedTextField(
                 value = title,
                 onValueChange = { title = it },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Title (optional)") },
+                label = { Text("Title") },
+                placeholder = {
+                    Text(autoTitle(text), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                },
+                supportingText = { Text("Shown on the keyboard button") },
                 singleLine = true,
             )
             if (isImage) {
@@ -166,8 +178,10 @@ fun SnippetEditorScreen(
                     onValueChange = { text = it },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(1f),
-                    label = { Text("Text") },
+                        .weight(1f)
+                        .focusRequester(contentFocus),
+                    label = { Text("Content") },
+                    minLines = 6,
                 )
             }
             ExposedDropdownMenuBox(
@@ -179,7 +193,7 @@ fun SnippetEditorScreen(
                     onValueChange = {},
                     readOnly = true,
                     modifier = Modifier.menuAnchor().fillMaxWidth(),
-                    label = { Text("Category") },
+                    label = { Text("Folder") },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoryExpanded) },
                     singleLine = true,
                 )
@@ -188,7 +202,7 @@ fun SnippetEditorScreen(
                     onDismissRequest = { categoryExpanded = false },
                 ) {
                     DropdownMenuItem(
-                        text = { Text("None") },
+                        text = { Text("None (top level)") },
                         onClick = {
                             categoryId = null
                             categoryExpanded = false
@@ -204,7 +218,7 @@ fun SnippetEditorScreen(
                         )
                     }
                     DropdownMenuItem(
-                        text = { Text("New category…") },
+                        text = { Text("New folder…") },
                         onClick = {
                             categoryExpanded = false
                             showCreateCategory = true

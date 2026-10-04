@@ -10,10 +10,12 @@ private val UUID_REGEX =
     Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 
 fun autoTitle(text: String): String {
-    if (!text.contains('\n') && text.length <= TITLE_CHARS) return ""
     val first = text.lines().firstOrNull { it.isNotBlank() }?.trim().orEmpty()
-    if (first.isEmpty()) return ""
-    return if (first.length > TITLE_CHARS) first.take(TITLE_CHARS) + "…" else first
+    if (first.length <= TITLE_CHARS) return first
+    val cut = first.take(TITLE_CHARS)
+    val boundary = cut.lastIndexOf(' ')
+    val head = if (boundary >= TITLE_CHARS / 2) cut.substring(0, boundary) else cut
+    return head.trimEnd() + "…"
 }
 
 fun findSingleUrl(text: String): String? {

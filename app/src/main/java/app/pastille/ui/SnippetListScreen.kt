@@ -11,6 +11,7 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import app.pastille.ime.ImageSourceReader
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
@@ -40,8 +41,8 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.material.icons.outlined.DragHandle
-import androidx.compose.material.icons.outlined.SwapVert
+import androidx.compose.material.icons.rounded.DragHandle
+import androidx.compose.material.icons.rounded.SwapVert
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
@@ -53,23 +54,26 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
-import androidx.compose.material.icons.automirrored.outlined.ShortText
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.outlined.BugReport
-import androidx.compose.material.icons.outlined.Check
-import androidx.compose.material.icons.outlined.ContentCopy
-import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material.icons.outlined.FileDownload
-import androidx.compose.material.icons.outlined.FileUpload
-import androidx.compose.material.icons.outlined.Folder
-import androidx.compose.material.icons.outlined.Image
-import androidx.compose.material.icons.outlined.Keyboard
-import androidx.compose.material.icons.outlined.Link
-import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.material.icons.rounded.GridView
+import androidx.compose.material.icons.rounded.CreateNewFolder
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.rounded.ShortText
+import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.BugReport
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.FileDownload
+import androidx.compose.material.icons.rounded.FileUpload
+import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.Image
+import androidx.compose.material.icons.rounded.Keyboard
+import androidx.compose.material.icons.rounded.Link
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -390,14 +394,17 @@ fun SnippetListScreen(
                     title = { Wordmark(collapsedFraction = scrollBehavior.state.collapsedFraction) },
                     actions = {
                         IconButton(onClick = { searching = true }) {
-                            Icon(Icons.Outlined.Search, contentDescription = "Search snippets")
+                            Icon(Icons.Rounded.Search, contentDescription = "Search snippets")
                         }
                         IconButton(onClick = { showMenu = true }) {
-                            Icon(Icons.Filled.MoreVert, contentDescription = "More options")
+                            Icon(Icons.Rounded.MoreVert, contentDescription = "More options")
                         }
                         DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                             DropdownMenuItem(
                                 text = { Text("New folder") },
+                                leadingIcon = {
+                                    Icon(Icons.Rounded.CreateNewFolder, contentDescription = null)
+                                },
                                 onClick = {
                                     showMenu = false
                                     showCreateFolder = true
@@ -406,7 +413,7 @@ fun SnippetListScreen(
                             DropdownMenuItem(
                                 text = { Text("Import snippets") },
                                 leadingIcon = {
-                                    Icon(Icons.Outlined.FileDownload, contentDescription = null)
+                                    Icon(Icons.Rounded.FileDownload, contentDescription = null)
                                 },
                                 onClick = {
                                     showMenu = false
@@ -416,7 +423,7 @@ fun SnippetListScreen(
                             DropdownMenuItem(
                                 text = { Text("Export snippets") },
                                 leadingIcon = {
-                                    Icon(Icons.Outlined.FileUpload, contentDescription = null)
+                                    Icon(Icons.Rounded.FileUpload, contentDescription = null)
                                 },
                                 onClick = {
                                     showMenu = false
@@ -426,7 +433,7 @@ fun SnippetListScreen(
                             DropdownMenuItem(
                                 text = { Text("Reorder") },
                                 leadingIcon = {
-                                    Icon(Icons.Outlined.SwapVert, contentDescription = null)
+                                    Icon(Icons.Rounded.SwapVert, contentDescription = null)
                                 },
                                 enabled = snippets.size > 1 || orderedFolders.size > 1,
                                 onClick = {
@@ -439,7 +446,7 @@ fun SnippetListScreen(
                             DropdownMenuItem(
                                 text = { Text("Try the keyboard") },
                                 leadingIcon = {
-                                    Icon(Icons.Outlined.Edit, contentDescription = null)
+                                    Icon(Icons.Rounded.Edit, contentDescription = null)
                                 },
                                 onClick = {
                                     showMenu = false
@@ -449,7 +456,7 @@ fun SnippetListScreen(
                             DropdownMenuItem(
                                 text = { Text("Keyboard setup") },
                                 leadingIcon = {
-                                    Icon(Icons.Outlined.Keyboard, contentDescription = null)
+                                    Icon(Icons.Rounded.Keyboard, contentDescription = null)
                                 },
                                 onClick = {
                                     showMenu = false
@@ -459,7 +466,7 @@ fun SnippetListScreen(
                             DropdownMenuItem(
                                 text = { Text("Settings") },
                                 leadingIcon = {
-                                    Icon(Icons.Outlined.Settings, contentDescription = null)
+                                    Icon(Icons.Rounded.Settings, contentDescription = null)
                                 },
                                 onClick = {
                                     showMenu = false
@@ -470,7 +477,7 @@ fun SnippetListScreen(
                                 DropdownMenuItem(
                                     text = { Text("Last crash report") },
                                     leadingIcon = {
-                                        Icon(Icons.Outlined.BugReport, contentDescription = null)
+                                        Icon(Icons.Rounded.BugReport, contentDescription = null)
                                     },
                                     onClick = {
                                         showMenu = false
@@ -492,7 +499,7 @@ fun SnippetListScreen(
             floatingActionButton = {
                 if (!reordering) {
                     FloatingActionButton(onClick = { onCreate(selectedFolderId) }) {
-                        Icon(Icons.Outlined.Edit, contentDescription = "New snippet")
+                        Icon(Icons.Rounded.Edit, contentDescription = "New snippet")
                     }
                 }
             },
@@ -629,7 +636,7 @@ fun SnippetListScreen(
                                 },
                             ) {
                                 Icon(
-                                    Icons.AutoMirrored.Filled.ArrowBack,
+                                    Icons.AutoMirrored.Rounded.ArrowBack,
                                     contentDescription = "Close search",
                                 )
                             }
@@ -705,20 +712,36 @@ private fun Wordmark(collapsedFraction: Float) {
 @Composable
 private fun OnboardingCard(key: Int) {
     val context = LocalContext.current
+    var photosAsked by remember { mutableStateOf(0) }
     val imeEnabled = remember(key) { isPastilleEnabled(context) }
-    if (imeEnabled) return
+    val photosGranted = remember(key, photosAsked) {
+        ImageSourceReader.hasPermission(context) && !ImageSourceReader.hasOnlyPartialAccess(context)
+    }
+    val photoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        photosAsked++
+    }
+    if (imeEnabled && photosGranted) return
 
     OutlinedCard(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
             Text("Get set up", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(8.dp))
-            SetupRow(
-                text = "1. Enable Pastille in system settings",
-                button = "Enable",
-                onClick = {
-                    context.startActivity(Intent(AndroidSettings.ACTION_INPUT_METHOD_SETTINGS))
-                },
-            )
+            if (!imeEnabled) {
+                SetupRow(
+                    text = "Enable Pastille in system settings",
+                    button = "Enable",
+                    onClick = {
+                        context.startActivity(Intent(AndroidSettings.ACTION_INPUT_METHOD_SETTINGS))
+                    },
+                )
+            }
+            if (!photosGranted) {
+                SetupRow(
+                    text = "Allow photo access so your images show in the keyboard",
+                    button = "Allow",
+                    onClick = { photoLauncher.launch(photoPermission()) },
+                )
+            }
         }
     }
 }
@@ -822,7 +845,7 @@ internal fun SnippetRow(
                     }
                     IconButton(onClick = onCopy) {
                         Icon(
-                            imageVector = Icons.Outlined.ContentCopy,
+                            imageVector = Icons.Rounded.ContentCopy,
                             contentDescription = "Copy ${snippet.title.ifBlank { "Image" }}",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -869,7 +892,7 @@ internal fun SnippetRow(
                 }
                 IconButton(onClick = onCopy) {
                     Icon(
-                        imageVector = Icons.Outlined.ContentCopy,
+                        imageVector = Icons.Rounded.ContentCopy,
                         contentDescription = "Copy ${rowTitle(snippet.title, snippet.text).ifBlank { "snippet" }}",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -881,7 +904,7 @@ internal fun SnippetRow(
                     DropdownMenuItem(
                         text = { Text("Move to folder") },
                         leadingIcon = {
-                            Icon(Icons.Outlined.Folder, contentDescription = null)
+                            Icon(Icons.Rounded.Folder, contentDescription = null)
                         },
                         onClick = {
                             menuOpen = false
@@ -892,7 +915,7 @@ internal fun SnippetRow(
                 DropdownMenuItem(
                     text = { Text("Delete") },
                     leadingIcon = {
-                        Icon(Icons.Outlined.Delete, contentDescription = null)
+                        Icon(Icons.Rounded.Delete, contentDescription = null)
                     },
                     onClick = {
                         menuOpen = false
@@ -932,7 +955,7 @@ private fun FolderChoice(name: String, selected: Boolean, onClick: () -> Unit) {
         text = { Text(name) },
         leadingIcon = {
             if (selected) {
-                Icon(Icons.Outlined.Check, contentDescription = "Current folder")
+                Icon(Icons.Rounded.Check, contentDescription = "Current folder")
             } else {
                 Spacer(Modifier.size(24.dp))
             }
@@ -968,7 +991,7 @@ private fun SwipeBackground(state: SwipeToDismissBoxState) {
     ) {
         if (direction != SwipeToDismissBoxValue.Settled) {
             Icon(
-                imageVector = if (deleting) Icons.Outlined.Delete else Icons.Outlined.Edit,
+                imageVector = if (deleting) Icons.Rounded.Delete else Icons.Rounded.Edit,
                 contentDescription = if (deleting) "Delete" else "Edit",
                 tint = content,
             )
@@ -994,14 +1017,14 @@ private fun FolderRow(
         },
         leadingContent = {
             Icon(
-                imageVector = Icons.Outlined.Folder,
+                imageVector = Icons.Rounded.Folder,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         },
         trailingContent = {
             Icon(
-                imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
                 contentDescription = null,
             )
         },
@@ -1015,9 +1038,9 @@ private fun SnippetMetaRow(snippet: SnippetRecord, categoryName: String?) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Icon(
             imageVector = when (kind) {
-                SnippetKind.Text -> Icons.AutoMirrored.Outlined.ShortText
-                SnippetKind.Link -> Icons.Outlined.Link
-                SnippetKind.Image -> Icons.Outlined.Image
+                SnippetKind.Text -> Icons.AutoMirrored.Rounded.ShortText
+                SnippetKind.Link -> Icons.Rounded.Link
+                SnippetKind.Image -> Icons.Rounded.Image
             },
             contentDescription = when (kind) {
                 SnippetKind.Text -> "Text"
@@ -1156,7 +1179,7 @@ private fun FolderTabs(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         item(key = "all") {
-            FolderTab(label = "All", selected = selectedId == ALL_TAB, onClick = { onSelect(ALL_TAB) })
+            FolderTab(label = "All", icon = Icons.Rounded.GridView, selected = selectedId == ALL_TAB, onClick = { onSelect(ALL_TAB) })
         }
         items(folders, key = { it.id }) { folder ->
             ReorderableItem(reorderState, key = folder.id) { dragging ->
@@ -1164,6 +1187,7 @@ private fun FolderTabs(
                 Box {
                     FolderTab(
                         label = folder.name,
+                        icon = Icons.Rounded.Folder,
                         selected = selectedId == folder.id || dragging,
                         onClick = { onSelect(folder.id) },
                         onLongClick = if (reordering) null else ({ menuOpen = true }),
@@ -1179,7 +1203,7 @@ private fun FolderTabs(
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                         DropdownMenuItem(
                             text = { Text("Rename") },
-                            leadingIcon = { Icon(Icons.Outlined.Edit, contentDescription = null) },
+                            leadingIcon = { Icon(Icons.Rounded.Edit, contentDescription = null) },
                             onClick = {
                                 menuOpen = false
                                 onRename(folder)
@@ -1187,7 +1211,7 @@ private fun FolderTabs(
                         )
                         DropdownMenuItem(
                             text = { Text("Delete") },
-                            leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null) },
+                            leadingIcon = { Icon(Icons.Rounded.Delete, contentDescription = null) },
                             onClick = {
                                 menuOpen = false
                                 onDelete(folder)
@@ -1204,6 +1228,7 @@ private fun FolderTabs(
 @Composable
 private fun FolderTab(
     label: String,
+    icon: ImageVector,
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -1223,12 +1248,17 @@ private fun FolderTab(
             .padding(horizontal = 16.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.titleSmall,
-            color = if (selected) colors.onSecondaryContainer else colors.onSurfaceVariant,
-            maxLines = 1,
-        )
+        val tint = if (selected) colors.onSecondaryContainer else colors.onSurfaceVariant
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.titleSmall,
+                color = tint,
+                maxLines = 1,
+            )
+        }
     }
 }
 
@@ -1269,7 +1299,7 @@ private fun ReorderRow(snippet: SnippetRecord, handle: Modifier) {
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                imageVector = Icons.Outlined.DragHandle,
+                imageVector = Icons.Rounded.DragHandle,
                 contentDescription = "Drag to reorder",
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )

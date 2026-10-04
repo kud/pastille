@@ -3,7 +3,7 @@ package app.pastille.ui
 import android.view.inputmethod.InputMethodManager
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Keyboard
+import androidx.compose.material.icons.rounded.Keyboard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
@@ -32,7 +32,7 @@ internal fun TryItField(modifier: Modifier = Modifier) {
                     context.getSystemService(InputMethodManager::class.java)?.showInputMethodPicker()
                 },
             ) {
-                Icon(Icons.Outlined.Keyboard, contentDescription = "Choose keyboard")
+                Icon(Icons.Rounded.Keyboard, contentDescription = "Choose keyboard")
             }
         },
         minLines = 2,

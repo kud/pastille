@@ -21,8 +21,8 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -87,7 +87,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                 title = { Text("Settings") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
                     }
                 },
             )
@@ -244,7 +244,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                 IconButton(
                     onClick = { clipboard.setText(AnnotatedString(command)) },
                 ) {
-                    Icon(Icons.Filled.ContentCopy, contentDescription = "Copy command")
+                    Icon(Icons.Rounded.ContentCopy, contentDescription = "Copy command")
                 }
             }
             ListItem(
@@ -347,7 +347,7 @@ private fun PhotoAccessRow() {
     )
 }
 
-private fun photoPermission(): String =
+internal fun photoPermission(): String =
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         Manifest.permission.READ_MEDIA_IMAGES
     } else {

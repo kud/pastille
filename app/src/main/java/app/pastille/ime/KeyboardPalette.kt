@@ -23,6 +23,7 @@ data class KeyboardPalette(
     val key: Color,
     val keyPressed: Color,
     val stripButton: Color,
+    val onStripButton: Color,
     val label: Color,
     val labelSecondary: Color,
     val icon: Color,
@@ -38,6 +39,7 @@ val GboardDark = KeyboardPalette(
     key = Color(0xFF565B5F),
     keyPressed = Color(0xFF646A6E),
     stripButton = Color(0xFF45494C),
+    onStripButton = Color(0xFFFFFFFF),
     label = Color(0xFFFFFFFF),
     labelSecondary = Color(0xFFB1B2B5),
     icon = Color(0xFFACADB1),
@@ -53,6 +55,7 @@ val GboardLight = KeyboardPalette(
     key = Color(0xFFFFFFFF),
     keyPressed = Color(0xFFE3E5E8),
     stripButton = Color(0xFFDADCE0),
+    onStripButton = Color(0xFF202124),
     label = Color(0xFF202124),
     labelSecondary = Color(0xFF5F6368),
     icon = Color(0xFF5F6368),
@@ -74,6 +77,7 @@ fun gboardDynamic(context: Context, dark: Boolean): KeyboardPalette {
             key = tone(android.R.color.system_accent1_800),
             keyPressed = tone(android.R.color.system_accent1_700),
             stripButton = tone(android.R.color.system_accent2_200),
+            onStripButton = tone(android.R.color.system_accent1_900),
             label = tone(android.R.color.system_accent1_100),
             labelSecondary = tone(android.R.color.system_accent1_100).copy(alpha = 0.72f),
             icon = tone(android.R.color.system_accent1_100),
@@ -89,6 +93,7 @@ fun gboardDynamic(context: Context, dark: Boolean): KeyboardPalette {
             key = tone(android.R.color.system_accent1_100),
             keyPressed = tone(android.R.color.system_accent1_200),
             stripButton = tone(android.R.color.system_accent2_200),
+            onStripButton = tone(android.R.color.system_accent1_900),
             label = tone(android.R.color.system_accent1_900),
             labelSecondary = tone(android.R.color.system_accent1_900).copy(alpha = 0.72f),
             icon = tone(android.R.color.system_accent1_900),
@@ -137,7 +142,7 @@ fun KeyboardPalette.toColorScheme(): ColorScheme {
         outline = key,
         outlineVariant = key,
         secondaryContainer = stripButton,
-        onSecondaryContainer = label,
+        onSecondaryContainer = onStripButton,
     )
 }
 

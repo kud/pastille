@@ -21,9 +21,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.OpenInNew
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.outlined.Link
+import androidx.compose.material.icons.automirrored.rounded.OpenInNew
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -171,7 +171,7 @@ fun ShareSheet(
                         Text("Edit in Pastille")
                         Spacer(modifier = Modifier.width(4.dp))
                         Icon(
-                            Icons.AutoMirrored.Outlined.OpenInNew,
+                            Icons.AutoMirrored.Rounded.OpenInNew,
                             contentDescription = null,
                             modifier = Modifier.size(18.dp),
                         )
@@ -281,7 +281,7 @@ private fun LinkPreview(state: ShareUiState) {
     }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Icon(
-            Icons.Outlined.Link,
+            Icons.Rounded.Link,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier.size(16.dp),
@@ -403,7 +403,7 @@ private fun ShareCategoryChip(label: String, selected: Boolean, onClick: () -> U
         leadingIcon = if (selected) {
             {
                 Icon(
-                    Icons.Filled.Check,
+                    Icons.Rounded.Check,
                     contentDescription = null,
                     modifier = Modifier.size(FilterChipDefaults.IconSize),
                 )

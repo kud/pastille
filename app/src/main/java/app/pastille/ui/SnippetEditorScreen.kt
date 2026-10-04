@@ -13,9 +13,9 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -101,7 +101,7 @@ fun SnippetEditorScreen(
                 title = { Text(if (snippetId == null) "New snippet" else "Edit snippet") },
                 navigationIcon = {
                     IconButton(onClick = onDone) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.Rounded.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
@@ -114,7 +114,7 @@ fun SnippetEditorScreen(
                                 }
                             },
                         ) {
-                            Icon(Icons.Filled.Delete, contentDescription = "Delete snippet")
+                            Icon(Icons.Rounded.Delete, contentDescription = "Delete snippet")
                         }
                     }
                     IconButton(
@@ -134,7 +134,7 @@ fun SnippetEditorScreen(
                         },
                         enabled = ready && (text.isNotBlank() || isImage),
                     ) {
-                        Icon(Icons.Filled.Check, contentDescription = "Save snippet")
+                        Icon(Icons.Rounded.Check, contentDescription = "Save snippet")
                     }
                 },
             )

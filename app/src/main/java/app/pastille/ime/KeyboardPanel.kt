@@ -74,22 +74,26 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
-import androidx.compose.material.icons.automirrored.outlined.OpenInNew
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.BrokenImage
-import androidx.compose.material.icons.outlined.ContentPaste
-import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material.icons.outlined.EditNote
-import androidx.compose.material.icons.outlined.Folder
-import androidx.compose.material.icons.outlined.Image
-import androidx.compose.material.icons.outlined.PhotoLibrary
-import androidx.compose.material.icons.outlined.Keyboard
-import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.TextFields
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.PhotoCamera
+import androidx.compose.material.icons.rounded.Screenshot
+import androidx.compose.material.icons.rounded.GridView
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.rounded.OpenInNew
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.BrokenImage
+import androidx.compose.material.icons.rounded.ContentPaste
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.EditNote
+import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.Image
+import androidx.compose.material.icons.rounded.PhotoLibrary
+import androidx.compose.material.icons.rounded.Keyboard
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.TextFields
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -308,7 +312,7 @@ private fun Toolbar(state: KeyboardUiState, actions: KeyboardActions, title: Str
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = actions::onBack) {
                             Icon(
-                                Icons.AutoMirrored.Outlined.ArrowBack,
+                                Icons.AutoMirrored.Rounded.ArrowBack,
                                 contentDescription = "Back",
                                 tint = palette.icon,
                             )
@@ -331,11 +335,11 @@ private fun Toolbar(state: KeyboardUiState, actions: KeyboardActions, title: Str
         ) {
             Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
                 if (state.mode == KeyboardMode.Snippets) {
-                    ToolbarAction(icon = Icons.Outlined.Add, label = "New snippet", onClick = actions::onOpenAdd)
+                    ToolbarAction(icon = Icons.Rounded.Add, label = "New snippet", onClick = actions::onOpenAdd)
                 }
             }
-            ToolbarAction(icon = Icons.Outlined.Settings, label = "Keyboard settings", onClick = actions::onOpenSettings)
-            ToolbarAction(icon = Icons.Outlined.Keyboard, label = "Switch keyboard", onClick = actions::onSwitchKeyboard)
+            ToolbarAction(icon = Icons.Rounded.Settings, label = "Keyboard settings", onClick = actions::onOpenSettings)
+            ToolbarAction(icon = Icons.Rounded.Keyboard, label = "Switch keyboard", onClick = actions::onSwitchKeyboard)
         }
     }
 }
@@ -371,7 +375,7 @@ private fun ModeTab(label: String, selected: Boolean, onClick: () -> Unit) {
         Text(
             text = label,
             style = MaterialTheme.typography.labelLarge,
-            color = if (selected) palette.label else palette.icon,
+            color = if (selected) palette.onStripButton else palette.icon,
             maxLines = 1,
         )
     }
@@ -413,7 +417,7 @@ private fun StatusStripRow(strip: StatusStrip, onDismiss: (Long) -> Unit) {
             .fillMaxWidth()
             .padding(8.dp)
             .clip(RoundedCornerShape(12.dp))
-            .background(palette.stripButton)
+            .background(palette.keyPressed)
             .height(44.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -536,7 +540,8 @@ private fun FolderContent(state: KeyboardUiState, actions: KeyboardActions) {
     Column(modifier = Modifier.fillMaxSize()) {
         if (folders.isNotEmpty()) {
             FolderChipRow(
-                entries = listOf<Pair<Long?, String>>(null to "All") + folders.map { it.id to it.name },
+                entries = listOf(ChipEntry(null, "All", Icons.Rounded.GridView)) +
+                    folders.map { ChipEntry(it.id, it.name, Icons.Rounded.Folder) },
                 selectedId = folderId,
                 onSelect = actions::onOpenFolder,
             )
@@ -570,13 +575,13 @@ private fun FolderContent(state: KeyboardUiState, actions: KeyboardActions) {
 // Snippet folders and image folders share one chip row, so both modes read the same way.
 @Composable
 private fun FolderChipRow(
-    entries: List<Pair<Long?, String>>,
+    entries: List<ChipEntry>,
     selectedId: Long?,
     onSelect: (Long?) -> Unit,
 ) {
     val rowState = rememberLazyListState()
     LaunchedEffect(selectedId) {
-        val index = entries.indexOfFirst { it.first == selectedId }
+        val index = entries.indexOfFirst { it.id == selectedId }
         if (index >= 0) rowState.animateScrollToItem(index)
     }
     LazyRow(
@@ -586,11 +591,12 @@ private fun FolderChipRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        items(entries, key = { it.first ?: Long.MIN_VALUE }) { (id, label) ->
+        items(entries, key = { it.id ?: Long.MIN_VALUE }) { entry ->
             FilterToggleChip(
-                label = label,
-                selected = id == selectedId,
-                onClick = { onSelect(id) },
+                label = entry.label,
+                icon = entry.icon,
+                selected = entry.id == selectedId,
+                onClick = { onSelect(entry.id) },
             )
         }
     }
@@ -884,7 +890,7 @@ private fun ImagesContent(state: KeyboardUiState, actions: KeyboardActions) {
     }
     Column(modifier = Modifier.fillMaxSize()) {
     FolderChipRow(
-        entries = sources.map { it.bucketId to it.name },
+        entries = sources.map { ChipEntry(it.bucketId, it.name, sourceIcon(it)) },
         selectedId = state.sourceId,
         onSelect = { id -> id?.let(actions::onSelectSource) },
     )
@@ -969,7 +975,7 @@ private fun ImageTile(image: ImageItem, onTap: () -> Unit, onLongPress: () -> Un
                 )
                 is ThumbState.Failed -> ThumbPlaceholder(shimmer = false) {
                     Icon(
-                        Icons.Outlined.BrokenImage,
+                        Icons.Rounded.BrokenImage,
                         contentDescription = null,
                         modifier = Modifier.size(20.dp),
                         tint = LocalKeyboardPalette.current.icon,
@@ -1020,7 +1026,7 @@ private fun PreviewContent(image: ImageItem, actions: KeyboardActions) {
                     ThumbPlaceholder(shimmer = true)
                 }
                 is ThumbState.Failed -> Icon(
-                    Icons.Outlined.BrokenImage,
+                    Icons.Rounded.BrokenImage,
                     contentDescription = null,
                     tint = LocalKeyboardPalette.current.icon,
                 )
@@ -1047,7 +1053,7 @@ private fun AddContent(
     Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         val field = sources?.field
         SourceRow(
-            icon = Icons.Outlined.TextFields,
+            icon = Icons.Rounded.TextFields,
             headline = if ((field as? HostRead.Text)?.fromSelection == true) "From selection" else "From text field",
             supporting = when (field) {
                 is HostRead.Text -> previewOf(field.text)
@@ -1060,7 +1066,7 @@ private fun AddContent(
         )
         val clip = sources?.clip
         SourceRow(
-            icon = Icons.Outlined.ContentPaste,
+            icon = Icons.Rounded.ContentPaste,
             headline = "From clipboard",
             supporting = when (clip) {
                 is ClipRead.Text -> if (clip.sensitive) "Sensitive content" else previewOf(clip.text)
@@ -1070,14 +1076,14 @@ private fun AddContent(
             onClick = { actions.onAddFrom(AddSource.Clipboard, addCategoryId) },
         )
         SourceRow(
-            icon = Icons.Outlined.EditNote,
+            icon = Icons.Rounded.EditNote,
             headline = "Write in Pastille app",
             supporting = null,
             enabled = true,
             onClick = { actions.onWriteInApp(addCategoryId) },
             trailing = {
                 Icon(
-                    Icons.AutoMirrored.Outlined.OpenInNew,
+                    Icons.AutoMirrored.Rounded.OpenInNew,
                     contentDescription = null,
                     tint = LocalKeyboardPalette.current.icon,
                     modifier = Modifier.size(18.dp),
@@ -1178,7 +1184,7 @@ private fun FolderChipsRow(
                             label = { Text("New in app") },
                             leadingIcon = {
                                 Icon(
-                                    Icons.AutoMirrored.Outlined.OpenInNew,
+                                    Icons.AutoMirrored.Rounded.OpenInNew,
                                     contentDescription = null,
                                     modifier = Modifier.size(AssistChipDefaults.IconSize),
                                 )
@@ -1239,13 +1245,13 @@ private fun ActionsContent(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             PanelActionButton(
-                icon = Icons.Outlined.Edit,
+                icon = Icons.Rounded.Edit,
                 label = "Edit in app",
                 onClick = { actions.onEditSnippet(snippet) },
                 modifier = Modifier.weight(1f),
             )
             PanelActionButton(
-                icon = Icons.Outlined.Delete,
+                icon = Icons.Rounded.Delete,
                 label = "Delete",
                 onClick = { actions.onDeleteSnippet(snippet) },
                 modifier = Modifier.weight(1f),
@@ -1287,16 +1293,16 @@ private fun PanelActionButton(
 }
 
 @Composable
-private fun FilterToggleChip(label: String, selected: Boolean, onClick: () -> Unit) {
+private fun FilterToggleChip(label: String, selected: Boolean, onClick: () -> Unit, icon: ImageVector? = null) {
     val palette = LocalKeyboardPalette.current
     FilterChip(
         selected = selected,
         onClick = onClick,
         label = { Text(label) },
-        leadingIcon = if (selected) {
+        leadingIcon = if (icon != null || selected) {
             {
                 Icon(
-                    Icons.Filled.Check,
+                    icon ?: Icons.Rounded.Check,
                     contentDescription = null,
                     modifier = Modifier.size(FilterChipDefaults.IconSize),
                 )
@@ -1308,9 +1314,9 @@ private fun FilterToggleChip(label: String, selected: Boolean, onClick: () -> Un
         colors = FilterChipDefaults.filterChipColors(
             containerColor = palette.key,
             labelColor = palette.label,
-            selectedContainerColor = palette.accent,
-            selectedLabelColor = palette.onAccent,
-            selectedLeadingIconColor = palette.onAccent,
+            selectedContainerColor = palette.stripButton,
+            selectedLabelColor = palette.onStripButton,
+            selectedLeadingIconColor = palette.onStripButton,
         ),
         border = null,
     )
@@ -1445,7 +1451,7 @@ private fun StyleTile(
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
-                        Icons.Filled.Check,
+                        Icons.Rounded.Check,
                         contentDescription = null,
                         tint = current.onAccent,
                         modifier = Modifier.size(12.dp),
@@ -1506,7 +1512,7 @@ private fun SettingsContent(state: KeyboardUiState, actions: KeyboardActions) {
             onChange = { actions.onSetReturn(image = true, enabled = it) },
         )
         SourceRow(
-            icon = Icons.Outlined.PhotoLibrary,
+            icon = Icons.Rounded.PhotoLibrary,
             headline = "Image folders",
             supporting = shownFolders.joinToString { it.name }.ifEmpty { "None shown" },
             enabled = true,
@@ -1514,14 +1520,14 @@ private fun SettingsContent(state: KeyboardUiState, actions: KeyboardActions) {
             trailing = { ChevronIcon() },
         )
         SourceRow(
-            icon = Icons.Outlined.Settings,
+            icon = Icons.Rounded.Settings,
             headline = "All settings",
             supporting = null,
             enabled = true,
             onClick = actions::onOpenAllSettings,
             trailing = {
                 Icon(
-                    Icons.AutoMirrored.Outlined.OpenInNew,
+                    Icons.AutoMirrored.Rounded.OpenInNew,
                     contentDescription = null,
                     tint = LocalKeyboardPalette.current.icon,
                 )
@@ -1625,8 +1631,17 @@ private fun SettingsSwitchRow(headline: String, checked: Boolean, onChange: (Boo
 @Composable
 private fun ChevronIcon() {
     Icon(
-        Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+        Icons.AutoMirrored.Rounded.KeyboardArrowRight,
         contentDescription = null,
         tint = LocalKeyboardPalette.current.icon,
     )
+}
+
+private data class ChipEntry(val id: Long?, val label: String, val icon: ImageVector)
+
+private fun sourceIcon(source: ImageSource): ImageVector = when {
+    source.isScreenshots -> Icons.Rounded.Screenshot
+    source.name.equals("Camera", ignoreCase = true) -> Icons.Rounded.PhotoCamera
+    source.name.startsWith("Download", ignoreCase = true) -> Icons.Rounded.Download
+    else -> Icons.Rounded.PhotoLibrary
 }

@@ -2,5 +2,6 @@
 <resources>
     <string name="app_name">Pastille</string>
     <string name="ime_label">Pastille</string>
+    <string name="share_label">Save to Pastille</string>
     <string name="tile_label">Pastille</string>
 </resources>

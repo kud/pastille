@@ -39,6 +39,8 @@ import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import app.pastille.MainActivity
 import app.pastille.data.SnippetRepository
+import app.pastille.images.ImageStore
+import app.pastille.images.mimeTypeForFile
 import app.pastille.model.SnippetRecord
 import app.pastille.settings.PastilleSettings
 import app.pastille.ui.theme.PastilleTheme
@@ -171,6 +173,10 @@ class PastilleImeService :
         val repository = remember { SnippetRepository.forContext(context) }
         val flow = remember { repository.observeSnippets() }
         val snippets by flow.collectAsState(initial = emptyList())
+        val categoriesFlow = remember { repository.observeCategories() }
+        val categories by categoriesFlow.collectAsState(initial = emptyList())
+        var selectedCategoryId by remember { mutableStateOf(settings.keyboardCategoryId) }
+        val effectiveCategoryId = selectedCategoryId?.takeIf { id -> categories.any { it.id == id } }
         var screenshots by remember { mutableStateOf(emptyList<ScreenshotItem>()) }
         var canReadScreenshots by remember {
             mutableStateOf(ScreenshotReader.hasPermission(context))
@@ -185,14 +191,30 @@ class PastilleImeService :
             clipboardHasText.value = readClipboardText() != null
         }
 
+        LaunchedEffect(categories, selectedCategoryId) {
+            if (selectedCategoryId != null && categories.isNotEmpty() &&
+                categories.none { it.id == selectedCategoryId }
+            ) {
+                selectedCategoryId = null
+                settings.keyboardCategoryId = null
+            }
+        }
+
         KeyboardPanel(
             snippets = snippets,
+            categories = categories,
+            selectedCategoryId = effectiveCategoryId,
+            openCount = openCount.intValue,
             screenshots = screenshots,
             hasScreenshotPermission = canReadScreenshots,
             clipboardHasText = clipboardHasText.value,
             statusMessage = statusMessage.value,
             onStatusShown = { statusMessage.value = null },
             onNewSnippet = ::openNewSnippet,
+            onSelectCategory = {
+                selectedCategoryId = it
+                settings.keyboardCategoryId = it
+            },
             onSaveClipboard = ::saveClipboardAsSnippet,
             onOpenApp = ::openApp,
             onOpenPermissions = ::openApp,
@@ -204,9 +226,34 @@ class PastilleImeService :
     }
 
     private fun pasteSnippet(snippet: SnippetRecord) {
+        if (snippet.isImage) {
+            insertImageSnippet(snippet)
+            return
+        }
         val committed = currentInputConnection?.commitText(snippet.text, 1) == true
         serviceScope.launch { SnippetRepository.forContext(this@PastilleImeService).recordUse(snippet.id) }
         if (committed) returnToPreviousKeyboardIfWanted()
+    }
+
+    private fun insertImageSnippet(snippet: SnippetRecord) {
+        val name = snippet.imageFile
+        if (name == null) {
+            statusMessage.value = "That image is gone"
+            return
+        }
+        val file = ImageStore.forContext(this).fileFor(name)
+        if (!file.exists()) {
+            statusMessage.value = "That image is gone"
+            return
+        }
+        val uri = try {
+            FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+        } catch (_: Exception) {
+            statusMessage.value = "That image is gone"
+            return
+        }
+        serviceScope.launch { SnippetRepository.forContext(this@PastilleImeService).recordUse(snippet.id) }
+        insertImage(uri, mimeTypeForFile(name), snippet.title.ifBlank { "Pastille image" })
     }
 
     private fun openSnippetInEditor(snippet: SnippetRecord) {
@@ -216,10 +263,13 @@ class PastilleImeService :
         startActivity(intent)
     }
 
-    private fun openNewSnippet() {
+    private fun openNewSnippet(categoryId: Long?) {
         val intent = Intent(this, MainActivity::class.java)
             .putExtra(MainActivity.EXTRA_NEW_SNIPPET, true)
             .addFlags(MainActivity.LAUNCH_FLAGS)
+        if (categoryId != null) {
+            intent.putExtra(MainActivity.EXTRA_CATEGORY_ID, categoryId)
+        }
         startActivity(intent)
     }
 
@@ -256,39 +306,43 @@ class PastilleImeService :
                     statusMessage.value = "Couldn't read that screenshot"
                     return@withContext
                 }
-                val connection = currentInputConnection
-                val editorInfo = currentInputEditorInfo
-                val mimeTypes = if (editorInfo != null) {
-                    EditorInfoCompat.getContentMimeTypes(editorInfo).toSet()
-                } else {
-                    emptySet()
-                }
-                val acceptsImage = mimeTypes.any { ClipDescription.compareMimeTypes(mimeType, it) }
-                if (connection != null && editorInfo != null && acceptsImage) {
-                    val info = InputContentInfoCompat(
-                        contentUri,
-                        ClipDescription("Pastille screenshot", arrayOf(mimeType)),
-                        null,
-                    )
-                    val flags = InputConnectionCompat.INPUT_CONTENT_GRANT_READ_URI_PERMISSION
-                    val committed = try {
-                        InputConnectionCompat.commitContent(connection, editorInfo, info, flags, null)
-                    } catch (_: Exception) {
-                        false
-                    }
-                    if (committed) {
-                        returnToPreviousKeyboardIfWanted()
-                        return@withContext
-                    }
-                }
-                // Only Pastille's own FileProvider URI travels with the clip's read grant;
-                // a MediaStore URI would be unreadable to the app that pastes it.
-                val clipboard = getSystemService(ClipboardManager::class.java) ?: return@withContext
-                val clip = ClipData.newUri(contentResolver, "Pastille screenshot", contentUri)
-                clipboard.setPrimaryClip(clip)
-                statusMessage.value = "Copied, long-press to paste"
+                insertImage(contentUri, mimeType, "Pastille screenshot")
             }
         }
+    }
+
+    private fun insertImage(contentUri: Uri, mimeType: String, label: String) {
+        val connection = currentInputConnection
+        val editorInfo = currentInputEditorInfo
+        val mimeTypes = if (editorInfo != null) {
+            EditorInfoCompat.getContentMimeTypes(editorInfo).toSet()
+        } else {
+            emptySet()
+        }
+        val acceptsImage = mimeTypes.any { ClipDescription.compareMimeTypes(mimeType, it) }
+        if (connection != null && editorInfo != null && acceptsImage) {
+            val info = InputContentInfoCompat(
+                contentUri,
+                ClipDescription(label, arrayOf(mimeType)),
+                null,
+            )
+            val flags = InputConnectionCompat.INPUT_CONTENT_GRANT_READ_URI_PERMISSION
+            val committed = try {
+                InputConnectionCompat.commitContent(connection, editorInfo, info, flags, null)
+            } catch (_: Exception) {
+                false
+            }
+            if (committed) {
+                returnToPreviousKeyboardIfWanted()
+                return
+            }
+        }
+        // Only Pastille's own FileProvider URI travels with the clip's read grant;
+        // a MediaStore URI would be unreadable to the app that pastes it.
+        val clipboard = getSystemService(ClipboardManager::class.java) ?: return
+        val clip = ClipData.newUri(contentResolver, label, contentUri)
+        clipboard.setPrimaryClip(clip)
+        statusMessage.value = "Copied, long-press to paste"
     }
 
     private fun copyToSharedCache(item: ScreenshotItem, mimeType: String): Uri {

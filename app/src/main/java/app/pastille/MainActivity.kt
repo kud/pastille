@@ -22,13 +22,20 @@ import app.pastille.ui.SnippetListScreen
 import app.pastille.ui.theme.PastilleTheme
 
 sealed interface LaunchRequest {
-    data object NewSnippet : LaunchRequest
+    data class NewSnippet(val categoryId: Long? = null) : LaunchRequest
     data class Edit(val id: Long) : LaunchRequest
 }
 
 fun Intent?.toLaunchRequest(): LaunchRequest? {
     if (this == null) return null
-    if (getBooleanExtra(MainActivity.EXTRA_NEW_SNIPPET, false)) return LaunchRequest.NewSnippet
+    if (getBooleanExtra(MainActivity.EXTRA_NEW_SNIPPET, false)) {
+        val categoryId = if (hasExtra(MainActivity.EXTRA_CATEGORY_ID)) {
+            getLongExtra(MainActivity.EXTRA_CATEGORY_ID, -1).takeIf { it >= 0 }
+        } else {
+            null
+        }
+        return LaunchRequest.NewSnippet(categoryId)
+    }
     if (hasExtra(MainActivity.EXTRA_EDIT_SNIPPET_ID)) {
         val id = getLongExtra(MainActivity.EXTRA_EDIT_SNIPPET_ID, -1)
         if (id >= 0) return LaunchRequest.Edit(id)
@@ -65,6 +72,7 @@ class MainActivity : ComponentActivity() {
     companion object {
         const val EXTRA_EDIT_SNIPPET_ID = "app.pastille.EXTRA_EDIT_SNIPPET_ID"
         const val EXTRA_NEW_SNIPPET = "app.pastille.EXTRA_NEW_SNIPPET"
+        const val EXTRA_CATEGORY_ID = "app.pastille.EXTRA_CATEGORY_ID"
         val LAUNCH_FLAGS = Intent.FLAG_ACTIVITY_NEW_TASK or
             Intent.FLAG_ACTIVITY_CLEAR_TOP or
             Intent.FLAG_ACTIVITY_SINGLE_TOP
@@ -78,19 +86,22 @@ private fun PastilleApp(
 ) {
     var editingId: Long? by rememberSaveable { mutableStateOf<Long?>(null) }
     var creating: Boolean by rememberSaveable { mutableStateOf(false) }
+    var newCategoryId: Long? by rememberSaveable { mutableStateOf<Long?>(null) }
     var showingSettings by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
     val repository = remember { SnippetRepository.forContext(context) }
 
     LaunchedEffect(launchRequest) {
         when (launchRequest) {
-            LaunchRequest.NewSnippet -> {
+            is LaunchRequest.NewSnippet -> {
                 editingId = null
                 creating = true
+                newCategoryId = launchRequest.categoryId
             }
             is LaunchRequest.Edit -> {
                 editingId = launchRequest.id
                 creating = false
+                newCategoryId = null
             }
             null -> return@LaunchedEffect
         }
@@ -102,6 +113,7 @@ private fun PastilleApp(
         if (editingId != null || creating) {
             editingId = null
             creating = false
+            newCategoryId = null
         } else {
             showingSettings = false
         }
@@ -114,14 +126,19 @@ private fun PastilleApp(
             onDone = {
                 editingId = null
                 creating = false
+                newCategoryId = null
             },
+            initialCategoryId = newCategoryId,
         )
     } else if (showingSettings) {
         SettingsScreen(onBack = { showingSettings = false })
     } else {
         SnippetListScreen(
             repository = repository,
-            onCreate = { creating = true },
+            onCreate = { categoryId ->
+                creating = true
+                newCategoryId = categoryId
+            },
             onEdit = { snippet: SnippetRecord -> editingId = snippet.id },
             onOpenSettings = { showingSettings = true },
         )

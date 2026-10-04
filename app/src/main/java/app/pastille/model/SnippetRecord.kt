@@ -8,4 +8,10 @@ data class SnippetRecord(
     val createdAt: Long = 0,
     val updatedAt: Long = 0,
     val lastUsedAt: Long = 0,
-)
+    val categoryId: Long? = null,
+    val imageFile: String? = null,
+    val imageWidth: Int? = null,
+    val imageHeight: Int? = null,
+) {
+    val isImage: Boolean get() = imageFile != null
+}

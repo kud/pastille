@@ -4,8 +4,16 @@ import android.app.Application
 import android.content.pm.PackageManager
 import android.os.Build
 import app.pastille.crash.CrashLog
+import app.pastille.data.DatabaseHolder
+import app.pastille.images.ImageStore
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 class PastilleApplication : Application() {
+
+    private val startupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onCreate() {
         super.onCreate()
@@ -21,6 +29,14 @@ class PastilleApplication : Application() {
             } catch (_: Throwable) {
             }
             previous?.uncaughtException(thread, throwable)
+        }
+        startupScope.launch {
+            runCatching {
+                val referenced =
+                    DatabaseHolder.get(this@PastilleApplication).snippets().allImageFiles().toSet()
+                ImageStore.forContext(this@PastilleApplication)
+                    .sweepOrphans(referenced, System.currentTimeMillis())
+            }
         }
     }
 

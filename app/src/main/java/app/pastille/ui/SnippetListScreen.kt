@@ -37,6 +37,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
@@ -45,6 +46,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
@@ -66,6 +68,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SearchBar
 import androidx.compose.material3.SearchBarDefaults
@@ -88,11 +92,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -100,20 +109,25 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.lerp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.FileProvider
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.pastille.crash.CrashLog
 import app.pastille.data.SnippetRepository
+import app.pastille.images.ImageStore
+import app.pastille.images.ImageThumbnail
 import app.pastille.ime.ScreenshotReader
+import app.pastille.model.CategoryRecord
 import app.pastille.model.SnippetRecord
+import app.pastille.settings.PastilleSettings
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SnippetListScreen(
     repository: SnippetRepository,
-    onCreate: () -> Unit,
+    onCreate: (Long?) -> Unit,
     onEdit: (SnippetRecord) -> Unit,
     onOpenSettings: () -> Unit,
 ) {
@@ -137,16 +151,42 @@ fun SnippetListScreen(
     }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { refreshTick++ }
 
+    val categories by remember { repository.observeCategories() }
+        .collectAsStateWithLifecycle(initialValue = emptyList())
+    val settings = remember { PastilleSettings.forContext(context) }
+    var selectedCategoryId by rememberSaveable { mutableStateOf(settings.appCategoryId) }
+    var showCreateCategory by remember { mutableStateOf(false) }
+    var renameTarget by remember { mutableStateOf<CategoryRecord?>(null) }
+    var deleteTarget by remember { mutableStateOf<CategoryRecord?>(null) }
+    var tabMenuId by remember { mutableStateOf<Long?>(null) }
+
+    LaunchedEffect(categories) {
+        if (selectedCategoryId != null && categories.none { it.id == selectedCategoryId }) {
+            selectedCategoryId = null
+            settings.appCategoryId = null
+        }
+    }
+
+    fun selectCategory(id: Long?) {
+        selectedCategoryId = id
+        settings.appCategoryId = id
+    }
+
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json"),
     ) { uri ->
         if (uri != null) {
             scope.launch {
                 runCatching {
+                    val result = repository.exportJson()
                     context.contentResolver.openOutputStream(uri)?.use { out ->
-                        out.write(repository.exportJson().toByteArray())
+                        out.write(result.json.toByteArray())
                     } ?: error("Could not open $uri")
-                    "Exported ${snippets.size} snippets"
+                    if (result.skippedImages > 0) {
+                        "Exported ${result.exported} snippets (${result.skippedImages} image snippets aren't included)"
+                    } else {
+                        "Exported ${result.exported} snippets"
+                    }
                 }.onSuccess { toast(context, it) }
                     .onFailure { toast(context, "Export failed: ${it.message}") }
             }
@@ -180,10 +220,23 @@ fun SnippetListScreen(
     }
 
     fun copySnippet(snippet: SnippetRecord) {
-        context.getSystemService(ClipboardManager::class.java)
-            ?.setPrimaryClip(
-                ClipData.newPlainText(snippet.title.ifBlank { "Snippet" }, snippet.text),
+        val imageFile = snippet.imageFile
+        if (snippet.isImage && imageFile != null) {
+            val uri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                ImageStore.forContext(context).fileFor(imageFile),
             )
+            context.getSystemService(ClipboardManager::class.java)
+                ?.setPrimaryClip(
+                    ClipData.newUri(context.contentResolver, snippet.title.ifBlank { "Image" }, uri),
+                )
+        } else {
+            context.getSystemService(ClipboardManager::class.java)
+                ?.setPrimaryClip(
+                    ClipData.newPlainText(snippet.title.ifBlank { "Snippet" }, snippet.text),
+                )
+        }
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
             scope.launch { snackbarHostState.showSnackbar("Copied") }
         }
@@ -204,7 +257,7 @@ fun SnippetListScreen(
                 duration = SnackbarDuration.Short,
             )
             if (result == SnackbarResult.ActionPerformed) {
-                repository.upsert(snippet)
+                repository.restore(snippet)
             }
         }
     }
@@ -218,6 +271,21 @@ fun SnippetListScreen(
                     it.text.contains(query, ignoreCase = true)
             }
         }
+    }
+    val tabVisible = remember(snippets, selectedCategoryId) {
+        val id = selectedCategoryId
+        if (id == null) {
+            snippets
+        } else {
+            snippets.filter { it.categoryId == id }
+        }
+    }
+    val categoryNames = remember(categories) { categories.associate { it.id to it.name } }
+    val emptyCategoryName = selectedCategoryId?.let { categoryNames[it] }
+    val selectedTabIndex = if (selectedCategoryId == null) {
+        0
+    } else {
+        categories.indexOfFirst { it.id == selectedCategoryId } + 1
     }
 
     if (showCrashDialog) {
@@ -268,6 +336,61 @@ fun SnippetListScreen(
         query = ""
     }
 
+    if (showCreateCategory) {
+        CategoryNameDialog(
+            initialName = "",
+            title = "New category",
+            confirmLabel = "Create",
+            onConfirm = { name ->
+                val id = repository.createCategory(name)
+                selectCategory(id)
+                null
+            },
+            onDismiss = { showCreateCategory = false },
+        )
+    }
+    renameTarget?.let { target ->
+        CategoryNameDialog(
+            initialName = target.name,
+            title = "Rename category",
+            confirmLabel = "Rename",
+            onConfirm = { name ->
+                try {
+                    repository.renameCategory(target.id, name)
+                    null
+                } catch (e: IllegalArgumentException) {
+                    e.message
+                }
+            },
+            onDismiss = { renameTarget = null },
+        )
+    }
+    deleteTarget?.let { target ->
+        AlertDialog(
+            onDismissRequest = { deleteTarget = null },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            repository.deleteCategory(target.id)
+                            if (selectedCategoryId == target.id) selectCategory(null)
+                            deleteTarget = null
+                        }
+                    },
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteTarget = null }) {
+                    Text("Cancel")
+                }
+            },
+            title = { Text("Delete ${target.name}?") },
+            text = { Text("Snippets in ${target.name} move to All.") },
+        )
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
             modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -283,6 +406,15 @@ fun SnippetListScreen(
                             Icon(Icons.Filled.MoreVert, contentDescription = "More options")
                         }
                         DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                            if (categories.isEmpty()) {
+                                DropdownMenuItem(
+                                    text = { Text("New category") },
+                                    onClick = {
+                                        showMenu = false
+                                        showCreateCategory = true
+                                    },
+                                )
+                            }
                             DropdownMenuItem(
                                 text = { Text("Import snippets") },
                                 leadingIcon = {
@@ -349,7 +481,7 @@ fun SnippetListScreen(
             },
             floatingActionButton = {
                 ExtendedFloatingActionButton(
-                    onClick = onCreate,
+                    onClick = { onCreate(selectedCategoryId) },
                     expanded = fabExpanded,
                     text = { Text("New snippet") },
                     icon = { Icon(Icons.Filled.Add, contentDescription = null) },
@@ -357,13 +489,79 @@ fun SnippetListScreen(
             },
             snackbarHost = { SnackbarHost(snackbarHostState) },
         ) { padding ->
-            LazyColumn(
+            Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding),
-                state = listState,
-                contentPadding = PaddingValues(bottom = 88.dp),
             ) {
+                if (categories.isNotEmpty()) {
+                    PrimaryScrollableTabRow(
+                        selectedTabIndex = selectedTabIndex,
+                        edgePadding = 16.dp,
+                        containerColor = MaterialTheme.colorScheme.surface,
+                    ) {
+                        CategoryTab(
+                            label = "All",
+                            selected = selectedCategoryId == null,
+                            onClick = { selectCategory(null) },
+                        )
+                        categories.forEachIndexed { index, category ->
+                            Box {
+                                CategoryTab(
+                                    label = category.name,
+                                    selected = selectedCategoryId == category.id,
+                                    onClick = { selectCategory(category.id) },
+                                    onLongClick = { tabMenuId = category.id },
+                                )
+                                DropdownMenu(
+                                    expanded = tabMenuId == category.id,
+                                    onDismissRequest = { tabMenuId = null },
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("Rename") },
+                                        onClick = {
+                                            tabMenuId = null
+                                            renameTarget = category
+                                        },
+                                    )
+                                    if (index > 0) {
+                                        DropdownMenuItem(
+                                            text = { Text("Move left") },
+                                            onClick = {
+                                                tabMenuId = null
+                                                scope.launch { repository.moveCategory(category.id, -1) }
+                                            },
+                                        )
+                                    }
+                                    if (index < categories.lastIndex) {
+                                        DropdownMenuItem(
+                                            text = { Text("Move right") },
+                                            onClick = {
+                                                tabMenuId = null
+                                                scope.launch { repository.moveCategory(category.id, 1) }
+                                            },
+                                        )
+                                    }
+                                    DropdownMenuItem(
+                                        text = { Text("Delete") },
+                                        onClick = {
+                                            tabMenuId = null
+                                            deleteTarget = category
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                        IconButton(onClick = { showCreateCategory = true }) {
+                            Icon(Icons.Outlined.Add, contentDescription = "New category")
+                        }
+                    }
+                }
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    state = listState,
+                    contentPadding = PaddingValues(bottom = 88.dp),
+                ) {
                 item(key = "onboarding") {
                     Box(modifier = Modifier.padding(horizontal = 16.dp)) {
                         OnboardingCard(key = refreshTick)
@@ -381,13 +579,27 @@ fun SnippetListScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             Spacer(Modifier.height(16.dp))
-                            FilledTonalButton(onClick = onCreate) {
+                            FilledTonalButton(onClick = { onCreate(selectedCategoryId) }) {
                                 Text("Add your first snippet")
                             }
                         }
                     }
                 }
-                itemsIndexed(snippets, key = { _, snippet -> snippet.id }) { index, snippet ->
+                if (snippets.isNotEmpty() && tabVisible.isEmpty() && emptyCategoryName != null) {
+                    item(key = "category-empty") {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 32.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Text(
+                                text = "Nothing in $emptyCategoryName yet",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+                itemsIndexed(tabVisible, key = { _, snippet -> snippet.id }) { index, snippet ->
                     if (index > 0) {
                         HorizontalDivider(
                             thickness = 1.dp,
@@ -396,11 +608,17 @@ fun SnippetListScreen(
                     }
                     SnippetRow(
                         snippet = snippet,
+                        categoryName = if (selectedCategoryId == null) {
+                            snippet.categoryId?.let { categoryNames[it] }
+                        } else {
+                            null
+                        },
                         onEdit = { onEdit(snippet) },
                         onCopy = { copySnippet(snippet) },
                         onTogglePin = { togglePin(snippet) },
                         onDelete = { deleteSnippet(snippet) },
                     )
+                }
                 }
             }
         }
@@ -458,6 +676,7 @@ fun SnippetListScreen(
                         }
                         SnippetRow(
                             snippet = snippet,
+                            categoryName = snippet.categoryId?.let { categoryNames[it] },
                             onEdit = { onEdit(snippet) },
                             onCopy = { copySnippet(snippet) },
                             onTogglePin = { togglePin(snippet) },
@@ -580,6 +799,7 @@ private fun SetupRow(text: String, button: String, onClick: () -> Unit) {
 @Composable
 private fun SnippetRow(
     snippet: SnippetRecord,
+    categoryName: String? = null,
     onEdit: () -> Unit,
     onCopy: () -> Unit,
     onTogglePin: () -> Unit,
@@ -588,13 +808,49 @@ private fun SnippetRow(
     var menuOpen by remember { mutableStateOf(false) }
     var expanded by rememberSaveable(snippet.id) { mutableStateOf(false) }
     var overflows by remember(snippet.id) { mutableStateOf(false) }
+    val imageFile = snippet.imageFile
     Box(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp)
-                .combinedClickable(onClick = onEdit, onLongClick = { menuOpen = true })
-                .padding(start = 16.dp, end = 4.dp, top = 12.dp, bottom = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+        if (snippet.isImage && imageFile != null) {
+            Row(
+                modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp)
+                    .combinedClickable(onClick = onEdit, onLongClick = { menuOpen = true })
+                    .padding(start = 16.dp, end = 4.dp, top = 12.dp, bottom = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ImageThumbnail(
+                    fileName = imageFile,
+                    contentDescription = null,
+                    modifier = Modifier.height(56.dp).width(imageThumbWidthDp(snippet).dp)
+                        .clip(RoundedCornerShape(8.dp)),
+                    contentScale = ContentScale.Crop,
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = snippet.title.ifBlank { "Image" },
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    SnippetMetaRow(snippet = snippet, categoryName = categoryName)
+                }
+                IconButton(onClick = onCopy) {
+                    Icon(
+                        imageVector = Icons.Outlined.ContentCopy,
+                        contentDescription = "Copy ${snippet.title.ifBlank { "Image" }}",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp)
+                    .combinedClickable(onClick = onEdit, onLongClick = { menuOpen = true })
+                    .padding(start = 16.dp, end = 4.dp, top = 12.dp, bottom = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
             Column(modifier = Modifier.weight(1f).animateContentSize()) {
                 if (snippet.title.isNotBlank()) {
                     Text(
@@ -624,25 +880,7 @@ private fun SnippetRow(
                     )
                 }
                 Spacer(modifier = Modifier.height(6.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = relativeTime(
-                            then = snippet.updatedAt.takeIf { it > 0 } ?: snippet.createdAt,
-                            now = System.currentTimeMillis(),
-                        ),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                    )
-                    if (snippet.pinned) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Icon(
-                            imageVector = Icons.Filled.PushPin,
-                            contentDescription = "Pinned",
-                            modifier = Modifier.size(14.dp),
-                            tint = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                }
+                SnippetMetaRow(snippet = snippet, categoryName = categoryName)
             }
             IconButton(onClick = onCopy) {
                 Icon(
@@ -650,6 +888,7 @@ private fun SnippetRow(
                     contentDescription = "Copy ${snippet.title.ifBlank { "snippet" }}",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
             }
         }
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
@@ -678,6 +917,135 @@ private fun SnippetRow(
             )
         }
     }
+}
+
+// Not a material3 Tab: its selectable swallows the press, so a long-press never reaches an outer detector.
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun CategoryTab(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
+) {
+    Box(
+        modifier = Modifier
+            .heightIn(min = 48.dp)
+            .semantics { this.selected = selected }
+            .combinedClickable(
+                role = Role.Tab,
+                onLongClickLabel = if (onLongClick != null) "Manage category" else null,
+                onLongClick = onLongClick,
+                onClick = onClick,
+            )
+            .padding(horizontal = 16.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.titleSmall,
+            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+        )
+    }
+}
+
+@Composable
+private fun SnippetMetaRow(snippet: SnippetRecord, categoryName: String?) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = relativeTime(
+                then = snippet.updatedAt.takeIf { it > 0 } ?: snippet.createdAt,
+                now = System.currentTimeMillis(),
+            ),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+        )
+        if (categoryName != null) {
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = categoryName,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (snippet.pinned) {
+            Spacer(modifier = Modifier.width(8.dp))
+            Icon(
+                imageVector = Icons.Filled.PushPin,
+                contentDescription = "Pinned",
+                modifier = Modifier.size(14.dp),
+                tint = MaterialTheme.colorScheme.primary,
+            )
+        }
+    }
+}
+
+private fun imageThumbWidthDp(snippet: SnippetRecord): Int {
+    val width = snippet.imageWidth
+    val height = snippet.imageHeight
+    if (width == null || height == null || width <= 0 || height <= 0) return 56
+    return (56f * width / height).toInt().coerceIn(56, 120)
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CategoryNameDialog(
+    initialName: String,
+    title: String,
+    confirmLabel: String,
+    onConfirm: suspend (String) -> String?,
+    onDismiss: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    var name by remember(initialName) { mutableStateOf(initialName) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var saving by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    scope.launch {
+                        saving = true
+                        val failure = onConfirm(name)
+                        saving = false
+                        if (failure == null) {
+                            onDismiss()
+                        } else {
+                            error = failure
+                        }
+                    }
+                },
+                enabled = name.isNotBlank() && !saving,
+            ) {
+                Text(confirmLabel)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        },
+        title = { Text(title) },
+        text = {
+            OutlinedTextField(
+                value = name,
+                onValueChange = {
+                    name = it
+                    error = null
+                },
+                label = { Text("Category name") },
+                singleLine = true,
+                isError = error != null,
+                supportingText = {
+                    if (error != null) {
+                        Text(error ?: "")
+                    }
+                },
+            )
+        },
+    )
 }
 
 private fun isPastilleEnabled(context: Context): Boolean {

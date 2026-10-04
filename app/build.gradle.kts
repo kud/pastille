@@ -16,8 +16,8 @@ android {
         applicationId = "app.pastille"
         minSdk = 28
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.1.0-dev.2"
+        versionCode = 3
+        versionName = "0.1.0-dev.3"
     }
 
     buildTypes {
@@ -69,6 +69,7 @@ dependencies {
     implementation(libs.compose.material.icons.extended)
     implementation(libs.activity.compose)
     implementation(libs.core.ktx)
+    implementation(libs.exifinterface)
     implementation(libs.lifecycle.runtime.ktx)
     implementation(libs.lifecycle.runtime.compose)
     implementation(libs.savedstate)

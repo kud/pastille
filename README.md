@@ -10,14 +10,14 @@ Pastille never connects to the network. The manifest requests no internet permis
 - Six most recent screenshots in the panel; tap to paste into apps that accept images, otherwise the image is copied so you can long-press to paste.
 - Save the current clipboard contents as a snippet straight from the keyboard.
 - Snippet manager app: create, edit, pin, search and delete; JSON export and import (`{ "version": 1, "snippets": [...] }`) via the system file picker.
-- Onboarding card covering enabling the IME, switching to it, and photo access, including the Android 14 partial-access case.
+- Onboarding card covering enabling the IME, photo access (including the Android 14 partial-access case) and the keyboard style, plus a "Try it" field to test the keyboard without leaving the app.
 - Material 3 with light and dark themes plus dynamic colour where available.
 
 ## How to enable the keyboard
 
 1. Open the Pastille app and work through the setup card, or do it manually:
 2. Enable Pastille under Settings → System → Keyboard → On-screen keyboard (or `Settings.ACTION_INPUT_METHOD_SETTINGS`).
-3. Switch to Pastille from any text field with the keyboard switcher.
+3. Switch to Pastille from any text field with the keyboard switcher, or use the "Try it" field in the app.
 4. Grant photo access if you want recent screenshots in the panel.
 
 ## Quick Settings tile

@@ -180,6 +180,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                     previewLandscape = true
                 },
             )
+            TryItField(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp))
             ListItem(
                 headlineContent = { Text("Return to previous keyboard after inserting") },
                 supportingContent = {

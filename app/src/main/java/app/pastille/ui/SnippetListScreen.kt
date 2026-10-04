@@ -435,6 +435,9 @@ fun SnippetListScreen(
                         OnboardingCard(key = refreshTick, onOpenSettings = onOpenSettings)
                     }
                 }
+                item(key = "try-it") {
+                    TryItCard()
+                }
                 if (snippets.isEmpty()) {
                     item(key = "empty") {
                         Column(
@@ -591,12 +594,11 @@ private fun OnboardingCard(key: Int, onOpenSettings: () -> Unit) {
     ) { _ -> }
 
     val imeEnabled = remember(key) { isPastilleEnabled(context) }
-    val current = remember(key) { isPastilleCurrent(context) }
     val photosGranted = remember(key) { ImageSourceReader.hasPermission(context) }
     val partialOnly = remember(key) { ImageSourceReader.hasOnlyPartialAccess(context) }
     val keyboardStyleChosen = remember(key) { PastilleSettings.forContext(context).keyboardStyleChosen }
 
-    if (imeEnabled && current && photosGranted && keyboardStyleChosen) return
+    if (imeEnabled && photosGranted && !partialOnly && keyboardStyleChosen) return
 
     OutlinedCard(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
@@ -611,16 +613,6 @@ private fun OnboardingCard(key: Int, onOpenSettings: () -> Unit) {
                     },
                 )
             }
-            if (!current) {
-                SetupRow(
-                    text = "2. Switch to the Pastille keyboard",
-                    button = "Switch",
-                    onClick = {
-                        context.getSystemService(InputMethodManager::class.java)
-                            ?.showInputMethodPicker()
-                    },
-                )
-            }
             if (!photosGranted || partialOnly) {
                 if (partialOnly) {
                     Text(
@@ -632,7 +624,7 @@ private fun OnboardingCard(key: Int, onOpenSettings: () -> Unit) {
                     Spacer(Modifier.height(4.dp))
                 }
                 SetupRow(
-                    text = "3. Allow photo access for screenshots",
+                    text = "2. Allow photo access for screenshots",
                     button = "Allow",
                     onClick = {
                         permissionLauncher.launch(photoPermission())
@@ -641,13 +633,21 @@ private fun OnboardingCard(key: Int, onOpenSettings: () -> Unit) {
             }
             if (!keyboardStyleChosen) {
                 SetupRow(
-                    text = "4. Pick a keyboard style",
+                    text = "3. Pick a keyboard style",
                     button = "Choose",
                     onClick = onOpenSettings,
                 )
             }
         }
     }
+}
+
+@Composable
+private fun TryItCard() {
+    val context = LocalContext.current
+    val show = remember { isPastilleEnabled(context) && !isPastilleCurrent(context) }
+    if (!show) return
+    TryItField(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp))
 }
 
 @Composable

@@ -94,6 +94,7 @@ import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.EditNote
 import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.FolderOff
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.Keyboard
@@ -115,6 +116,7 @@ import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -379,11 +381,12 @@ private fun ModeTab(label: String, selected: Boolean, onClick: () -> Unit) {
     val palette = LocalKeyboardPalette.current
     val background by animateColorAsState(
         targetValue = if (selected) palette.stripButton else Color.Transparent,
-        animationSpec = tween(120),
+        animationSpec = tween(PastilleMotion.EXIT_MS),
         label = "modePill",
     )
     Box(
         modifier = Modifier
+            .minimumInteractiveComponentSize()
             .height(32.dp)
             .clip(RoundedCornerShape(50))
             .background(background)
@@ -615,7 +618,7 @@ private fun FolderChipRow(
     LazyRow(
         state = rowState,
         modifier = Modifier.fillMaxWidth().height(48.dp),
-        contentPadding = PaddingValues(horizontal = 6.dp),
+        contentPadding = PaddingValues(horizontal = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -1223,16 +1226,18 @@ private fun FolderChipsRow(
             ) {
                 item(key = "none") {
                     FilterToggleChip(
-                        label = "None (top level)",
+                        label = "No folder",
                         selected = selectedId == null,
                         onClick = { onSelect(null) },
+                        icon = Icons.Rounded.FolderOff,
                     )
                 }
-                items(categories.sortedBy { it.name.lowercase() }, key = { it.id }) { category ->
+                items(categories.sortedBy { it.position }, key = { it.id }) { category ->
                     FilterToggleChip(
                         label = category.name,
                         selected = selectedId == category.id,
                         onClick = { onSelect(category.id) },
+                        icon = Icons.Rounded.Folder,
                     )
                 }
                 if (trailingNewInApp) {
@@ -1314,8 +1319,6 @@ private fun ActionsContent(
                 label = "Delete",
                 onClick = { actions.onDeleteSnippet(snippet) },
                 modifier = Modifier.weight(1f),
-                container = MaterialTheme.colorScheme.errorContainer,
-                tint = MaterialTheme.colorScheme.onErrorContainer,
             )
         }
         if (categories.isNotEmpty()) {
@@ -1334,14 +1337,11 @@ private fun PanelActionButton(
     label: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    container: Color? = null,
-    tint: Color? = null,
 ) {
-    val contentColor = tint ?: LocalKeyboardPalette.current.label
+    val contentColor = LocalKeyboardPalette.current.label
     KeyButton(
         onClick = onClick,
         onLongClick = null,
-        container = container,
         modifier = modifier.height(64.dp),
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -1358,10 +1358,10 @@ private fun FilterToggleChip(label: String, selected: Boolean, onClick: () -> Un
         selected = selected,
         onClick = onClick,
         label = { Text(label) },
-        leadingIcon = if (icon != null || selected) {
+        leadingIcon = if (icon != null) {
             {
                 Icon(
-                    icon ?: Icons.Rounded.Check,
+                    icon,
                     contentDescription = null,
                     modifier = Modifier.size(FilterChipDefaults.IconSize),
                 )

@@ -41,7 +41,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -120,7 +119,7 @@ fun ShareSheet(
                 }
                 if ((state.kind == ShareKind.TEXT || state.kind == ShareKind.LINK) && state.truncated) {
                     Text(
-                        text = "Long text — saved the first 50,000 characters",
+                        text = "Long text: saved the first 50,000 characters",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 4.dp),
@@ -412,17 +411,12 @@ private fun ShareCategoryChip(label: String, selected: Boolean, onClick: () -> U
             null
         },
         colors = FilterChipDefaults.filterChipColors(
-            containerColor = Color.Transparent,
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
             selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
             selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer,
             selectedLeadingIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
         ),
-        border = FilterChipDefaults.filterChipBorder(
-            enabled = true,
-            selected = selected,
-            borderColor = MaterialTheme.colorScheme.outlineVariant,
-            selectedBorderColor = Color.Transparent,
-        ),
+        border = null,
     )
 }

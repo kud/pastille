@@ -35,7 +35,9 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.findByName("release")
         }
     }
@@ -54,6 +56,12 @@ android {
     lint {
         // Lifecycle 2.8's detector crashes under Kotlin 2 UAST (IncompatibleClassChangeError); Pastille uses no LiveData.
         disable += "NullSafeMutableLiveData"
+    }
+
+    // F-Droid and reproducible builds reject the Google-encrypted dependency metadata block.
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
     }
 
     buildFeatures {

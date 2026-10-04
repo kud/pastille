@@ -49,4 +49,10 @@ class TypingKeyboardTest {
         org.junit.Assert.assertTrue(isTypingKeyboard(listOf("keyboard", "voice")))
         org.junit.Assert.assertTrue(isTypingKeyboard(emptyList()))
     }
+
+    @org.junit.Test
+    fun `a keyboard whose subtypes set no mode still counts`() {
+        org.junit.Assert.assertTrue(isTypingKeyboard(listOf("", "")))
+        org.junit.Assert.assertTrue(isTypingKeyboard(listOf("", "voice")))
+    }
 }

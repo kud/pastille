@@ -51,7 +51,9 @@ import app.pastille.MainActivity
 import app.pastille.data.SnippetRepository
 import app.pastille.images.ImageStore
 import app.pastille.images.mimeTypeForFile
+import app.pastille.model.CategoryRecord
 import app.pastille.model.SnippetRecord
+import app.pastille.model.isMissingFolder
 import app.pastille.settings.KeyboardMode
 import app.pastille.settings.KeyboardStyle
 import app.pastille.settings.PanelHeight
@@ -175,6 +177,10 @@ class PastilleImeService :
         moveLifecycleTo(Lifecycle.State.RESUMED)
     }
 
+    // Back acts on what the panel shows, which differs from the saved mode when a mode is switched off.
+    private fun shownMode(): KeyboardMode =
+        effectiveMode(mode.value, settings.snippetsEnabled, settings.imagesEnabled)
+
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
         if (keyCode == KeyEvent.KEYCODE_BACK && isInputViewShown) {
             when {
@@ -190,7 +196,7 @@ class PastilleImeService :
                     panelState.value = PanelState.Browse
                     return true
                 }
-                mode.value == KeyboardMode.Snippets && folderId.value != null -> {
+                shownMode() == KeyboardMode.Snippets && folderId.value != null -> {
                     onOpenFolder(null)
                     return true
                 }
@@ -537,7 +543,8 @@ class PastilleImeService :
         val snippetsFlow = remember { repository.observeSnippets() }
         val snippets by snippetsFlow.collectAsState(initial = emptyList())
         val categoriesFlow = remember { repository.observeCategories() }
-        val categories by categoriesFlow.collectAsState(initial = emptyList())
+        val loadedCategories by categoriesFlow.collectAsState(initial = null as List<CategoryRecord>?)
+        val categories = loadedCategories.orEmpty()
         val settingsFlow = remember { settings.changes() }
         val settingsTick by settingsFlow.collectAsState(initial = 0)
         var imageSources by remember { mutableStateOf(emptyList<ImageSource>()) }
@@ -582,9 +589,8 @@ class PastilleImeService :
             }
         }
 
-        LaunchedEffect(categories, folderId.value) {
-            val current = folderId.value ?: return@LaunchedEffect
-            if (categories.isNotEmpty() && categories.none { it.id == current }) onOpenFolder(null)
+        LaunchedEffect(loadedCategories, folderId.value) {
+            if (isMissingFolder(loadedCategories, folderId.value)) onOpenFolder(null)
         }
 
         val state = KeyboardUiState(

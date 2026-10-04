@@ -129,4 +129,6 @@ fun returnKeyboardTarget(chosen: String?, otherKeyboardIds: List<String>): Strin
 }
 
 // Voice input (Gboard's speech IME, for one) registers as an input method too; switching back should land on a keyboard.
-fun isTypingKeyboard(subtypeModes: List<String>): Boolean = subtypeModes.isEmpty() || "keyboard" in subtypeModes
+// Only voice input is excluded: a keyboard may declare subtypes without setting a mode.
+fun isTypingKeyboard(subtypeModes: List<String>): Boolean =
+    subtypeModes.isEmpty() || subtypeModes.any { it.isBlank() || it == "keyboard" }

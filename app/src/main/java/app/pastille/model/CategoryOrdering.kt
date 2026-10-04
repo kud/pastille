@@ -21,3 +21,7 @@ fun orderCategories(categories: List<CategoryRecord>, newOrder: List<Long>): Lis
     val ordered = newOrder.mapNotNull { byId[it] } + categories.filter { it.id !in newOrder }.sortedBy { it.position }
     return ordered.mapIndexed { index, category -> category.copy(position = index) }
 }
+
+// Null means the folders haven't loaded yet; an empty list is real (the last folder was deleted).
+fun isMissingFolder(loaded: List<CategoryRecord>?, folderId: Long?): Boolean =
+    loaded != null && folderId != null && loaded.none { it.id == folderId }

@@ -82,4 +82,20 @@ class CategoryOrderingTest {
             orderCategories(folders, listOf(3, 1)).map { it.id to it.position },
         )
     }
+
+    @Test
+    fun `deleting the last folder leaves an open one missing`() {
+        assertEquals(true, isMissingFolder(emptyList(), folderId = 4))
+    }
+
+    @Test
+    fun `folders that have not loaded yet never close the open one`() {
+        assertEquals(false, isMissingFolder(null, folderId = 4))
+    }
+
+    @Test
+    fun `an open folder that still exists is not missing`() {
+        assertEquals(false, isMissingFolder(listOf(CategoryRecord(id = 4, name = "Work")), folderId = 4))
+        assertEquals(false, isMissingFolder(emptyList(), folderId = null))
+    }
 }

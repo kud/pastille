@@ -9,7 +9,6 @@ import android.net.Uri
 import android.os.Build
 import android.view.View
 import android.view.inputmethod.InputMethodManager
-import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -47,6 +46,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.IOException
 
 class PastilleImeService :
     InputMethodService(),
@@ -63,15 +63,29 @@ class PastilleImeService :
     // Bumped each time the keyboard opens, so the screenshot row picks up new ones.
     private val openCount = mutableIntStateOf(0)
 
+    private val statusMessage = mutableStateOf<String?>(null)
+    private val clipboardHasText = mutableStateOf(false)
+
+    private val clipChangedListener =
+        ClipboardManager.OnPrimaryClipChangedListener {
+            clipboardHasText.value = readClipboardText() != null
+        }
+
     override val lifecycle: Lifecycle get() = lifecycleRegistry
     override val savedStateRegistry: SavedStateRegistry get() = savedStateController.savedStateRegistry
     override val viewModelStore: ViewModelStore get() = viewModelStoreHolder
+
+    private fun moveLifecycleTo(state: Lifecycle.State) {
+        if (lifecycleRegistry.currentState == Lifecycle.State.DESTROYED) return
+        lifecycleRegistry.currentState = state
+    }
 
     override fun onCreate() {
         super.onCreate()
         savedStateController.performAttach()
         savedStateController.performRestore(null)
-        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
+        moveLifecycleTo(Lifecycle.State.CREATED)
+        getSystemService(ClipboardManager::class.java)?.addPrimaryClipChangedListener(clipChangedListener)
     }
 
     override fun onCreateInputView(): View {
@@ -98,20 +112,39 @@ class PastilleImeService :
     override fun onStartInputView(info: android.view.inputmethod.EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
         openCount.intValue++
-        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
-        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
+        moveLifecycleTo(Lifecycle.State.RESUMED)
     }
 
     override fun onFinishInputView(finishingInput: Boolean) {
-        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
+        if (lifecycleRegistry.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+            moveLifecycleTo(Lifecycle.State.STARTED)
+        }
         super.onFinishInputView(finishingInput)
     }
 
+    override fun onWindowHidden() {
+        moveLifecycleTo(Lifecycle.State.CREATED)
+        super.onWindowHidden()
+    }
+
     override fun onDestroy() {
-        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
+        getSystemService(ClipboardManager::class.java)?.removePrimaryClipChangedListener(clipChangedListener)
+        moveLifecycleTo(Lifecycle.State.DESTROYED)
         viewModelStoreHolder.clear()
         serviceScope.cancel()
         super.onDestroy()
+    }
+
+    private fun readClipboardText(): String? {
+        return try {
+            val clipboard = getSystemService(ClipboardManager::class.java) ?: return null
+            val clip = clipboard.primaryClip ?: return null
+            (0 until clip.itemCount)
+                .mapNotNull { clip.getItemAt(it)?.coerceToText(this)?.toString() }
+                .firstOrNull { it.isNotBlank() }
+        } catch (_: Exception) {
+            null
+        }
     }
 
     @Composable
@@ -127,20 +160,25 @@ class PastilleImeService :
 
         LaunchedEffect(openCount.intValue) {
             val items = withContext(Dispatchers.IO) {
-                ScreenshotReader.readRecent(context)
+                runCatching { ScreenshotReader.readRecent(context) }.getOrDefault(emptyList())
             }
             screenshots = items
             canReadScreenshots = ScreenshotReader.hasPermission(context)
+            clipboardHasText.value = readClipboardText() != null
         }
 
         KeyboardPanel(
             snippets = snippets,
             screenshots = screenshots,
             hasScreenshotPermission = canReadScreenshots,
+            clipboardHasText = clipboardHasText.value,
+            statusMessage = statusMessage.value,
+            onStatusShown = { statusMessage.value = null },
+            onNewSnippet = ::openNewSnippet,
             onSaveClipboard = ::saveClipboardAsSnippet,
             onOpenApp = ::openApp,
             onOpenPermissions = ::openApp,
-            onBack = ::switchBack,
+            onSwitchKeyboard = ::switchKeyboard,
             onSnippetTap = ::pasteSnippet,
             onSnippetLongPress = ::openSnippetInEditor,
             onScreenshotTap = ::shareScreenshot,
@@ -155,77 +193,99 @@ class PastilleImeService :
     private fun openSnippetInEditor(snippet: SnippetRecord) {
         val intent = Intent(this, MainActivity::class.java)
             .putExtra(MainActivity.EXTRA_EDIT_SNIPPET_ID, snippet.id)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            .addFlags(MainActivity.LAUNCH_FLAGS)
+        startActivity(intent)
+    }
+
+    private fun openNewSnippet() {
+        val intent = Intent(this, MainActivity::class.java)
+            .putExtra(MainActivity.EXTRA_NEW_SNIPPET, true)
+            .addFlags(MainActivity.LAUNCH_FLAGS)
         startActivity(intent)
     }
 
     private fun saveClipboardAsSnippet() {
-        val clipboard = getSystemService(ClipboardManager::class.java) ?: return
-        val clip = clipboard.primaryClip ?: return
-        val text = (0 until clip.itemCount)
-            .mapNotNull { clip.getItemAt(it)?.coerceToText(this)?.toString() }
-            .firstOrNull { it.isNotBlank() }
-            ?: return
+        val text = readClipboardText()
+        if (text == null) {
+            statusMessage.value = "Clipboard is empty"
+            return
+        }
         serviceScope.launch {
             SnippetRepository.forContext(this@PastilleImeService).saveClipboardText(text)
             withContext(Dispatchers.Main) {
-                Toast.makeText(this@PastilleImeService, "Snippet saved", Toast.LENGTH_SHORT).show()
+                statusMessage.value = "Saved from clipboard"
             }
         }
     }
 
     private fun shareScreenshot(item: ScreenshotItem) {
-        val connection = currentInputConnection
-        val editorInfo = currentInputEditorInfo
-        val mimeTypes = if (editorInfo != null) {
-            EditorInfoCompat.getContentMimeTypes(editorInfo).toSet()
-        } else {
-            emptySet()
-        }
-        val mimeType = contentResolver.getType(item.uri) ?: "image/png"
-        val acceptsImage = mimeTypes.any { ClipDescription.compareMimeTypes(mimeType, it) }
-        val contentUri = try {
-            copyToSharedCache(item, mimeType)
-        } catch (_: Exception) {
-            Toast.makeText(this, "Couldn't read that screenshot", Toast.LENGTH_SHORT).show()
-            return
-        }
-        if (connection != null && editorInfo != null && acceptsImage) {
-            val info = InputContentInfoCompat(
-                contentUri,
-                ClipDescription("Pastille screenshot", arrayOf(mimeType)),
-                null,
-            )
-            val flags = InputConnectionCompat.INPUT_CONTENT_GRANT_READ_URI_PERMISSION
-            if (InputConnectionCompat.commitContent(connection, editorInfo, info, flags, null)) {
-                return
+        serviceScope.launch {
+            val mimeType = try {
+                contentResolver.getType(item.uri)
+            } catch (_: Exception) {
+                null
+            } ?: "image/png"
+            val contentUri = try {
+                copyToSharedCache(item, mimeType)
+            } catch (_: Exception) {
+                null
+            }
+            withContext(Dispatchers.Main) {
+                if (contentUri == null) {
+                    statusMessage.value = "Couldn't read that screenshot"
+                    return@withContext
+                }
+                val connection = currentInputConnection
+                val editorInfo = currentInputEditorInfo
+                val mimeTypes = if (editorInfo != null) {
+                    EditorInfoCompat.getContentMimeTypes(editorInfo).toSet()
+                } else {
+                    emptySet()
+                }
+                val acceptsImage = mimeTypes.any { ClipDescription.compareMimeTypes(mimeType, it) }
+                if (connection != null && editorInfo != null && acceptsImage) {
+                    val info = InputContentInfoCompat(
+                        contentUri,
+                        ClipDescription("Pastille screenshot", arrayOf(mimeType)),
+                        null,
+                    )
+                    val flags = InputConnectionCompat.INPUT_CONTENT_GRANT_READ_URI_PERMISSION
+                    val committed = try {
+                        InputConnectionCompat.commitContent(connection, editorInfo, info, flags, null)
+                    } catch (_: Exception) {
+                        false
+                    }
+                    if (committed) return@withContext
+                }
+                // Only Pastille's own FileProvider URI travels with the clip's read grant;
+                // a MediaStore URI would be unreadable to the app that pastes it.
+                val clipboard = getSystemService(ClipboardManager::class.java) ?: return@withContext
+                val clip = ClipData.newUri(contentResolver, "Pastille screenshot", contentUri)
+                clipboard.setPrimaryClip(clip)
+                statusMessage.value = "Copied, long-press to paste"
             }
         }
-        // Only Pastille's own FileProvider URI travels with the clip's read grant;
-        // a MediaStore URI would be unreadable to the app that pastes it.
-        val clipboard = getSystemService(ClipboardManager::class.java) ?: return
-        val clip = ClipData.newUri(contentResolver, "Pastille screenshot", contentUri)
-        clipboard.setPrimaryClip(clip)
-        Toast.makeText(this, "Copied, long-press to paste", Toast.LENGTH_SHORT).show()
     }
 
     private fun copyToSharedCache(item: ScreenshotItem, mimeType: String): Uri {
         val dir = File(cacheDir, "shared").apply { mkdirs() }
         val extension = if (mimeType == "image/jpeg") "jpg" else mimeType.substringAfter('/')
         val out = File(dir, "screenshot-${System.currentTimeMillis()}.$extension")
-        contentResolver.openInputStream(item.uri)?.use { input ->
-            out.outputStream().use { output -> input.copyTo(output) }
+        val input = contentResolver.openInputStream(item.uri)
+            ?: throw IOException("Cannot open ${item.uri}")
+        input.use { stream ->
+            out.outputStream().use { output -> stream.copyTo(output) }
         }
         return FileProvider.getUriForFile(this, "$packageName.fileprovider", out)
     }
 
     private fun openApp() {
         val intent = Intent(this, MainActivity::class.java)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            .addFlags(MainActivity.LAUNCH_FLAGS)
         startActivity(intent)
     }
 
-    private fun switchBack() {
+    private fun switchKeyboard() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             switchToPreviousInputMethod()
         } else {

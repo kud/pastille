@@ -10,7 +10,6 @@ import android.os.Build
 import android.provider.MediaStore
 import android.util.Size
 import androidx.core.content.ContextCompat
-import java.io.IOException
 
 data class ScreenshotItem(
     val uri: Uri,
@@ -62,23 +61,29 @@ object ScreenshotReader {
         val args = arrayOf("%Screenshots%")
         val sortOrder = "${MediaStore.Images.Media.DATE_ADDED} DESC"
         val found = mutableListOf<ScreenshotItem>()
-        context.contentResolver.query(
-            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-            projection,
-            selection,
-            args,
-            sortOrder,
-        )?.use { cursor ->
-            val idIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
-            val nameIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DISPLAY_NAME)
-            while (cursor.moveToNext() && found.size < limit) {
-                val id = cursor.getLong(idIndex)
-                val uri = Uri.withAppendedPath(
-                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                    id.toString(),
-                )
-                found.add(ScreenshotItem(uri, cursor.getString(nameIndex) ?: ""))
+        try {
+            context.contentResolver.query(
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                projection,
+                selection,
+                args,
+                sortOrder,
+            )?.use { cursor ->
+                val idIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
+                val nameIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DISPLAY_NAME)
+                while (cursor.moveToNext() && found.size < limit) {
+                    val id = cursor.getLong(idIndex)
+                    val uri = Uri.withAppendedPath(
+                        MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                        id.toString(),
+                    )
+                    found.add(ScreenshotItem(uri, cursor.getString(nameIndex) ?: ""))
+                }
             }
+        } catch (_: SecurityException) {
+            return found
+        } catch (_: IllegalArgumentException) {
+            return found
         }
         return found
     }
@@ -87,7 +92,7 @@ object ScreenshotReader {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
         return try {
             resolver.loadThumbnail(uri, Size(256, 256), null)
-        } catch (e: IOException) {
+        } catch (_: Exception) {
             null
         }
     }

@@ -11,25 +11,37 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Upload
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -47,12 +59,16 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.pastille.crash.CrashLog
 import app.pastille.data.SnippetRepository
 import app.pastille.ime.ScreenshotReader
 import app.pastille.model.SnippetRecord
@@ -71,6 +87,8 @@ fun SnippetListScreen(
     val snippets by flow.collectAsStateWithLifecycle(initialValue = emptyList())
     var query by remember { mutableStateOf("") }
     var refreshTick by remember { mutableStateOf(0) }
+    var showMenu by remember { mutableStateOf(false) }
+    var showCrashDialog by remember { mutableStateOf(false) }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { refreshTick++ }
 
     val exportLauncher = rememberLauncherForActivityResult(
@@ -115,7 +133,51 @@ fun SnippetListScreen(
         }
     }
 
+    if (showCrashDialog) {
+        val entries = remember(showCrashDialog) { CrashLog.forContext(context).entries() }
+        val clipboard = LocalClipboardManager.current
+        val crashText = remember(entries) { entries.joinToString("\n\n———\n\n") }
+        AlertDialog(
+            onDismissRequest = { showCrashDialog = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        clipboard.setText(AnnotatedString(crashText))
+                        showCrashDialog = false
+                    },
+                    enabled = entries.isNotEmpty(),
+                ) {
+                    Text("Copy")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCrashDialog = false }) {
+                    Text("Close")
+                }
+            },
+            title = { Text("Last crash") },
+            text = {
+                if (entries.isEmpty()) {
+                    Text("No crashes recorded.")
+                } else {
+                    Column(
+                        modifier = Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState()),
+                    ) {
+                        SelectionContainer {
+                            Text(
+                                text = crashText,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = FontFamily.Monospace,
+                            )
+                        }
+                    }
+                }
+            },
+        )
+    }
+
     Scaffold(
+        contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             TopAppBar(
                 title = { Text("Pastille") },
@@ -126,13 +188,27 @@ fun SnippetListScreen(
                     IconButton(onClick = { importLauncher.launch(arrayOf("application/json")) }) {
                         Icon(Icons.Filled.Download, contentDescription = "Import snippets")
                     }
+                    IconButton(onClick = { showMenu = true }) {
+                        Icon(Icons.Filled.MoreVert, contentDescription = "More options")
+                    }
+                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Last crash") },
+                            onClick = {
+                                showMenu = false
+                                showCrashDialog = true
+                            },
+                        )
+                    }
                 },
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = onCreate) {
-                Icon(Icons.Filled.Add, contentDescription = "Add snippet")
-            }
+            ExtendedFloatingActionButton(
+                onClick = onCreate,
+                text = { Text("New snippet") },
+                icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+            )
         },
     ) { padding ->
         LazyColumn(
@@ -140,6 +216,7 @@ fun SnippetListScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .padding(horizontal = 16.dp),
+            contentPadding = PaddingValues(bottom = 88.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item(key = "onboarding") {
@@ -156,14 +233,27 @@ fun SnippetListScreen(
                     singleLine = true,
                 )
             }
-            if (visible.isEmpty()) {
+            if (snippets.isEmpty()) {
+                item(key = "empty") {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Text(
+                            text = "No snippets yet",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        FilledTonalButton(onClick = onCreate) {
+                            Text("Add your first snippet")
+                        }
+                    }
+                }
+            } else if (visible.isEmpty()) {
                 item(key = "empty") {
                     Text(
-                        text = if (snippets.isEmpty()) {
-                            "No snippets yet. Tap + to add your first one."
-                        } else {
-                            "No snippets match your search."
-                        },
+                        text = "No snippets match “$query”",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

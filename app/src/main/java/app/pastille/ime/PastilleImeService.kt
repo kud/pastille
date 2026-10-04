@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.Intent
+import android.content.res.Configuration
 import android.inputmethodservice.InputMethodService
 import android.net.Uri
 import android.os.Build
@@ -15,6 +16,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.neverEqualPolicy
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ComposeView
@@ -38,6 +40,7 @@ import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import app.pastille.MainActivity
 import app.pastille.data.SnippetRepository
 import app.pastille.model.SnippetRecord
+import app.pastille.settings.PastilleSettings
 import app.pastille.ui.theme.PastilleTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -63,6 +66,13 @@ class PastilleImeService :
     // Bumped each time the keyboard opens, so the screenshot row picks up new ones.
     private val openCount = mutableIntStateOf(0)
 
+    // Mirrors the service configuration, so the panel follows dark mode and wallpaper colours without recreating the view.
+    private val configuration = mutableStateOf(Configuration(), neverEqualPolicy())
+
+    private var destroyed = false
+
+    private val settings by lazy { PastilleSettings.forContext(this) }
+
     private val statusMessage = mutableStateOf<String?>(null)
     private val clipboardHasText = mutableStateOf(false)
 
@@ -82,6 +92,7 @@ class PastilleImeService :
 
     override fun onCreate() {
         super.onCreate()
+        configuration.value = Configuration(resources.configuration)
         savedStateController.performAttach()
         savedStateController.performRestore(null)
         moveLifecycleTo(Lifecycle.State.CREATED)
@@ -102,7 +113,8 @@ class PastilleImeService :
         }
         view.setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
         view.setContent {
-            PastilleTheme {
+            val nightMode = configuration.value.uiMode and Configuration.UI_MODE_NIGHT_MASK
+            PastilleTheme(darkTheme = nightMode == Configuration.UI_MODE_NIGHT_YES) {
                 PanelHost()
             }
         }
@@ -127,7 +139,13 @@ class PastilleImeService :
         super.onWindowHidden()
     }
 
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        configuration.value = Configuration(newConfig)
+    }
+
     override fun onDestroy() {
+        destroyed = true
         getSystemService(ClipboardManager::class.java)?.removePrimaryClipChangedListener(clipChangedListener)
         moveLifecycleTo(Lifecycle.State.DESTROYED)
         viewModelStoreHolder.clear()
@@ -186,8 +204,9 @@ class PastilleImeService :
     }
 
     private fun pasteSnippet(snippet: SnippetRecord) {
-        currentInputConnection?.commitText(snippet.text, 1)
+        val committed = currentInputConnection?.commitText(snippet.text, 1) == true
         serviceScope.launch { SnippetRepository.forContext(this@PastilleImeService).recordUse(snippet.id) }
+        if (committed) returnToPreviousKeyboardIfWanted()
     }
 
     private fun openSnippetInEditor(snippet: SnippetRecord) {
@@ -213,6 +232,7 @@ class PastilleImeService :
         serviceScope.launch {
             SnippetRepository.forContext(this@PastilleImeService).saveClipboardText(text)
             withContext(Dispatchers.Main) {
+                if (destroyed) return@withContext
                 statusMessage.value = "Saved from clipboard"
             }
         }
@@ -231,6 +251,7 @@ class PastilleImeService :
                 null
             }
             withContext(Dispatchers.Main) {
+                if (destroyed) return@withContext
                 if (contentUri == null) {
                     statusMessage.value = "Couldn't read that screenshot"
                     return@withContext
@@ -255,7 +276,10 @@ class PastilleImeService :
                     } catch (_: Exception) {
                         false
                     }
-                    if (committed) return@withContext
+                    if (committed) {
+                        returnToPreviousKeyboardIfWanted()
+                        return@withContext
+                    }
                 }
                 // Only Pastille's own FileProvider URI travels with the clip's read grant;
                 // a MediaStore URI would be unreadable to the app that pastes it.
@@ -285,7 +309,12 @@ class PastilleImeService :
         startActivity(intent)
     }
 
+    private fun returnToPreviousKeyboardIfWanted() {
+        if (settings.returnToPreviousKeyboard) switchKeyboard()
+    }
+
     private fun switchKeyboard() {
+        if (destroyed) return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             switchToPreviousInputMethod()
         } else {

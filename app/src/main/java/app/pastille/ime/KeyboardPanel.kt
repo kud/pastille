@@ -1326,19 +1326,15 @@ private fun FilterToggleChip(label: String, selected: Boolean, onClick: () -> Un
         } else {
             null
         },
+        shape = RoundedCornerShape(50),
         colors = FilterChipDefaults.filterChipColors(
-            containerColor = Color.Transparent,
-            labelColor = palette.icon,
-            selectedContainerColor = palette.stripButton,
-            selectedLabelColor = palette.label,
-            selectedLeadingIconColor = palette.label,
+            containerColor = palette.key,
+            labelColor = palette.label,
+            selectedContainerColor = palette.accent,
+            selectedLabelColor = palette.onAccent,
+            selectedLeadingIconColor = palette.onAccent,
         ),
-        border = FilterChipDefaults.filterChipBorder(
-            enabled = true,
-            selected = selected,
-            borderColor = palette.key,
-            selectedBorderColor = Color.Transparent,
-        ),
+        border = null,
     )
 }
 

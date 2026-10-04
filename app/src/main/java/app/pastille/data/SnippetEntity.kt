@@ -1,5 +1,6 @@
 package app.pastille.data
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -17,4 +18,5 @@ data class SnippetEntity(
     val imageFile: String? = null,
     val imageWidth: Int? = null,
     val imageHeight: Int? = null,
+    @ColumnInfo(defaultValue = "0") val position: Int = 0,
 )

@@ -89,7 +89,7 @@ class MigrationTest {
             ApplicationProvider.getApplicationContext(),
             PastilleDatabase::class.java,
             DB_NAME,
-        ).addMigrations(MIGRATION_1_2).build()
+        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build()
         helper.closeWhenFinished(database)
 
         val snippets = runBlocking { database.snippets().getAll() }
@@ -99,6 +99,29 @@ class MigrationTest {
         assertTrue(snippets.all { it.categoryId == null && it.imageFile == null })
         assertNull(snippets.first().imageWidth)
         assertTrue(runBlocking { database.categories().getAll() }.isEmpty())
+    }
+
+    @Test
+    fun migration2To3KeepsTheOrderPeopleSaw() {
+        createVersion1WithTwoSnippets()
+        helper.runMigrationsAndValidate(DB_NAME, 2, true, MIGRATION_1_2).apply {
+            execSQL(
+                "INSERT INTO snippets (id, title, text, pinned, createdAt, updatedAt, lastUsedAt) " +
+                    "VALUES (3, 'recent', 'fresh', 0, 12, 22, 99)",
+            )
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(DB_NAME, 3, true, MIGRATION_2_3)
+
+        db.query("SELECT id FROM snippets ORDER BY pinned DESC, position ASC").use { cursor ->
+            val ids = buildList { while (cursor.moveToNext()) add(cursor.getLong(0)) }
+            assertEquals(listOf(1L, 3L, 2L), ids)
+        }
+        db.query("SELECT COUNT(DISTINCT position) FROM snippets").use { cursor ->
+            assertTrue(cursor.moveToNext())
+            assertEquals(3, cursor.getInt(0))
+        }
     }
 
     private companion object {

@@ -21,6 +21,7 @@ data class BackupSnippet(
     val updatedAt: Long = 0,
     val lastUsedAt: Long = 0,
     val category: String? = null,
+    val position: Int = 0,
 )
 
 @Serializable
@@ -67,6 +68,7 @@ object SnippetBackup {
                         updatedAt = it.updatedAt,
                         lastUsedAt = it.lastUsedAt,
                         category = it.categoryId?.let(namesById::get),
+                        position = it.position,
                     )
                 },
             ),
@@ -89,6 +91,7 @@ object SnippetBackup {
                         createdAt = it.createdAt,
                         updatedAt = it.updatedAt,
                         lastUsedAt = it.lastUsedAt,
+                        position = it.position,
                     ),
                     category = it.category,
                 )

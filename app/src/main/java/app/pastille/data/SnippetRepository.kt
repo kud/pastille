@@ -7,6 +7,9 @@ import app.pastille.model.CategoryRecord
 import app.pastille.model.SnippetRecord
 import app.pastille.model.moveCategory as reorderCategories
 import app.pastille.model.sortSnippets
+import app.pastille.model.keepPinnedFirst
+import app.pastille.model.orderCategories
+import app.pastille.model.reassignPositions
 import app.pastille.model.uniqueTitle
 import app.pastille.share.autoTitle
 import kotlinx.coroutines.flow.Flow
@@ -42,8 +45,21 @@ class SnippetRepository private constructor(
             imageFile = record.imageFile,
             imageWidth = record.imageWidth,
             imageHeight = record.imageHeight,
+            position = if (record.id == 0L) newTopPosition() else record.position,
         )
         return dao.upsert(entity)
+    }
+
+    private suspend fun newTopPosition(): Int = (dao.minPosition() ?: 1) - 1
+
+    suspend fun setSnippetOrder(shown: List<SnippetRecord>, newOrder: List<Long>) {
+        db.withTransaction {
+            val positions = reassignPositions(shown, keepPinnedFirst(shown, newOrder))
+            shown.forEach { record ->
+                val position = positions[record.id] ?: return@forEach
+                if (position != record.position) dao.updatePosition(record.id, position)
+            }
+        }
     }
 
     // Every snippet carries a title: blank ones take the auto title, and a clash
@@ -160,6 +176,16 @@ class SnippetRepository private constructor(
         }
     }
 
+    suspend fun setCategoryOrder(newOrder: List<Long>) {
+        db.withTransaction {
+            val current = categoryDao.getAll().map { it.toRecord() }
+            val before = current.associate { it.id to it.position }
+            orderCategories(current, newOrder).forEach {
+                if (before[it.id] != it.position) categoryDao.updatePosition(it.id, it.position)
+            }
+        }
+    }
+
     suspend fun deleteCategory(id: Long) {
         db.withTransaction {
             dao.clearCategory(id)
@@ -194,8 +220,10 @@ class SnippetRepository private constructor(
                 }
             }
             var imported = 0
-            contents.snippets.forEach { entry ->
-                if (dao.findTextDuplicate(entry.record.text) != null) return@forEach
+            val ordered = contents.snippets.sortedBy { it.record.position }
+            val base = (dao.minPosition() ?: 0) - ordered.size
+            ordered.forEachIndexed { index, entry ->
+                if (dao.findTextDuplicate(entry.record.text) != null) return@forEachIndexed
                 val categoryId = entry.category?.let { nameToId[it.lowercase()] }
                 dao.upsert(
                     SnippetEntity(
@@ -206,6 +234,7 @@ class SnippetRepository private constructor(
                         updatedAt = now,
                         lastUsedAt = entry.record.lastUsedAt,
                         categoryId = categoryId,
+                        position = base + index,
                     ),
                 )
                 imported++
@@ -225,6 +254,7 @@ class SnippetRepository private constructor(
         imageFile = imageFile,
         imageWidth = imageWidth,
         imageHeight = imageHeight,
+        position = position,
     )
 
     private fun SnippetRecord.toEntity() = SnippetEntity(
@@ -239,6 +269,7 @@ class SnippetRepository private constructor(
         imageFile = imageFile,
         imageWidth = imageWidth,
         imageHeight = imageHeight,
+        position = position,
     )
 
     private fun CategoryEntity.toRecord() = CategoryRecord(

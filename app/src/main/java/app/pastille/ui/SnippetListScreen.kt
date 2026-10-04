@@ -33,7 +33,19 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.material.icons.outlined.DragHandle
+import androidx.compose.material.icons.outlined.SwapVert
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.Role
+import sh.calvin.reorderable.ReorderableItem
+import sh.calvin.reorderable.rememberReorderableLazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -43,7 +55,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.ShortText
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.outlined.BugReport
@@ -64,7 +75,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -91,14 +103,13 @@ import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -137,7 +148,6 @@ fun SnippetListScreen(
     onCreate: (Long?) -> Unit,
     onEdit: (SnippetRecord) -> Unit,
     onOpenSettings: () -> Unit,
-    onOpenFolder: (Long) -> Unit,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -149,9 +159,6 @@ fun SnippetListScreen(
     var refreshTick by remember { mutableStateOf(0) }
     var showMenu by remember { mutableStateOf(false) }
     var showCrashDialog by remember { mutableStateOf(false) }
-    var fabExpanded by remember { mutableStateOf(true) }
-    var prevIndex by remember { mutableIntStateOf(0) }
-    var prevOffset by remember { mutableIntStateOf(0) }
     val listState = rememberLazyListState()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val hasCrashReport = remember(showMenu) {
@@ -198,17 +205,6 @@ fun SnippetListScreen(
                     .onFailure { toast(context, "Import failed: ${it.message}") }
             }
         }
-    }
-
-    LaunchedEffect(listState) {
-        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
-            .collect { (index, offset) ->
-                fabExpanded = index == 0 && offset == 0 ||
-                    index < prevIndex ||
-                    (index == prevIndex && offset < prevOffset)
-                prevIndex = index
-                prevOffset = offset
-            }
     }
 
     fun copySnippet(snippet: SnippetRecord) {
@@ -270,14 +266,27 @@ fun SnippetListScreen(
             }
         }
     }
-    val sortedFolders = remember(categories) {
-        categories.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
+    val haptics = LocalHapticFeedback.current
+    var selectedTab by rememberSaveable { mutableLongStateOf(ALL_TAB) }
+    var reordering by rememberSaveable { mutableStateOf(false) }
+    var renamingFolder by remember { mutableStateOf<CategoryRecord?>(null) }
+    var deletingFolder by remember { mutableStateOf<CategoryRecord?>(null) }
+    val orderedFolders = remember(categories) { categories.sortedBy { it.position } }
+    LaunchedEffect(orderedFolders) {
+        if (selectedTab != ALL_TAB && orderedFolders.none { it.id == selectedTab }) selectedTab = ALL_TAB
     }
-    val snippetCounts = remember(snippets) {
-        snippets.groupingBy { it.categoryId }.eachCount()
+    val selectedFolderId = selectedTab.takeIf { it != ALL_TAB }
+    val shown = remember(snippets, selectedTab) {
+        if (selectedTab == ALL_TAB) snippets else snippets.filter { it.categoryId == selectedTab }
     }
-    val topLevel = remember(snippets) {
-        snippets.filter { it.categoryId == null }
+    var snippetDragOrder by remember(shown, reordering) { mutableStateOf(shown) }
+    var folderDragOrder by remember(orderedFolders, reordering) { mutableStateOf(orderedFolders) }
+    val snippetReorderState = rememberReorderableLazyListState(listState) { from, to ->
+        val fromIndex = snippetDragOrder.indexOfFirst { it.id == from.key }
+        val toIndex = snippetDragOrder.indexOfFirst { it.id == to.key }
+        if (fromIndex >= 0 && toIndex >= 0) {
+            snippetDragOrder = snippetDragOrder.toMutableList().apply { add(toIndex, removeAt(fromIndex)) }
+        }
     }
     val categoryNames = remember(categories) { categories.associate { it.id to it.name } }
 
@@ -327,6 +336,39 @@ fun SnippetListScreen(
     BackHandler(enabled = searching) {
         searching = false
         query = ""
+    }
+
+    BackHandler(enabled = !searching && (reordering || selectedTab != ALL_TAB)) {
+        if (reordering) reordering = false else selectedTab = ALL_TAB
+    }
+
+    renamingFolder?.let { folder ->
+        CategoryNameDialog(
+            initialName = folder.name,
+            title = "Rename folder",
+            confirmLabel = "Rename",
+            onConfirm = { name ->
+                runCatching { repository.renameCategory(folder.id, name) }.exceptionOrNull()?.message
+            },
+            onDismiss = { renamingFolder = null },
+        )
+    }
+
+    deletingFolder?.let { folder ->
+        AlertDialog(
+            onDismissRequest = { deletingFolder = null },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        scope.launch { repository.deleteCategory(folder.id) }
+                        deletingFolder = null
+                    },
+                ) { Text("Delete") }
+            },
+            dismissButton = { TextButton(onClick = { deletingFolder = null }) { Text("Cancel") } },
+            title = { Text("Delete ?") },
+            text = { Text("Snippets in  move to the top level.") },
+        )
     }
 
     if (showTryIt) {
@@ -388,6 +430,18 @@ fun SnippetListScreen(
                                     exportLauncher.launch("pastille-snippets.json")
                                 },
                             )
+                            DropdownMenuItem(
+                                text = { Text("Reorder") },
+                                leadingIcon = {
+                                    Icon(Icons.Outlined.SwapVert, contentDescription = null)
+                                },
+                                enabled = snippets.size > 1 || orderedFolders.size > 1,
+                                onClick = {
+                                    showMenu = false
+                                    searching = false
+                                    reordering = true
+                                },
+                            )
                             HorizontalDivider()
                             DropdownMenuItem(
                                 text = { Text("Try the keyboard") },
@@ -443,12 +497,11 @@ fun SnippetListScreen(
                 )
             },
             floatingActionButton = {
-                ExtendedFloatingActionButton(
-                    onClick = { onCreate(null) },
-                    expanded = fabExpanded,
-                    text = { Text("New snippet") },
-                    icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                )
+                if (!reordering) {
+                    FloatingActionButton(onClick = { onCreate(selectedFolderId) }) {
+                        Icon(Icons.Outlined.Edit, contentDescription = "New snippet")
+                    }
+                }
             },
             snackbarHost = { SnackbarHost(snackbarHostState) },
         ) { padding ->
@@ -457,65 +510,103 @@ fun SnippetListScreen(
                     .fillMaxSize()
                     .padding(padding),
             ) {
+                if (orderedFolders.isNotEmpty()) {
+                    FolderTabs(
+                        folders = if (reordering) folderDragOrder else orderedFolders,
+                        selectedId = selectedTab,
+                        reordering = reordering,
+                        onSelect = { selectedTab = it },
+                        onMove = { fromId, toId ->
+                            val from = folderDragOrder.indexOfFirst { it.id == fromId }
+                            val to = folderDragOrder.indexOfFirst { it.id == toId }
+                            if (from >= 0 && to >= 0) {
+                                folderDragOrder = folderDragOrder.toMutableList().apply { add(to, removeAt(from)) }
+                            }
+                        },
+                        onDropped = {
+                            scope.launch { repository.setCategoryOrder(folderDragOrder.map { it.id }) }
+                        },
+                        onRename = { renamingFolder = it },
+                        onDelete = { deletingFolder = it },
+                    )
+                }
+                if (reordering) {
+                    ReorderBanner(onDone = { reordering = false })
+                }
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     state = listState,
                     contentPadding = PaddingValues(bottom = 88.dp),
                 ) {
-                item(key = "onboarding") {
-                    Box(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        OnboardingCard(key = refreshTick)
+                    item(key = "onboarding") {
+                        Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                            OnboardingCard(key = refreshTick)
+                        }
                     }
-                }
-                if (snippets.isEmpty()) {
-                    item(key = "empty") {
-                        Column(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 32.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
-                            Text(
-                                text = "No snippets yet",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Spacer(Modifier.height(16.dp))
-                            FilledTonalButton(onClick = { onCreate(null) }) {
-                                Text("Add your first snippet")
+                    if (shown.isEmpty()) {
+                        item(key = "empty") {
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 32.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                            ) {
+                                Text(
+                                    text = if (snippets.isEmpty()) "No snippets yet" else "Nothing in this folder yet",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Spacer(Modifier.height(16.dp))
+                                FilledTonalButton(onClick = { onCreate(selectedFolderId) }) {
+                                    Text(if (snippets.isEmpty()) "Add your first snippet" else "Add a snippet here")
+                                }
                             }
                         }
                     }
-                }
-                itemsIndexed(sortedFolders, key = { _, folder -> "folder-${folder.id}" }) { index, folder ->
-                    if (index > 0) {
-                        HorizontalDivider(
-                            thickness = 1.dp,
-                            color = MaterialTheme.colorScheme.outlineVariant,
-                        )
+                    if (reordering) {
+                        itemsIndexed(snippetDragOrder, key = { _, snippet -> snippet.id }) { index, snippet ->
+                            ReorderableItem(snippetReorderState, key = snippet.id) { dragging ->
+                                val elevation by animateDpAsState(if (dragging) 6.dp else 0.dp, label = "dragElevation")
+                                Surface(shadowElevation = elevation, color = MaterialTheme.colorScheme.surface) {
+                                    Column {
+                                        if (index > 0) {
+                                            HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
+                                        }
+                                        ReorderRow(
+                                            snippet = snippet,
+                                            handle = Modifier.draggableHandle(
+                                                onDragStarted = {
+                                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                },
+                                                onDragStopped = {
+                                                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                    scope.launch {
+                                                        repository.setSnippetOrder(shown, snippetDragOrder.map { it.id })
+                                                    }
+                                                },
+                                            ),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        itemsIndexed(shown, key = { _, snippet -> snippet.id }) { index, snippet ->
+                            Column(modifier = Modifier.animateItem()) {
+                                if (index > 0) {
+                                    HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
+                                }
+                                SnippetRow(
+                                    snippet = snippet,
+                                    categoryName = if (selectedTab == ALL_TAB) snippet.categoryId?.let { categoryNames[it] } else null,
+                                    onEdit = { onEdit(snippet) },
+                                    onCopy = { copySnippet(snippet) },
+                                    onTogglePin = { togglePin(snippet) },
+                                    onDelete = { deleteSnippet(snippet) },
+                                    folders = orderedFolders,
+                                    onMove = { moveSnippet(snippet, it) },
+                                )
+                            }
+                        }
                     }
-                    FolderRow(
-                        name = folder.name,
-                        count = snippetCounts[folder.id] ?: 0,
-                        onClick = { onOpenFolder(folder.id) },
-                    )
-                }
-                itemsIndexed(topLevel, key = { _, snippet -> snippet.id }) { index, snippet ->
-                    if (index > 0 || sortedFolders.isNotEmpty()) {
-                        HorizontalDivider(
-                            thickness = 1.dp,
-                            color = MaterialTheme.colorScheme.outlineVariant,
-                        )
-                    }
-                    SnippetRow(
-                        snippet = snippet,
-                        categoryName = null,
-                        onEdit = { onEdit(snippet) },
-                        onCopy = { copySnippet(snippet) },
-                        onTogglePin = { togglePin(snippet) },
-                        onDelete = { deleteSnippet(snippet) },
-                        folders = sortedFolders,
-                        onMove = { moveSnippet(snippet, it) },
-                    )
-                }
                 }
             }
         }
@@ -578,7 +669,7 @@ fun SnippetListScreen(
                             onCopy = { copySnippet(snippet) },
                             onTogglePin = { togglePin(snippet) },
                             onDelete = { deleteSnippet(snippet) },
-                            folders = sortedFolders,
+                            folders = orderedFolders,
                             onMove = { moveSnippet(snippet, it) },
                             containerColor = SearchBarDefaults.colors().containerColor,
                         )
@@ -1062,4 +1153,167 @@ private fun isPastilleEnabled(context: Context): Boolean {
 
 private fun toast(context: Context, message: String) {
     Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+}
+
+private const val ALL_TAB = -1L
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun FolderTabs(
+    folders: List<CategoryRecord>,
+    selectedId: Long,
+    reordering: Boolean,
+    onSelect: (Long) -> Unit,
+    onMove: (Long, Long) -> Unit,
+    onDropped: () -> Unit,
+    onRename: (CategoryRecord) -> Unit,
+    onDelete: (CategoryRecord) -> Unit,
+) {
+    val haptics = LocalHapticFeedback.current
+    val rowState = rememberLazyListState()
+    val reorderState = rememberReorderableLazyListState(rowState) { from, to ->
+        val fromId = from.key as? Long ?: return@rememberReorderableLazyListState
+        val toId = to.key as? Long ?: return@rememberReorderableLazyListState
+        onMove(fromId, toId)
+    }
+    LaunchedEffect(selectedId, folders) {
+        val index = if (selectedId == ALL_TAB) 0 else folders.indexOfFirst { it.id == selectedId } + 1
+        if (index >= 0) rowState.animateScrollToItem(index)
+    }
+    LazyRow(
+        state = rowState,
+        modifier = Modifier.fillMaxWidth().height(48.dp).selectableGroup(),
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        item(key = "all") {
+            FolderTab(label = "All", selected = selectedId == ALL_TAB, onClick = { onSelect(ALL_TAB) })
+        }
+        items(folders, key = { it.id }) { folder ->
+            ReorderableItem(reorderState, key = folder.id) { dragging ->
+                var menuOpen by remember { mutableStateOf(false) }
+                Box {
+                    FolderTab(
+                        label = folder.name,
+                        selected = selectedId == folder.id || dragging,
+                        onClick = { onSelect(folder.id) },
+                        onLongClick = if (reordering) null else ({ menuOpen = true }),
+                        modifier = if (reordering) {
+                            Modifier.longPressDraggableHandle(
+                                onDragStarted = { haptics.performHapticFeedback(HapticFeedbackType.LongPress) },
+                                onDragStopped = { onDropped() },
+                            )
+                        } else {
+                            Modifier
+                        },
+                    )
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Rename") },
+                            leadingIcon = { Icon(Icons.Outlined.Edit, contentDescription = null) },
+                            onClick = {
+                                menuOpen = false
+                                onRename(folder)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Delete") },
+                            leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null) },
+                            onClick = {
+                                menuOpen = false
+                                onDelete(folder)
+                            },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun FolderTab(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    onLongClick: (() -> Unit)? = null,
+) {
+    val colors = MaterialTheme.colorScheme
+    val container by animateColorAsState(
+        targetValue = if (selected) colors.secondaryContainer else Color.Transparent,
+        label = "tabContainer",
+    )
+    Box(
+        modifier = modifier
+            .height(36.dp)
+            .clip(CircleShape)
+            .background(container)
+            .combinedClickable(role = Role.Tab, onClick = onClick, onLongClick = onLongClick)
+            .padding(horizontal = 16.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.titleSmall,
+            color = if (selected) colors.onSecondaryContainer else colors.onSurfaceVariant,
+            maxLines = 1,
+        )
+    }
+}
+
+@Composable
+private fun ReorderBanner(onDone: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .padding(start = 16.dp, end = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "Drag ≡ to reorder. Hold a folder tab to move it.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+        )
+        TextButton(onClick = onDone) { Text("Done") }
+    }
+}
+
+@Composable
+private fun ReorderRow(snippet: SnippetRecord, handle: Modifier) {
+    Row(
+        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(start = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (snippet.pinned) {
+            Icon(
+                imageVector = Icons.Filled.PushPin,
+                contentDescription = "Pinned",
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(Modifier.width(8.dp))
+        }
+        Text(
+            text = rowTitle(snippet.title, snippet.text).ifBlank { "Image" },
+            style = MaterialTheme.typography.titleMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        Box(
+            modifier = handle.size(48.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.DragHandle,
+                contentDescription = "Drag to reorder",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
 }

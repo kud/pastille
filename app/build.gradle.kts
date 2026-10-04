@@ -76,6 +76,7 @@ dependencies {
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
     implementation(libs.serialization.json)
+    implementation(libs.reorderable)
     ksp(libs.room.compiler)
 
     testImplementation(libs.junit)

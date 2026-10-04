@@ -15,3 +15,9 @@ fun moveCategory(categories: List<CategoryRecord>, id: Long, delta: Int): List<C
     reordered.add(to, moved)
     return reordered.mapIndexed { index, category -> category.copy(position = index) }
 }
+
+fun orderCategories(categories: List<CategoryRecord>, newOrder: List<Long>): List<CategoryRecord> {
+    val byId = categories.associateBy { it.id }
+    val ordered = newOrder.mapNotNull { byId[it] } + categories.filter { it.id !in newOrder }.sortedBy { it.position }
+    return ordered.mapIndexed { index, category -> category.copy(position = index) }
+}

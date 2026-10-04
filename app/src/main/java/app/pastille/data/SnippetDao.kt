@@ -8,10 +8,10 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface SnippetDao {
-    @Query("SELECT * FROM snippets ORDER BY pinned DESC, lastUsedAt DESC")
+    @Query("SELECT * FROM snippets ORDER BY pinned DESC, position ASC, lastUsedAt DESC")
     fun observeAll(): Flow<List<SnippetEntity>>
 
-    @Query("SELECT * FROM snippets ORDER BY pinned DESC, lastUsedAt DESC")
+    @Query("SELECT * FROM snippets ORDER BY pinned DESC, position ASC, lastUsedAt DESC")
     suspend fun getAll(): List<SnippetEntity>
 
     @Query("SELECT * FROM snippets WHERE id = :id")
@@ -55,4 +55,10 @@ interface SnippetDao {
 
     @Query("DELETE FROM snippets WHERE id IN (:ids)")
     suspend fun deleteByIds(ids: List<Long>)
+
+    @Query("UPDATE snippets SET position = :position WHERE id = :id")
+    suspend fun updatePosition(id: Long, position: Int)
+
+    @Query("SELECT MIN(position) FROM snippets")
+    suspend fun minPosition(): Int?
 }

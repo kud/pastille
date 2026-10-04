@@ -12,6 +12,7 @@ data class SnippetRecord(
     val imageFile: String? = null,
     val imageWidth: Int? = null,
     val imageHeight: Int? = null,
+    val position: Int = 0,
 ) {
     val isImage: Boolean get() = imageFile != null
 }

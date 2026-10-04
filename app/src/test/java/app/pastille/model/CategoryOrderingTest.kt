@@ -69,4 +69,17 @@ class CategoryOrderingTest {
         assertEquals(listOf("a", "b"), moved.map { it.name })
         assertEquals(listOf(0, 1), moved.map { it.position })
     }
+
+    @Test
+    fun `a dragged order is numbered from zero`() {
+        val folders = listOf(
+            CategoryRecord(id = 1, name = "Work", position = 0),
+            CategoryRecord(id = 2, name = "Home", position = 1),
+            CategoryRecord(id = 3, name = "Travel", position = 2),
+        )
+        assertEquals(
+            listOf(3L to 0, 1L to 1, 2L to 2),
+            orderCategories(folders, listOf(3, 1)).map { it.id to it.position },
+        )
+    }
 }

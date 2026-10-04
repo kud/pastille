@@ -68,6 +68,8 @@ fun SettingsScreen(onBack: () -> Unit) {
     val settings = remember { PastilleSettings.forContext(context) }
     var returnAfterSnippet by remember { mutableStateOf(settings.returnAfterSnippet) }
     var returnAfterImage by remember { mutableStateOf(settings.returnAfterImage) }
+    var snippetsOn by remember { mutableStateOf(settings.snippetsEnabled) }
+    var imagesOn by remember { mutableStateOf(settings.imagesEnabled) }
     var selectedStyle by remember { mutableStateOf(settings.keyboardStyle) }
     var panelPortrait by remember { mutableStateOf(settings.panelHeightPortrait) }
     var panelLandscape by remember { mutableStateOf(settings.panelHeightLandscape) }
@@ -187,6 +189,32 @@ fun SettingsScreen(onBack: () -> Unit) {
                 },
             )
             TryItField(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp))
+            Text(
+                text = "Show in the keyboard",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp),
+            )
+            ToggleRow(
+                headline = "Snippets",
+                supporting = "Your saved text.",
+                checked = snippetsOn,
+                enabled = imagesOn,
+                onChange = {
+                    snippetsOn = it
+                    settings.snippetsEnabled = it
+                },
+            )
+            ToggleRow(
+                headline = "Images",
+                supporting = "Recent images from the folders you choose.",
+                checked = imagesOn,
+                enabled = snippetsOn,
+                onChange = {
+                    imagesOn = it
+                    settings.imagesEnabled = it
+                },
+            )
             Text(
                 text = "After inserting",
                 style = MaterialTheme.typography.titleSmall,
@@ -360,11 +388,12 @@ private fun ToggleRow(
     supporting: String,
     checked: Boolean,
     onChange: (Boolean) -> Unit,
+    enabled: Boolean = true,
 ) {
     ListItem(
         headlineContent = { Text(headline) },
         supportingContent = { Text(supporting) },
-        trailingContent = { Switch(checked = checked, onCheckedChange = null) },
-        modifier = Modifier.toggleable(value = checked, role = Role.Switch, onValueChange = onChange),
+        trailingContent = { Switch(checked = checked, onCheckedChange = null, enabled = enabled) },
+        modifier = Modifier.toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onChange),
     )
 }

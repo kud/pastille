@@ -51,6 +51,14 @@ class PastilleSettings private constructor(private val prefs: SharedPreferences)
         get() = PanelHeight.fromKey(prefs.getString(KEY_PANEL_HEIGHT_LANDSCAPE, null))
         set(value) = prefs.edit().putString(KEY_PANEL_HEIGHT_LANDSCAPE, value.key).apply()
 
+    var snippetsEnabled: Boolean
+        get() = prefs.getBoolean(KEY_SNIPPETS_ENABLED, true)
+        set(value) = prefs.edit().putBoolean(KEY_SNIPPETS_ENABLED, value).apply()
+
+    var imagesEnabled: Boolean
+        get() = prefs.getBoolean(KEY_IMAGES_ENABLED, true)
+        set(value) = prefs.edit().putBoolean(KEY_IMAGES_ENABLED, value).apply()
+
     var keyboardMode: KeyboardMode
         get() = KeyboardMode.fromKey(prefs.getString(KEY_KEYBOARD_MODE, null))
         set(value) = prefs.edit().putString(KEY_KEYBOARD_MODE, value.key).apply()
@@ -90,6 +98,8 @@ class PastilleSettings private constructor(private val prefs: SharedPreferences)
         private const val KEY_PANEL_HEIGHT_PORTRAIT = "panel_height_portrait"
         private const val KEY_PANEL_HEIGHT_LANDSCAPE = "panel_height_landscape"
         private const val KEY_KEYBOARD_MODE = "keyboard_mode"
+        private const val KEY_SNIPPETS_ENABLED = "snippets_enabled"
+        private const val KEY_IMAGES_ENABLED = "images_enabled"
         private const val KEY_IMAGE_SOURCE_BUCKET_ID = "image_source_bucket_id"
         private const val KEY_ENABLED_IMAGE_SOURCES = "enabled_image_sources"
 

@@ -18,3 +18,13 @@ class ReturnDefaultTest {
         assertFalse(returnDefault(legacy = false, image = false))
     }
 }
+
+class EffectiveModeTest {
+
+    @org.junit.Test
+    fun `a switched-off mode is never shown`() {
+        org.junit.Assert.assertEquals(KeyboardMode.Images, effectiveMode(KeyboardMode.Snippets, snippetsEnabled = false, imagesEnabled = true))
+        org.junit.Assert.assertEquals(KeyboardMode.Snippets, effectiveMode(KeyboardMode.Images, snippetsEnabled = true, imagesEnabled = false))
+        org.junit.Assert.assertEquals(KeyboardMode.Images, effectiveMode(KeyboardMode.Images, snippetsEnabled = true, imagesEnabled = true))
+    }
+}

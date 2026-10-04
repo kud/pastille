@@ -53,6 +53,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.material.icons.Icons
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.rounded.Close
@@ -275,9 +276,11 @@ fun SnippetListScreen(
         if (selectedTab != ALL_TAB && orderedFolders.none { it.id == selectedTab }) selectedTab = ALL_TAB
     }
     val selectedFolderId = selectedTab.takeIf { it != ALL_TAB }
-    val shown = remember(snippets, selectedTab) {
-        if (selectedTab == ALL_TAB) snippets else snippets.filter { it.categoryId == selectedTab }
+    val shown = remember(visible, selectedTab) {
+        if (selectedTab == ALL_TAB) visible else visible.filter { it.categoryId == selectedTab }
     }
+    val searchFocus = remember { FocusRequester() }
+    LaunchedEffect(searching) { if (searching) searchFocus.requestFocus() }
     var snippetDragOrder by remember(shown, reordering) { mutableStateOf(shown) }
     var folderDragOrder by remember(orderedFolders, reordering) { mutableStateOf(orderedFolders) }
     val snippetReorderState = rememberReorderableLazyListState(listState) { from, to ->
@@ -292,7 +295,7 @@ fun SnippetListScreen(
     if (showCrashDialog) {
         val entries = remember(showCrashDialog) { CrashLog.forContext(context).entries() }
         val clipboard = LocalClipboardManager.current
-        val crashText = remember(entries) { entries.joinToString("\n\n———\n\n") }
+        val crashText = remember(entries) { entries.joinToString("\n\nâââ\n\n") }
         AlertDialog(
             onDismissRequest = { showCrashDialog = false },
             confirmButton = {
@@ -392,7 +395,19 @@ fun SnippetListScreen(
             modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
             contentWindowInsets = WindowInsets.safeDrawing,
             topBar = {
-                LargeTopAppBar(
+                if (searching) {
+                    Column(modifier = Modifier.background(MaterialTheme.colorScheme.surface).windowInsetsPadding(WindowInsets.statusBars)) {
+                        SearchField(
+                            query = query,
+                            onQueryChange = { query = it },
+                            onClose = {
+                                searching = false
+                                query = ""
+                            },
+                            modifier = Modifier.focusRequester(searchFocus),
+                        )
+                    }
+                } else LargeTopAppBar(
                     title = { Wordmark(collapsedFraction = scrollBehavior.state.collapsedFraction) },
                     actions = {
                         IconButton(onClick = { searching = true }) {
@@ -552,12 +567,16 @@ fun SnippetListScreen(
                                 horizontalAlignment = Alignment.CenterHorizontally,
                             ) {
                                 Text(
-                                    text = if (snippets.isEmpty()) "No snippets yet" else "Nothing in this folder yet",
+                                    text = when {
+                                        query.isNotBlank() -> "No snippets match “$query”"
+                                        snippets.isEmpty() -> "No snippets yet"
+                                        else -> "Nothing in this folder yet"
+                                    },
                                     style = MaterialTheme.typography.bodyLarge,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                                 Spacer(Modifier.height(16.dp))
-                                FilledTonalButton(onClick = { onCreate(selectedFolderId) }) {
+                                if (query.isBlank()) FilledTonalButton(onClick = { onCreate(selectedFolderId) }) {
                                     Text(if (snippets.isEmpty()) "Add your first snippet" else "Add a snippet here")
                                 }
                             }
@@ -606,58 +625,6 @@ fun SnippetListScreen(
                                     onMove = { moveSnippet(snippet, it) },
                                 )
                             }
-                        }
-                    }
-                }
-            }
-        }
-        if (searching) {
-            val focusRequester = remember { FocusRequester() }
-            LaunchedEffect(Unit) {
-                focusRequester.requestFocus()
-            }
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.surface)
-                    .windowInsetsPadding(WindowInsets.safeDrawing),
-            ) {
-                SearchField(
-                    query = query,
-                    onQueryChange = { query = it },
-                    onClose = {
-                        searching = false
-                        query = ""
-                    },
-                    modifier = Modifier.focusRequester(focusRequester),
-                )
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    itemsIndexed(visible, key = { _, snippet -> snippet.id }) { index, snippet ->
-                        if (index > 0) {
-                            HorizontalDivider(
-                                thickness = 1.dp,
-                                color = MaterialTheme.colorScheme.outlineVariant,
-                            )
-                        }
-                        SnippetRow(
-                            snippet = snippet,
-                            categoryName = snippet.categoryId?.let { categoryNames[it] },
-                            onEdit = { onEdit(snippet) },
-                            onCopy = { copySnippet(snippet) },
-                            onDelete = { deleteSnippet(snippet) },
-                            folders = orderedFolders,
-                            onMove = { moveSnippet(snippet, it) },
-                        )
-                    }
-                    if (query.isNotBlank() && visible.isEmpty()) {
-                        item(key = "no-match") {
-                            Text(
-                                text = "No snippets match “$query”",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(16.dp),
-                            )
                         }
                     }
                 }
@@ -1250,7 +1217,7 @@ private fun ReorderBanner(onDone: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = "Drag ≡ to reorder. Hold a folder tab to move it.",
+            text = "Drag â¡ to reorder. Hold a folder tab to move it.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.weight(1f),

@@ -52,3 +52,10 @@ fun panelHeightDp(preset: PanelHeight, landscape: Boolean, windowHeightDp: Int):
 }
 
 fun tileColumns(widthDp: Int): Int = (widthDp / 195).coerceIn(2, 4)
+
+// With one mode switched off the keyboard shows only the other, whatever was last open.
+fun effectiveMode(saved: KeyboardMode, snippetsEnabled: Boolean, imagesEnabled: Boolean): KeyboardMode = when {
+    !snippetsEnabled && imagesEnabled -> KeyboardMode.Images
+    !imagesEnabled -> KeyboardMode.Snippets
+    else -> saved
+}

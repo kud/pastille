@@ -185,6 +185,8 @@ data class KeyboardUiState(
     val returnAfterSnippet: Boolean = true,
     val returnAfterImage: Boolean = false,
     val enabledSourceIds: Set<Long>? = null,
+    val snippetsEnabled: Boolean = true,
+    val imagesEnabled: Boolean = true,
 )
 
 interface KeyboardActions {
@@ -215,6 +217,7 @@ interface KeyboardActions {
     fun onSetHeight(height: PanelHeight) {}
     fun onSetReturn(image: Boolean, enabled: Boolean) {}
     fun onOpenImageFolders() {}
+    fun onSetModeEnabled(mode: KeyboardMode, enabled: Boolean) {}
     fun onSetShownSources(bucketIds: Set<Long>) {}
 }
 
@@ -307,7 +310,9 @@ private fun Toolbar(state: KeyboardUiState, actions: KeyboardActions, title: Str
                 label = "toolbarLeading",
             ) { current ->
                 if (current == null) {
-                    ModeSwitch(mode = state.mode, onChange = actions::onModeChange)
+                    if (state.snippetsEnabled && state.imagesEnabled) {
+                        ModeSwitch(mode = state.mode, onChange = actions::onModeChange)
+                    }
                 } else {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = actions::onBack) {
@@ -1500,6 +1505,19 @@ private fun SettingsContent(state: KeyboardUiState, actions: KeyboardActions) {
                 )
             }
         }
+        SettingsHeading("Show in the keyboard")
+        SettingsSwitchRow(
+            headline = "Snippets",
+            checked = state.snippetsEnabled,
+            enabled = state.imagesEnabled,
+            onChange = { actions.onSetModeEnabled(KeyboardMode.Snippets, it) },
+        )
+        SettingsSwitchRow(
+            headline = "Images",
+            checked = state.imagesEnabled,
+            enabled = state.snippetsEnabled,
+            onChange = { actions.onSetModeEnabled(KeyboardMode.Images, it) },
+        )
         SettingsHeading("After inserting")
         SettingsSwitchRow(
             headline = "Return after a snippet",
@@ -1606,7 +1624,7 @@ private fun ChipLine(content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun SettingsSwitchRow(headline: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+private fun SettingsSwitchRow(headline: String, checked: Boolean, onChange: (Boolean) -> Unit, enabled: Boolean = true) {
     val palette = LocalKeyboardPalette.current
     ListItem(
         headlineContent = { Text(headline, color = palette.label) },
@@ -1614,6 +1632,7 @@ private fun SettingsSwitchRow(headline: String, checked: Boolean, onChange: (Boo
             Switch(
                 checked = checked,
                 onCheckedChange = null,
+                enabled = enabled,
                 colors = SwitchDefaults.colors(
                     checkedTrackColor = palette.accent,
                     checkedThumbColor = palette.onAccent,
@@ -1624,7 +1643,7 @@ private fun SettingsSwitchRow(headline: String, checked: Boolean, onChange: (Boo
             )
         },
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-        modifier = Modifier.toggleable(value = checked, role = Role.Switch, onValueChange = onChange),
+        modifier = Modifier.toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onChange),
     )
 }
 

@@ -58,6 +58,7 @@ import app.pastille.settings.PanelHeight
 import app.pastille.settings.PastilleSettings
 import app.pastille.settings.TOOLBAR_HEIGHT_DP
 import app.pastille.settings.panelHeightDp
+import app.pastille.settings.effectiveMode
 import app.pastille.share.MAX_TEXT_CHARS
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -499,6 +500,13 @@ class PastilleImeService :
         if (image) settings.returnAfterImage = enabled else settings.returnAfterSnippet = enabled
     }
 
+    override fun onSetModeEnabled(mode: KeyboardMode, enabled: Boolean) {
+        when (mode) {
+            KeyboardMode.Snippets -> settings.snippetsEnabled = enabled
+            KeyboardMode.Images -> settings.imagesEnabled = enabled
+        }
+    }
+
     override fun onOpenImageFolders() {
         panelState.value = PanelState.ImageFolders
     }
@@ -534,8 +542,11 @@ class PastilleImeService :
 
         SideEffect { applyNavigationBar(palette) }
 
+        val snippetsOn = remember(settingsTick) { settings.snippetsEnabled }
+        val imagesOn = remember(settingsTick) { settings.imagesEnabled }
+        val shownMode = effectiveMode(mode.value, snippetsOn, imagesOn)
         val enabledSourceIds = remember(settingsTick) { settings.enabledImageSources }
-        val needsSources = mode.value == KeyboardMode.Images ||
+        val needsSources = shownMode == KeyboardMode.Images ||
             panelState.value == PanelState.Settings ||
             panelState.value == PanelState.ImageFolders
         LaunchedEffect(openCount.intValue, needsSources, enabledSourceIds) {
@@ -548,8 +559,8 @@ class PastilleImeService :
             if (resolved?.bucketId != sourceId.value) sourceId.value = resolved?.bucketId
         }
 
-        LaunchedEffect(openCount.intValue, mode.value, sourceId.value) {
-            if (mode.value != KeyboardMode.Images) return@LaunchedEffect
+        LaunchedEffect(openCount.intValue, shownMode, sourceId.value) {
+            if (shownMode != KeyboardMode.Images) return@LaunchedEffect
             val bucket = sourceId.value ?: return@LaunchedEffect
             images = withContext(Dispatchers.IO) {
                 runCatching { ImageSourceReader.readRecent(context, bucket) }.getOrDefault(emptyList())
@@ -562,7 +573,9 @@ class PastilleImeService :
         }
 
         val state = KeyboardUiState(
-            mode = mode.value,
+            mode = shownMode,
+            snippetsEnabled = snippetsOn,
+            imagesEnabled = imagesOn,
             snippets = snippets,
             categories = categories,
             folderId = folderId.value,

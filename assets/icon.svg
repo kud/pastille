@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title">
+  <title id="title">Pastille app icon</title>
+  <rect width="1024" height="1024" fill="#0B3A78"/>
+  <circle cx="456" cy="548" r="274" fill="#2F7EF7"/>
+  <path fill="#FFF8ED" d="M352 204 C267 225 216 304 206 393 C196 482 213 601 263 692 C316 789 415 832 532 824 C649 816 753 772 803 687 C850 607 849 491 825 402 C807 334 755 291 703 246 C654 204 583 187 505 188 C448 188 397 194 352 204 Z"/>
+  <path fill="#F04452" d="M661 236 C661 220 674 207 690 207 C701 207 711 212 719 220 L803 304 C811 312 816 322 816 334 C816 350 803 363 787 363 L728 363 C691 363 661 333 661 296 Z"/>
+  <rect x="326" y="382" width="389" height="150" rx="43" fill="#0B3A78"/>
+  <rect x="371" y="420" width="235" height="24" rx="12" fill="#FFF8ED"/>
+  <rect x="371" y="464" width="145" height="24" rx="12" fill="#FFF8ED"/>
+  <rect x="326" y="557" width="389" height="153" rx="43" fill="#0B3A78"/>
+  <circle cx="458" cy="608" r="18" fill="#FFF8ED"/>
+  <path d="M361 675 L405 626 L446 670 L470 645 L505 684 L361 684 Z" fill="#FFF8ED"/>
+  <rect x="528" y="596" width="138" height="24" rx="12" fill="#FFF8ED"/>
+  <rect x="528" y="642" width="94" height="24" rx="12" fill="#FFF8ED"/>
+</svg>

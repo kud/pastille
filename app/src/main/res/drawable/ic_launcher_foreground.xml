@@ -1,18 +1,13 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-    <path
-        android:fillColor="@color/ic_launcher_pastille_back"
-        android:pathData="M45.575,38.637A18,18 0 1,1 69.363,62.425A21.5,21.5 0 0,0 45.575,38.637Z" />
-    <path
-        android:fillColor="@color/ic_launcher_pastille_front"
-        android:pathData="M48,41.5A18.5,18.5 0 1,1 48,78.5A18.5,18.5 0 1,1 48,41.5Z" />
-    <path
-        android:pathData="M34.6,56.2A14,14 0 0,1 43.2,46.8"
-        android:strokeColor="@color/ic_launcher_background"
-        android:strokeAlpha="0.55"
-        android:strokeLineCap="round"
-        android:strokeWidth="2.6" />
+    android:viewportWidth="1024"
+    android:viewportHeight="1024">
+    <path android:fillColor="@color/ic_launcher_back" android:pathData="M730,548 A274,274 0,1 1,182 548 A274,274 0,1 1,730 548 Z" />
+    <path android:fillColor="@color/ic_launcher_front" android:pathData="M352,204 C267,225 216,304 206,393 C196,482 213,601 263,692 C316,789 415,832 532,824 C649,816 753,772 803,687 C850,607 849,491 825,402 C807,334 755,291 703,246 C654,204 583,187 505,188 C448,188 397,194 352,204 Z" />
+    <path android:fillColor="@color/ic_launcher_fold" android:pathData="M661,236 C661,220 674,207 690,207 C701,207 711,212 719,220 L803,304 C811,312 816,322 816,334 C816,350 803,363 787,363 L728,363 C691,363 661,333 661,296 Z" />
+    <path android:fillColor="@color/ic_launcher_ink" android:pathData="M369,382 H672 A43,43 0,0 1,715 425 V489 A43,43 0,0 1,672 532 H369 A43,43 0,0 1,326 489 V425 A43,43 0,0 1,369 382 Z" />
+    <path android:fillColor="@color/ic_launcher_front" android:pathData="M383,420 H594 A12,12 0,0 1,606 432 A12,12 0,0 1,594 444 H383 A12,12 0,0 1,371 432 A12,12 0,0 1,383 420 Z M383,464 H504 A12,12 0,0 1,516 476 A12,12 0,0 1,504 488 H383 A12,12 0,0 1,371 476 A12,12 0,0 1,383 464 Z" />
+    <path android:fillColor="@color/ic_launcher_ink" android:pathData="M369,557 H672 A43,43 0,0 1,715 600 V667 A43,43 0,0 1,672 710 H369 A43,43 0,0 1,326 667 V600 A43,43 0,0 1,369 557 Z" />
+    <path android:fillColor="@color/ic_launcher_front" android:pathData="M476,608 A18,18 0,1 1,440 608 A18,18 0,1 1,476 608 Z M361,675 L405,626 L446,670 L470,645 L505,684 L361,684 Z M540,596 H654 A12,12 0,0 1,666 608 A12,12 0,0 1,654 620 H540 A12,12 0,0 1,528 608 A12,12 0,0 1,540 596 Z M540,642 H610 A12,12 0,0 1,622 654 A12,12 0,0 1,610 666 H540 A12,12 0,0 1,528 654 A12,12 0,0 1,540 642 Z" />
 </vector>

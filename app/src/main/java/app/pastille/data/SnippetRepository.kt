@@ -50,6 +50,9 @@ class SnippetRepository private constructor(
     suspend fun findTextDuplicate(text: String): SnippetRecord? =
         dao.findTextDuplicate(text)?.toRecord()
 
+    suspend fun findByImageFile(name: String): SnippetRecord? =
+        dao.findByImageFile(name)?.toRecord()
+
     suspend fun recordUse(id: Long, now: Long = System.currentTimeMillis()) {
         dao.touch(id, now)
     }

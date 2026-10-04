@@ -17,10 +17,8 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
@@ -264,10 +262,10 @@ fun KeyboardPanel(
         }
         Column(modifier = Modifier.fillMaxWidth().then(insets)) {
             Toolbar(state = state, actions = actions, title = title)
-            Column(modifier = Modifier.fillMaxWidth().height(contentHeight).clipToBounds()) {
-                StatusStripArea(strip = state.strip, actions = actions)
-                Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                    PanelContent(state = state, actions = actions, actionsSnippet = actionsSnippet)
+            Box(modifier = Modifier.fillMaxWidth().height(contentHeight).clipToBounds()) {
+                PanelContent(state = state, actions = actions, actionsSnippet = actionsSnippet)
+                Box(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
+                    StatusStripArea(strip = state.strip, actions = actions)
                 }
             }
         }
@@ -403,12 +401,8 @@ private fun StatusStripArea(strip: StatusStrip?, actions: KeyboardActions) {
     if (strip != null) shown = strip
     AnimatedVisibility(
         visible = strip != null,
-        enter = if (reduceMotion) {
-            EnterTransition.None
-        } else {
-            expandVertically(tween(180, easing = PastilleMotion.EmphasizedDecelerate)) + fadeIn(tween(180))
-        },
-        exit = if (reduceMotion) ExitTransition.None else shrinkVertically(tween(120)) + fadeOut(tween(120)),
+        enter = fadeIn(tween(if (reduceMotion) 0 else 150)),
+        exit = fadeOut(tween(if (reduceMotion) 0 else 120)),
     ) {
         shown?.let { StatusStripRow(strip = it, onDismiss = actions::onStripDismiss) }
     }
@@ -418,7 +412,12 @@ private fun StatusStripArea(strip: StatusStrip?, actions: KeyboardActions) {
 private fun StatusStripRow(strip: StatusStrip, onDismiss: (Long) -> Unit) {
     val palette = LocalKeyboardPalette.current
     Row(
-        modifier = Modifier.fillMaxWidth().height(40.dp).background(palette.key),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(8.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(palette.stripButton)
+            .height(44.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(

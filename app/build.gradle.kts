@@ -16,8 +16,8 @@ android {
         applicationId = "app.pastille"
         minSdk = 28
         targetSdk = 35
-        versionCode = 9
-        versionName = "0.1.0-dev.9"
+        versionCode = 10
+        versionName = "0.1.0-dev.10"
     }
 
     // CI writes the keystore from the PASTILLE_KEYSTORE_* secrets; without them the release build is left unsigned.

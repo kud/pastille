@@ -1,0 +1,7 @@
+Test build for the first stable release.
+- Text in the editor survives rotation and theme changes.
+- Reordering snippets twice in quick succession keeps the right order.
+- The keyboard no longer stays inside a folder you just deleted.
+- Folder chips follow your order, with icons, and are easier to tap.
+- Calmer Delete button and share sheet.
+- A much smaller download.

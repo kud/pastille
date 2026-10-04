@@ -348,16 +348,16 @@ private fun Toolbar(state: KeyboardUiState, actions: KeyboardActions, title: Str
         ) {
             Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
                 if (state.mode == KeyboardMode.Snippets) {
-                    ToolbarAction(icon = Icons.Rounded.SwapVert, label = "Reorder snippets", onClick = actions::onOpenReorder)
+                    ToolbarAction(icon = Icons.Rounded.Add, label = "New snippet", onClick = actions::onOpenAdd)
                 }
             }
             Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
                 if (state.mode == KeyboardMode.Snippets) {
-                    ToolbarAction(icon = Icons.Rounded.Add, label = "New snippet", onClick = actions::onOpenAdd)
+                    ToolbarAction(icon = Icons.Rounded.SwapVert, label = "Reorder snippets", onClick = actions::onOpenReorder)
                 }
             }
-            ToolbarAction(icon = Icons.Rounded.Settings, label = "Keyboard settings", onClick = actions::onOpenSettings)
             ToolbarAction(icon = Icons.Rounded.Keyboard, label = "Switch keyboard", onClick = actions::onSwitchKeyboard)
+            ToolbarAction(icon = Icons.Rounded.Settings, label = "Keyboard settings", onClick = actions::onOpenSettings)
         }
     }
 }

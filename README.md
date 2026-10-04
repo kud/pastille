@@ -36,6 +36,11 @@ Pastille must be enabled under Settings → System → Keyboards first. The gran
 - CI builds every push and pull request to `main` with `gradle --no-daemon assembleDebug testDebugUnitTest lintDebug`.
 - There is no Gradle wrapper checked in yet (no `gradlew`, no wrapper jar), so command-line builds need a local Gradle 8.10+ install.
 
+## Design notes
+
+- [Design spec](docs/design-spec.md): how the keyboard and app look and behave.
+- [Architecture](docs/architecture.md): schema, storage, image handling and the Quick Settings tile mechanics.
+
 ## Roadmap (out of v1)
 
 Typing keys, cloud sync and espanso import are deliberately out of v1. Everything stays local until sync is designed properly.

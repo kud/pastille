@@ -1,0 +1,7 @@
+First stable release.
+- Paste your own snippets and recent images from a keyboard, then hop back to your usual one.
+- Folders, with drag to reorder right in the keyboard.
+- Choose which image folders to show.
+- Share text or images from any app to save them.
+- Gboard-style themes and panel heights.
+- No internet permission: everything stays on your phone.

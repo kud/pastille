@@ -54,6 +54,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.TextField
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material.icons.rounded.CreateNewFolder
@@ -90,8 +94,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SearchBar
-import androidx.compose.material3.SearchBarDefaults
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -614,45 +616,22 @@ fun SnippetListScreen(
             LaunchedEffect(Unit) {
                 focusRequester.requestFocus()
             }
-            SearchBar(
-                inputField = {
-                    SearchBarDefaults.InputField(
-                        query = query,
-                        onQueryChange = { query = it },
-                        onSearch = {},
-                        expanded = true,
-                        onExpandedChange = {
-                            if (!it) {
-                                searching = false
-                                query = ""
-                            }
-                        },
-                        placeholder = { Text("Search snippets") },
-                        leadingIcon = {
-                            IconButton(
-                                onClick = {
-                                    searching = false
-                                    query = ""
-                                },
-                            ) {
-                                Icon(
-                                    Icons.AutoMirrored.Rounded.ArrowBack,
-                                    contentDescription = "Close search",
-                                )
-                            }
-                        },
-                        modifier = Modifier.focusRequester(focusRequester),
-                    )
-                },
-                expanded = true,
-                onExpandedChange = {
-                    if (!it) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.surface)
+                    .windowInsetsPadding(WindowInsets.safeDrawing),
+            ) {
+                SearchField(
+                    query = query,
+                    onQueryChange = { query = it },
+                    onClose = {
                         searching = false
                         query = ""
-                    }
-                },
-                modifier = Modifier.fillMaxSize(),
-            ) {
+                    },
+                    modifier = Modifier.focusRequester(focusRequester),
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
                     itemsIndexed(visible, key = { _, snippet -> snippet.id }) { index, snippet ->
                         if (index > 0) {
@@ -669,7 +648,6 @@ fun SnippetListScreen(
                             onDelete = { deleteSnippet(snippet) },
                             folders = orderedFolders,
                             onMove = { moveSnippet(snippet, it) },
-                            containerColor = SearchBarDefaults.colors().containerColor,
                         )
                     }
                     if (query.isNotBlank() && visible.isEmpty()) {
@@ -1303,6 +1281,41 @@ private fun ReorderRow(snippet: SnippetRecord, handle: Modifier) {
                 contentDescription = "Drag to reorder",
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+    }
+}
+
+@Composable
+private fun SearchField(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(onClick = onClose) {
+            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Close search")
+        }
+        TextField(
+            value = query,
+            onValueChange = onQueryChange,
+            placeholder = { Text("Search snippets") },
+            singleLine = true,
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = Color.Transparent,
+                unfocusedContainerColor = Color.Transparent,
+                focusedIndicatorColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent,
+            ),
+            modifier = modifier.weight(1f),
+        )
+        if (query.isNotEmpty()) {
+            IconButton(onClick = { onQueryChange("") }) {
+                Icon(Icons.Rounded.Close, contentDescription = "Clear search")
+            }
         }
     }
 }

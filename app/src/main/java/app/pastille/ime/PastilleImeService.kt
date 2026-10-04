@@ -535,7 +535,7 @@ class PastilleImeService :
         val categoriesFlow = remember { repository.observeCategories() }
         val categories by categoriesFlow.collectAsState(initial = emptyList())
         val settingsFlow = remember { settings.changes() }
-        val settingsTick by settingsFlow.collectAsState(initial = Unit)
+        val settingsTick by settingsFlow.collectAsState(initial = 0)
         var imageSources by remember { mutableStateOf(emptyList<ImageSource>()) }
         var images by remember { mutableStateOf(emptyList<ImageItem>()) }
         var hasImagePermission by remember { mutableStateOf(ImageSourceReader.hasPermission(context)) }

@@ -74,10 +74,11 @@ class PastilleSettings private constructor(private val prefs: SharedPreferences)
         }.apply()
 
     // Emits once on collection and again on every change, so the keyboard redraws when Settings changes.
-    fun changes(): Flow<Unit> = callbackFlow {
-        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> trySend(Unit) }
+    fun changes(): Flow<Int> = callbackFlow {
+        var version = 0
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> trySend(++version) }
         prefs.registerOnSharedPreferenceChangeListener(listener)
-        trySend(Unit)
+        trySend(version)
         awaitClose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
     }.conflate()
 

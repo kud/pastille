@@ -21,7 +21,24 @@ jobs:
           distribution: temurin
           java-version: "21"
       - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew --no-daemon assembleDebug testDebugUnitTest lintDebug
+      - name: Write the release keystore
+        if: github.event_name == 'push'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.PASTILLE_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/pastille-release.jks"
+            echo "PASTILLE_KEYSTORE_PATH=$RUNNER_TEMP/pastille-release.jks" >> "$GITHUB_ENV"
+          fi
+      - run: ./gradlew --no-daemon assembleDebug assembleRelease testDebugUnitTest lintDebug
+        env:
+          PASTILLE_KEYSTORE_PASSWORD: ${{ secrets.PASTILLE_KEYSTORE_PASSWORD }}
+      - uses: actions/upload-artifact@v4
+        if: env.PASTILLE_KEYSTORE_PATH != ''
+        with:
+          name: pastille-release-apk
+          path: app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
           name: pastille-debug-apk

@@ -20,9 +20,23 @@ android {
         versionName = "0.1.0-dev.9"
     }
 
+    // CI writes the keystore from the PASTILLE_KEYSTORE_* secrets; without them the release build is left unsigned.
+    val releaseKeystore = System.getenv("PASTILLE_KEYSTORE_PATH")?.let(::file)?.takeIf { it.exists() }
+    signingConfigs {
+        if (releaseKeystore != null) {
+            create("release") {
+                storeFile = releaseKeystore
+                storePassword = System.getenv("PASTILLE_KEYSTORE_PASSWORD")
+                keyAlias = "pastille"
+                keyPassword = System.getenv("PASTILLE_KEYSTORE_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.findByName("release")
         }
     }
 

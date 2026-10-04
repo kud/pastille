@@ -346,6 +346,11 @@ private fun Toolbar(state: KeyboardUiState, actions: KeyboardActions, title: Str
         ) {
             Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
                 if (state.mode == KeyboardMode.Snippets) {
+                    ToolbarAction(icon = Icons.Rounded.SwapVert, label = "Reorder snippets", onClick = actions::onOpenReorder)
+                }
+            }
+            Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                if (state.mode == KeyboardMode.Snippets) {
                     ToolbarAction(icon = Icons.Rounded.Add, label = "New snippet", onClick = actions::onOpenAdd)
                 }
             }
@@ -1262,12 +1267,6 @@ private fun ActionsContent(
                 icon = Icons.Rounded.Edit,
                 label = "Edit in app",
                 onClick = { actions.onEditSnippet(snippet) },
-                modifier = Modifier.weight(1f),
-            )
-            PanelActionButton(
-                icon = Icons.Rounded.SwapVert,
-                label = "Reorder",
-                onClick = actions::onOpenReorder,
                 modifier = Modifier.weight(1f),
             )
             PanelActionButton(

@@ -8,7 +8,7 @@
 
 [![CI](https://github.com/kud/pastille/actions/workflows/ci.yml/badge.svg)](https://github.com/kud/pastille/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/kud/pastille?include_prereleases)](https://github.com/kud/pastille/releases)
-[![Licence: MIT](https://img.shields.io/github/license/kud/pastille)](LICENSE)
+[![Licence: GPL-3.0](https://img.shields.io/github/license/kud/pastille)](LICENSE)
 ![Android 9+](https://img.shields.io/badge/Android-9%2B-3DDC84)
 ![Kotlin](https://img.shields.io/badge/Kotlin-Compose-7F52FF)
 
@@ -83,4 +83,4 @@ Or open the directory in Android Studio and run the `app` configuration on a dev
 
 ## Licence
 
-MIT, Copyright (c) 2026 Erwann Mest. See [LICENSE](LICENSE).
+Copyright (c) 2026 Erwann Mest. Released under the GNU General Public License v3.0 or later; see [LICENSE](LICENSE).

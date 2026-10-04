@@ -20,8 +20,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
@@ -61,6 +59,7 @@ import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -534,32 +533,70 @@ private fun BrowseContent(state: KeyboardUiState, actions: KeyboardActions) {
 @Composable
 private fun FolderContent(state: KeyboardUiState, actions: KeyboardActions) {
     val reduceMotion = LocalReduceMotion.current
-    val folderId = state.folderId?.takeIf { id -> state.categories.any { it.id == id } }
-    AnimatedContent(
-        targetState = folderId,
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.TopStart,
-        transitionSpec = {
-            val opening = targetState != null && initialState == null
-            val enterFade = fadeIn(
-                tween(PastilleMotion.ENTER_MS - PastilleMotion.FADE_IN_DELAY_MS, delayMillis = PastilleMotion.FADE_IN_DELAY_MS),
+    val offset = with(LocalDensity.current) { 32.dp.roundToPx() }
+    val folders = state.categories.sortedBy { it.position }
+    val folderId = state.folderId?.takeIf { id -> folders.any { it.id == id } }
+    val order = listOf<Long?>(null) + folders.map { it.id }
+    Column(modifier = Modifier.fillMaxSize()) {
+        if (folders.isNotEmpty()) {
+            FolderChipRow(
+                entries = listOf<Pair<Long?, String>>(null to "All") + folders.map { it.id to it.name },
+                selectedId = folderId,
+                onSelect = actions::onOpenFolder,
             )
-            val enterScale = if (opening) 0.92f else 1.04f
-            val exitScale = if (opening) 1.04f else 0.92f
-            val transform = if (reduceMotion) {
-                EnterTransition.None togetherWith ExitTransition.None
-            } else {
-                (scaleIn(tween(PastilleMotion.ENTER_MS, easing = PastilleMotion.EmphasizedDecelerate), initialScale = enterScale) + enterFade) togetherWith
+        }
+        AnimatedContent(
+            targetState = folderId,
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            contentAlignment = Alignment.TopStart,
+            transitionSpec = {
+                val dir = if (order.indexOf(targetState) >= order.indexOf(initialState)) 1 else -1
+                val transform = if (reduceMotion) {
+                    fadeIn(tween(PastilleMotion.EXIT_MS)) togetherWith fadeOut(tween(PastilleMotion.EXIT_MS))
+                } else {
                     (
-                        scaleOut(tween(PastilleMotion.EXIT_MS, easing = PastilleMotion.EmphasizedAccelerate), targetScale = exitScale) +
+                        slideInHorizontally(tween(PastilleMotion.ENTER_MS, easing = PastilleMotion.EmphasizedDecelerate)) { dir * offset } +
+                            fadeIn(tween(PastilleMotion.ENTER_MS - PastilleMotion.FADE_IN_DELAY_MS, delayMillis = PastilleMotion.FADE_IN_DELAY_MS))
+                        ) togetherWith (
+                        slideOutHorizontally(tween(PastilleMotion.EXIT_MS, easing = PastilleMotion.EmphasizedAccelerate)) { -dir * offset } +
                             fadeOut(tween(PastilleMotion.EXIT_MS))
                         )
-            }
-            noSizeChange(transform)
-        },
-        label = "folder",
-    ) { openFolderId ->
-        SnippetsPage(state = state, folderId = openFolderId, actions = actions)
+                }
+                noSizeChange(transform)
+            },
+            label = "folder",
+        ) { shownFolderId ->
+            SnippetsPage(state = state, folderId = shownFolderId, actions = actions)
+        }
+    }
+}
+
+// Snippet folders and image folders share one chip row, so both modes read the same way.
+@Composable
+private fun FolderChipRow(
+    entries: List<Pair<Long?, String>>,
+    selectedId: Long?,
+    onSelect: (Long?) -> Unit,
+) {
+    val rowState = rememberLazyListState()
+    LaunchedEffect(selectedId) {
+        val index = entries.indexOfFirst { it.first == selectedId }
+        if (index >= 0) rowState.animateScrollToItem(index)
+    }
+    LazyRow(
+        state = rowState,
+        modifier = Modifier.fillMaxWidth().height(48.dp),
+        contentPadding = PaddingValues(horizontal = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        items(entries, key = { it.first ?: Long.MIN_VALUE }) { (id, label) ->
+            FilterToggleChip(
+                label = label,
+                selected = id == selectedId,
+                onClick = { onSelect(id) },
+            )
+        }
     }
 }
 
@@ -567,8 +604,7 @@ private fun FolderContent(state: KeyboardUiState, actions: KeyboardActions) {
 private fun SnippetsPage(state: KeyboardUiState, folderId: Long?, actions: KeyboardActions) {
     val haptics = LocalHapticFeedback.current
     val folder = state.categories.find { it.id == folderId }
-    val folders = if (folder == null) state.categories.sortedBy { it.name.lowercase() } else emptyList()
-    val items = state.snippets.filter { it.categoryId == folder?.id }
+    val items = if (folder == null) state.snippets else state.snippets.filter { it.categoryId == folder.id }
     val gridState = rememberLazyGridState()
 
     LaunchedEffect(state.highlightedSnippetId, items) {
@@ -577,87 +613,46 @@ private fun SnippetsPage(state: KeyboardUiState, folderId: Long?, actions: Keybo
         if (index == -1) return@LaunchedEffect
         // Let the return-to-Browse transition settle before the flash.
         delay(PastilleMotion.ENTER_MS.toLong())
-        gridState.animateScrollToItem(folders.size + index)
+        gridState.animateScrollToItem(index)
         delay(650)
         actions.onHighlightShown()
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        if (folder != null) {
-            FolderBar(name = folder.name, count = items.size, onBack = { actions.onOpenFolder(null) })
-        }
-        when {
-            folder != null && items.isEmpty() -> EmptyState(
-                message = "Nothing in ${folder.name} yet",
-                button = "New snippet",
-                onClick = actions::onOpenAdd,
-            )
-            folder == null && folders.isEmpty() && items.isEmpty() -> EmptyState(
-                message = "No snippets yet",
-                button = "Add a snippet",
-                onClick = actions::onOpenAdd,
-            )
-            else -> BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(tileColumns(maxWidth.value.toInt())),
-                    state = gridState,
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    items(folders, key = { "folder-${it.id}" }) { category ->
-                        FolderTile(
-                            name = category.name,
-                            count = state.snippets.count { it.categoryId == category.id },
-                            onClick = { actions.onOpenFolder(category.id) },
-                        )
-                    }
-                    items(items, key = { it.id }) { snippet ->
-                        SnippetTile(
-                            snippet = snippet,
-                            highlighted = snippet.id == state.highlightedSnippetId,
-                            onTap = { actions.onSnippetTap(snippet) },
-                            onLongPress = {
-                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                actions.onSnippetLongPress(snippet)
-                            },
-                            actions = actions,
-                        )
-                    }
+    when {
+        items.isEmpty() && folder != null -> EmptyState(
+            message = "Nothing in ${folder.name} yet",
+            button = "New snippet",
+            onClick = actions::onOpenAdd,
+        )
+        items.isEmpty() -> EmptyState(
+            message = "No snippets yet",
+            button = "Add a snippet",
+            onClick = actions::onOpenAdd,
+        )
+        else -> BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(tileColumns(maxWidth.value.toInt())),
+                state = gridState,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(start = 6.dp, end = 6.dp, bottom = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                items(items, key = { it.id }) { snippet ->
+                    SnippetTile(
+                        snippet = snippet,
+                        highlighted = snippet.id == state.highlightedSnippetId,
+                        onTap = { actions.onSnippetTap(snippet) },
+                        onLongPress = {
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            actions.onSnippetLongPress(snippet)
+                        },
+                        actions = actions,
+                        modifier = Modifier.animateItem(),
+                    )
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun FolderBar(name: String, count: Int, onBack: () -> Unit) {
-    val palette = LocalKeyboardPalette.current
-    Row(
-        modifier = Modifier.fillMaxWidth().height(40.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        IconButton(onClick = onBack) {
-            Icon(
-                Icons.AutoMirrored.Outlined.ArrowBack,
-                contentDescription = "Back to all snippets",
-                tint = palette.icon,
-            )
-        }
-        Text(
-            text = name,
-            style = MaterialTheme.typography.titleSmall,
-            color = palette.label,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f, fill = false),
-        )
-        Text(
-            text = " · $count",
-            style = MaterialTheme.typography.labelMedium,
-            color = palette.icon,
-        )
     }
 }
 
@@ -784,53 +779,13 @@ private fun Tile(
 }
 
 @Composable
-private fun FolderTile(name: String, count: Int, onClick: () -> Unit) {
-    val palette = LocalKeyboardPalette.current
-    Tile(onClick = onClick, onLongClick = null) {
-        Row(
-            modifier = Modifier.fillMaxSize().padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                Icons.Outlined.Folder,
-                contentDescription = null,
-                tint = palette.label,
-                modifier = Modifier.size(24.dp),
-            )
-            Spacer(Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = name,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = palette.label,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = if (count == 1) "1 snippet" else "$count snippets",
-                    fontSize = 14.sp,
-                    color = palette.label.copy(alpha = 0.72f),
-                    maxLines = 1,
-                )
-            }
-            Icon(
-                Icons.AutoMirrored.Outlined.KeyboardArrowRight,
-                contentDescription = null,
-                tint = palette.label,
-                modifier = Modifier.size(24.dp),
-            )
-        }
-    }
-}
-
-@Composable
 private fun SnippetTile(
     snippet: SnippetRecord,
     highlighted: Boolean,
     onTap: () -> Unit,
     onLongPress: () -> Unit,
     actions: KeyboardActions,
+    modifier: Modifier = Modifier,
 ) {
     val palette = LocalKeyboardPalette.current
     val title = displayTitle(snippet.title, snippet.text).ifBlank { if (snippet.isImage) "Image" else "" }
@@ -839,7 +794,7 @@ private fun SnippetTile(
         onClick = onTap,
         onLongClick = onLongPress,
         highlighted = highlighted,
-        modifier = Modifier.semantics(mergeDescendants = true) {
+        modifier = modifier.semantics(mergeDescendants = true) {
             contentDescription = "Insert $title"
             customActions = listOf(
                 CustomAccessibilityAction(if (snippet.pinned) "Unpin" else "Pin") {
@@ -943,7 +898,13 @@ private fun ImagesContent(state: KeyboardUiState, actions: KeyboardActions) {
         )
         return
     }
-    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+    Column(modifier = Modifier.fillMaxSize()) {
+    FolderChipRow(
+        entries = sources.map { it.bucketId to it.name },
+        selectedId = state.sourceId,
+        onSelect = { id -> id?.let(actions::onSelectSource) },
+    )
+    BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxWidth()) {
         LazyVerticalGrid(
             columns = GridCells.Fixed(tileColumns(maxWidth.value.toInt())),
             modifier = Modifier.fillMaxSize(),
@@ -951,21 +912,6 @@ private fun ImagesContent(state: KeyboardUiState, actions: KeyboardActions) {
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            item(key = "sources", span = { GridItemSpan(maxLineSpan) }) {
-                LazyRow(
-                    modifier = Modifier.fillMaxWidth().height(48.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    items(sources, key = { it.bucketId }) { source ->
-                        FilterToggleChip(
-                            label = source.name,
-                            selected = source.bucketId == state.sourceId,
-                            onClick = { actions.onSelectSource(source.bucketId) },
-                        )
-                    }
-                }
-            }
             if (state.images.isEmpty()) {
                 item(key = "empty", span = { GridItemSpan(maxLineSpan) }) {
                     Text(
@@ -988,6 +934,7 @@ private fun ImagesContent(state: KeyboardUiState, actions: KeyboardActions) {
                 )
             }
         }
+    }
     }
 }
 

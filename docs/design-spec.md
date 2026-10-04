@@ -876,7 +876,7 @@ That confirms 2.625 px/dp and a 411dp-wide screen.
 
 **Setting (app → Settings, under "Keyboard style")**
 
-- [ ] **"Keyboard height":** a `SingleChoiceSegmentedButtonRow` (this is the app, so M3 is right here) with Compact / Gboard / Comfortable / Tall. Under it, a second row labelled "Landscape" with the same four options.
+- [ ] **"Keyboard height":** a `SingleChoiceSegmentedButtonRow` (this is the app, so M3 is right here) labelled "Portrait", with Compact / Standard / Roomy / Tall (one line each, no check icon; "Gboard" read as a brand rather than a height, and "Comfortable" wrapped). Under it, a second row labelled "Landscape" with the same four options. The stored keys stay `gboard` and `comfortable`.
 - [ ] **Preview:** the 11.7 preview gains a phone silhouette.
   - A rounded outline at the device's real aspect ratio, about 200dp tall.
   - The panel drawn at its true share of the screen, with the host area above it in `surfaceContainerHighest` and three placeholder text lines.
@@ -889,3 +889,137 @@ That confirms 2.625 px/dp and a 411dp-wide screen.
 A drag strip in an IME fights grid scrolling and the system's swipe-down-to-dismiss, and dragging lands on arbitrary heights the grids weren't designed for. Gboard resizes from a menu, not a drag. The four presets cover the range. If the owner later wants fine control, it becomes a long-press on the toolbar that enters a resize state snapping between presets, never a free drag.
 
 **First run:** the §11.9 Style picker doesn't ask about height. Comfortable is the default, and two questions on first open is one too many. Setup step 3 links to both settings.
+
+### 11.11 Clipboard-model tiles (overrides §10.5 buttons, §11.5 layout, §11.10 grids)
+
+The owner's model is now Gboard's clipboard panel: a fixed height, and a 2-column grid of **equal-size rounded tiles** for text and images alike. One tile geometry is used in every style (Gboard Dark, Gboard Light, Material You); only the colours change.
+
+**Tile geometry**
+
+- [ ] 2 columns in portrait (landscape per §11.10), `LazyVerticalGrid`, `contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp)`, 8dp gaps both ways.
+- [ ] Every tile is **88dp tall** and full column width (about 195dp on their 411dp phone): Gboard's text tile measured 86dp. Never content-sized. Equal tiles are the point.
+- [ ] `Surface(color = key, shape = RoundedCornerShape(10.dp))` (measured), no border, no elevation. Pressed state: `keyPressed`, 60ms, `indication = null` (§11.5 rule).
+
+**Text snippet tile**
+
+- [ ] 12dp padding, top-aligned `Column`:
+  - Title: 16sp `FontWeight.Medium`, `label`, `maxLines = 1`, ellipsis.
+  - 2dp gap.
+  - Content preview: 14sp, `label` at 72% alpha, `maxLines = 2`, ellipsis.
+- [ ] When the content equals the title (a short one-liner), hide the preview line and let the title take `maxLines = 3`.
+- [ ] Pinned: `Icons.Filled.PushPin` at 14dp in `accent`, top-end at an 8dp inset (`Box` + `Alignment.TopEnd`). Pad the title end by 18dp when pinned.
+- [ ] This keeps "the title is what you read" (§10.5) and adds Gboard's clipboard-style glimpse of the content. Tap inserts the content; long-press opens Actions (§7.2).
+
+**Folder tile** (Snippets mode, top level, folders first)
+
+- [ ] Same 88dp tile. A `Row`, vertically centred, 12dp padding:
+  - leading `Icons.Outlined.Folder` at 24dp in `label`
+  - 12dp gap
+  - a `Column(weight 1f)` with the name (16sp Medium, `maxLines = 2`) and the count ("6 snippets", 14sp at 72% alpha)
+  - trailing `Icons.AutoMirrored.Outlined.KeyboardArrowRight` at 24dp
+- [ ] This is Gboard's tools-menu tile layout at clipboard-tile size.
+
+**Image tile** (Images mode, and image snippets in Snippets mode)
+
+- [ ] The image fills the tile: `ContentScale.Crop`, **`Alignment.TopCenter`**, clipped to the same 10dp shape. The top of a screenshot is its legible part.
+- [ ] Placeholder and broken states as §5, on `key`.
+- [ ] **Images mode:** no label, like Gboard's clipboard images. `contentDescription` = file name or "Screenshot, 14:32".
+- [ ] **Image snippets in Snippets mode:** a bottom scrim (`Brush.verticalGradient(Transparent → Black 45%)`, 32dp tall) carrying the title at 14sp Medium, white, one line, 12dp start padding. This tells a saved image apart from the photos in Images mode.
+- [ ] Wide 195 × 88dp tiles crop screenshots hard. That's the cost of equal tiles. Long-press opens the §11.10 **Preview** for the full image.
+
+**Fixed height**
+
+- [ ] The grid always fills `contentHeight` (§11.10). With only two snippets the panel is still full height, with empty `tray` below the tiles. It never shrinks to its content. That's the owner's "always the same, like the max size".
+- [ ] Empty states centre in that same fixed area.
+
+**Visible counts at the default (Comfortable, 328dp content):** 6 tiles plus a peek at the top level, 6 inside a folder, and about 2¾ rows of images with the source chips showing (table in §11.10).
+
+### 11.12 Addendum: calm, neutral-first accents in the app, every API level (overrides §2 and §8.4 accent roles) — **Build B**
+
+The owner, twice: "a bit too neon" (Android 16, cyan FAB `#00C4FF` and links) and "really cool but too neon vibe" (Android 12, lilac focus outline `#D0BCFF`, purple FAB `#4F378B`, lilac links, Settings headers and switch). Two causes. On API 34+, `dynamic*ColorScheme` reads Android 16's vibrant role resources. On every level, M3's `primary` is drawn from the **accent1** palette, the most chromatic one. They don't want it in either case. *(History: the first draft of this section moved `primary` to `system_accent1_*`; Android 12 showed that wasn't calm enough.)*
+
+**The rule: neutral first, accent in small doses, and the accent comes from the low-chroma `accent2` palette.** It still follows the wallpaper, since accent2 is the wallpaper's own secondary palette, just quieter.
+
+**The fix lives in one place, `Theme.kt`.** Keep `dynamic*ColorScheme(context)` for surfaces, neutrals, secondary, tertiary and error. Then `.copy(...)` the primary family from `system_accent2_*`, on **every** API 31+ level, not only 34+. No per-component colour overrides. FAB, `TextButton`, focused `OutlinedTextField` outline and label, tab indicator, `Switch`, Settings section headers (`colorScheme.primary`), pin glyph and links all inherit the change.
+
+| Role | Dark | Light |
+|---|---|---|
+| `primary` (links, focus outline and label, headers, tab indicator, pin, switch track) | `system_accent2_200` (T80) | `system_accent2_600` (T40) |
+| `onPrimary` (switch thumb, filled-button text) | `system_accent2_800` (T20) | `system_accent2_0` (T100) |
+| `primaryContainer` (the "New snippet" FAB) | `system_accent2_700` (T30) | `system_accent2_100` (T90) |
+| `onPrimaryContainer` (FAB icon and label) | `system_accent2_100` (T90) | `system_accent2_900` (T10) |
+| `inversePrimary` | `system_accent2_600` | `system_accent2_200` |
+| `surfaceTint` | = `primary` above | = `primary` above |
+
+- [ ] Read them with `colorResource(android.R.color.system_accent2_*)` inside the `SDK_INT >= S` branch.
+- [ ] **Below Android 12** (static fallback), use the same idea with M3 baseline *secondary* values in place of the purple primaries:
+  - Dark: `primary #CCC2DC`, `onPrimary #332D41`, `primaryContainer #4A4458`, `onPrimaryContainer #E8DEF8`.
+  - Light: `primary #625B71`, `onPrimary #FFFFFF`, `primaryContainer #E8DEF8`, `onPrimaryContainer #1D192B`.
+- [ ] ⚠ **Check first:** `#D0BCFF` and `#4F378B` are *exactly* M3's static baseline dark `primary` and `primaryContainer`. A real purple wallpaper rarely lands on those values, so on their Android 12 phone the editor or the whole app is probably not getting dynamic colour (a screen outside `PastilleTheme`, or `dynamicColor = false` somewhere). Confirm that every activity, the editor and the share sheet are wrapped in `PastilleTheme`, or the fix won't reach them.
+- [ ] The FAB keeps its default colours (`primaryContainer`); don't set `containerColor`. In dark it becomes a muted slate tint of the wallpaper with pale text, a step above the surface.
+- [ ] The focused text field keeps the M3 2dp outline. The change from a 1dp `outline` to a 2dp pale `primary` (T80, low chroma) is still clearly visible, so focus stays obvious without the glow.
+- [ ] "Add your first snippet" (`FilledTonalButton`, `secondaryContainer`) is unchanged; it was already accent2.
+- [ ] Contrast: T90 on T30, T20 on T80 and T10 on T90 all clear 4.5:1 for labels; check once on device in both themes.
+
+**Keyboard consistency.** The keyboard doesn't change. In its Material You style (§11.9) it's built from accent1 at T10 and T20, which are near-neutral at those tones. Its only accent is the small T40 "active" circle, the same "accent in small doses" rule. The app and panel share the wallpaper's hue family and the same restraint; the app's accents are simply a shade quieter. The Gboard Dark and Light styles (§11.1–§11.2) are fixed palettes and are unaffected.
+
+### 11.13 Motion pass: one vocabulary for the app and the keyboard (extends §10.6) — **Build B, last in the queue**
+
+The owner: "We need effect between main root and opening a folder", then "nice and neat and subtle animations everywhere". As of `main` (c4d2715), the keyboard already zooms into folders (§10.6.2, `FolderContent`). The **app** cuts: `MainActivity` swaps screens with a bare `if / else` chain. This pass gives both surfaces one small vocabulary.
+
+**Principles**
+
+- **Every motion means something**, and the meaning is the same in the app and the keyboard:
+  - *sideways (X)*: a sibling or the next screen;
+  - *zoom (Z)*: into a folder;
+  - *rise (Y)*: something coming up over the view;
+  - *fade*: things appearing or leaving in place.
+- **Quick:** nothing runs longer than 220ms, and nothing bounces (no springs with `dampingRatio < 1`).
+- **Never in the way of pasting:** a tile's `onClick` commits the text at once, and no animation delays it, gates it or waits for one to finish. Taps during a transition are honoured, never queued or debounced (`AnimatedContent` retargets).
+
+**Tokens.** Move `PastilleMotion` from `ime/` to a shared `ui/motion/` package so the app uses the same object. Add the `Standard` easing and two durations; keep the rest as they are.
+
+```kotlin
+val EmphasizedDecelerate = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1f)  // entering
+val EmphasizedAccelerate = CubicBezierEasing(0.3f, 0f, 0.8f, 0.15f)  // leaving
+val Standard = CubicBezierEasing(0.2f, 0f, 0f, 1f)                   // in-place changes (new)
+const val PRESS_MS = 60     // press colour
+const val QUICK_MS = 90     // fade-outs (new name for the existing 90s)
+const val SHORT_MS = 150    // in-place state: colour, selection, item fade-in (new)
+const val EXIT_MS = 120
+const val ENTER_MS = 220
+const val FADE_IN_DELAY_MS = 60
+val AxisOffset = 32.dp      // X slides
+val Rise = 24.dp            // Y rises
+const val ZOOM_IN = 0.92f; const val ZOOM_OUT = 1.04f
+```
+
+Every spec below is made from these values; no literals elsewhere.
+
+**Where each one goes**
+
+| Place | Motion | Spec |
+|---|---|---|
+| **App screens**: list ↔ editor, list ↔ settings, folder ↔ editor | X | `AnimatedContent` keyed on a `Screen` sealed type (`List`, `Folder(id)`, `Settings`, `Editor(id?, categoryId?)`), each with a depth (List 0, Folder/Settings 1, Editor 2). Deeper = forward: incoming `slideIn(+AxisOffset)` `ENTER_MS` `EmphasizedDecelerate`, plus `fadeIn(ENTER_MS − 60, delay 60)`; outgoing `slideOut(−AxisOffset)` `EXIT_MS` `EmphasizedAccelerate`, plus `fadeOut(EXIT_MS)`. Shallower = mirrored. The same shape as §10.6.1. `SizeTransform(clip = false)`, no size animation. |
+| **App folder** open / close | Z | List ↔ `Folder(id)` overrides the X rule with the §10.6.2 zoom: open `scaleIn(ZOOM_IN)` + fade, and the list `scaleOut(ZOOM_OUT)` + fade; close mirrored. `transformOrigin` = the tapped `FolderRow`'s centre, from `onGloballyPositioned`, on open; `Center` on close. |
+| **Keyboard folder** open / close | Z | Already built (§10.6.2). Verify it still plays with the §11.11 tiles. If it cuts, the tile grid is being rendered outside `FolderContent`'s `AnimatedContent`. Add the same tapped-tile `transformOrigin`. **No container transform** (the tile literally growing into the view): at keyboard scale it's heavy and fussy, and zooming from the tile gives the same "I went into that" for free. |
+| **Back gesture** (app and keyboard) | — | Plays the backward version of whichever transition brought you there. Predictive back is out of scope. |
+| **Snippets ↔ Images** (keyboard) | X | §10.6.1, unchanged. The selected-pill background crossfade (§11.4) moves from 120ms to `SHORT_MS` with `Standard`. |
+| **Keyboard Add / Actions states**, status strip | Y | §10.6.3, unchanged. |
+| **List items**: add, delete, undo, reorder (app `LazyColumn`, keyboard grid) | fade + placement | `Modifier.animateItem(fadeInSpec = tween(SHORT_MS, easing = Standard), placementSpec = tween(ENTER_MS, easing = Standard), fadeOutSpec = tween(QUICK_MS))` on every item with a stable key. Undo brings the item back with the same fade-in while its neighbours part. No slide-in from an edge. |
+| **Swipe actions** (where `SwipeToDismissBox` exists) | colour | The background behind the row goes from `surfaceContainerHigh` to the action colour when the threshold is crossed (`animateColorAsState`, `SHORT_MS`, `Standard`). The icon scales 0.85 → 1 on the same trigger, with `HapticFeedbackConstants.GESTURE_THRESHOLD_ACTIVATE` (API 30+, else `CONTEXT_CLICK`). Below the threshold, it settles back with the component's default. On commit, the row leaves through `animateItem`'s fade-out. |
+| **Press feedback**, keyboard tiles | colour only | `key` → `keyPressed`, `tween(PRESS_MS)`, no ripple (§11.5). **Remove the `keyCorner` spring** in `KeyboardPanel`'s key composable (`animateDpAsState`, `dampingRatio = 0.6f`). That's the Expressive corner morph §11.9 dropped, and it bounces. The shape is fixed. |
+| **Press feedback**, app rows and buttons | ripple | Material's default ripple. Nothing added. |
+| **Long-press menu** (app) | — | `DropdownMenu`'s own scale-and-fade from its anchor, as shipped. A `LONG_PRESS` haptic at press time. |
+| **Long-press** (keyboard) | Y | A `LONG_PRESS` haptic at press time, then the Actions state rises (§10.6.3). |
+| **FAB** | — | `ExtendedFloatingActionButton`'s built-in expand/collapse on scroll. It travels with its screen in screen transitions and never animates on its own. |
+| **Settings switches, segmented buttons, radio rows** | — | Material defaults, untouched; they're already quiet. |
+| **Style picker tiles** (keyboard §11.9, app §11.7) | colour + check | Border `animateColorAsState(SHORT_MS, Standard)`. The check badge uses `scaleIn(0.6f) + fadeIn`, `SHORT_MS`, `Standard`, and fades out over `QUICK_MS`. Palette crossfade 150ms, as specced. |
+| **Empty states** (app list, folder, keyboard) | fade | The empty-state block uses `fadeIn(ENTER_MS − 60, delay 60)` when it appears and `fadeOut(QUICK_MS)` when the first item arrives. No illustration motion. |
+| **Post-save highlight** | colour | §7.1 / §11.5, unchanged (600ms flash once the transition settles). It's the one deliberately longer motion, because it's a "here it is" cue rather than a transition. |
+
+**Reduced motion: fades only.** This amends §10.6, where reduced motion meant no transitions at all.
+
+- [ ] Provide `LocalReduceMotion` in `MainActivity` as well as the IME, from the same `PastilleMotion.reduceMotion()`.
+- [ ] When it's true, every X, Z and Y transition above becomes `fadeIn(tween(SHORT_MS)) togetherWith fadeOut(tween(QUICK_MS))`, with no offset and no scale. `animateItem` keeps its fades and passes `placementSpec = null`. Swipe, press and selection colour changes stay: they're feedback, not movement. The check badge only fades.
+- [ ] With "Remove animations" on (animator scale 0), Compose's clock makes those fades instant anyway. That's correct; nothing extra to do, and no hand-multiplying of durations.

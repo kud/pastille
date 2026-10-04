@@ -1,12 +1,16 @@
-Pastille is a keyboard you switch to only when you want to paste something. Tap a saved snippet or one of your latest screenshots and it goes straight into the text field, then one key takes you back to your usual keyboard.
+Pastille is a keyboard you switch to only when you want to paste something. Tap a saved snippet or a recent image and it goes straight into the text field, then Pastille hands you back to your usual keyboard.
 
 <b>Features</b>
 <ul>
-<li>Your own snippets: create, edit, pin and search them in the app</li>
-<li>Your six most recent screenshots, inserted as images where the app accepts them, copied to the clipboard where it doesn't</li>
-<li>Save whatever is on the clipboard as a new snippet</li>
+<li>Your own snippets, written in the app or saved from the clipboard</li>
+<li>Folders for snippets, with an "All" view, and drag to reorder snippets and folders right in the keyboard</li>
+<li>Recent images from the folders you choose (Screenshots, Camera, Downloads…), inserted as images where the app accepts them and copied to the clipboard where it doesn't</li>
+<li>Share text or an image from any app to Pastille to keep it as a snippet</li>
+<li>Choose, separately for snippets and images, whether to return to your usual keyboard after inserting, and which keyboard that is</li>
+<li>Turn snippets or images off entirely if you only need one</li>
+<li>Gboard-style dark, light and Material You themes, with a choice of panel heights</li>
 <li>Back up and restore your snippets as a JSON file</li>
 </ul>
 
 <b>Private by design</b>
-Pastille has no internet permission. Your snippets and screenshots never leave your phone.
+Pastille has no internet permission. Your snippets and images never leave your phone.

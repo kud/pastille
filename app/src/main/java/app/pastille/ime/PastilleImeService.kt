@@ -8,7 +8,9 @@ import android.content.res.Configuration
 import android.inputmethodservice.InputMethodService
 import android.net.Uri
 import android.os.Build
+import android.view.KeyEvent
 import android.view.View
+import android.view.inputmethod.ExtractedTextRequest
 import android.view.inputmethod.InputMethodManager
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -43,11 +45,15 @@ import app.pastille.images.ImageStore
 import app.pastille.images.mimeTypeForFile
 import app.pastille.model.SnippetRecord
 import app.pastille.settings.PastilleSettings
+import app.pastille.share.MAX_TEXT_CHARS
+import app.pastille.share.autoTitle
 import app.pastille.ui.theme.PastilleTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -64,6 +70,8 @@ class PastilleImeService :
     private val viewModelStoreHolder = ViewModelStore()
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var refreshJob: Job? = null
 
     // Bumped each time the keyboard opens, so the screenshot row picks up new ones.
     private val openCount = mutableIntStateOf(0)
@@ -75,12 +83,20 @@ class PastilleImeService :
 
     private val settings by lazy { PastilleSettings.forContext(this) }
 
-    private val statusMessage = mutableStateOf<String?>(null)
-    private val clipboardHasText = mutableStateOf(false)
+    private val panelState = mutableStateOf<PanelState>(PanelState.Browse)
+    private val addSources = mutableStateOf<AddSources?>(null)
+    private val strip = mutableStateOf<StatusStrip?>(null)
+    private val highlightedSnippetId = mutableStateOf<Long?>(null)
+    private var hasSelection = false
 
     private val clipChangedListener =
         ClipboardManager.OnPrimaryClipChangedListener {
-            clipboardHasText.value = readClipboardText() != null
+            if (panelState.value == PanelState.Add) {
+                val current = addSources.value
+                if (current != null) {
+                    addSources.value = current.copy(clip = readClipboard())
+                }
+            }
         }
 
     override val lifecycle: Lifecycle get() = lifecycleRegistry
@@ -126,7 +142,43 @@ class PastilleImeService :
     override fun onStartInputView(info: android.view.inputmethod.EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
         openCount.intValue++
+        if (!restarting) {
+            panelState.value = PanelState.Browse
+        }
+        hasSelection = info != null &&
+            info.initialSelStart >= 0 &&
+            info.initialSelEnd >= 0 &&
+            info.initialSelStart != info.initialSelEnd
         moveLifecycleTo(Lifecycle.State.RESUMED)
+    }
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_BACK && isInputViewShown && panelState.value != PanelState.Browse) {
+            panelState.value = PanelState.Browse
+            return true
+        }
+        return super.onKeyDown(keyCode, event)
+    }
+
+    override fun onUpdateSelection(
+        oldSelStart: Int,
+        oldSelEnd: Int,
+        newSelStart: Int,
+        newSelEnd: Int,
+        candidatesStart: Int,
+        candidatesEnd: Int,
+    ) {
+        super.onUpdateSelection(oldSelStart, oldSelEnd, newSelStart, newSelEnd, candidatesStart, candidatesEnd)
+        hasSelection = newSelStart != newSelEnd
+        if (panelState.value == PanelState.Add) {
+            refreshJob?.cancel()
+            refreshJob = mainScope.launch {
+                delay(300)
+                if (panelState.value == PanelState.Add) {
+                    addSources.value = AddSources(readHostText(), readClipboard())
+                }
+            }
+        }
     }
 
     override fun onFinishInputView(finishingInput: Boolean) {
@@ -148,6 +200,8 @@ class PastilleImeService :
 
     override fun onDestroy() {
         destroyed = true
+        refreshJob?.cancel()
+        mainScope.cancel()
         getSystemService(ClipboardManager::class.java)?.removePrimaryClipChangedListener(clipChangedListener)
         moveLifecycleTo(Lifecycle.State.DESTROYED)
         viewModelStoreHolder.clear()
@@ -155,15 +209,160 @@ class PastilleImeService :
         super.onDestroy()
     }
 
-    private fun readClipboardText(): String? {
+    private fun showStrip(message: String, actionLabel: String? = null, onAction: (() -> Unit)? = null) {
+        strip.value = StatusStrip(message = message, actionLabel = actionLabel, onAction = onAction)
+    }
+
+    private fun readHostText(): HostRead {
         return try {
-            val clipboard = getSystemService(ClipboardManager::class.java) ?: return null
-            val clip = clipboard.primaryClip ?: return null
-            (0 until clip.itemCount)
+            val info = currentInputEditorInfo ?: return HostRead.Unavailable
+            val ic = currentInputConnection ?: return HostRead.Unavailable
+            if (isSensitiveField(info.inputType, info.imeOptions)) return HostRead.Sensitive
+            if (hasSelection) {
+                val selected = ic.getSelectedText(0)?.toString()
+                if (!selected.isNullOrBlank()) return HostRead.Text(selected, fromSelection = true)
+            }
+            val extracted = ic.getExtractedText(
+                ExtractedTextRequest().apply { hintMaxChars = MAX_TEXT_CHARS },
+                0,
+            )?.text?.toString()
+            if (extracted != null) {
+                return if (extracted.isBlank()) HostRead.Empty else HostRead.Text(extracted, fromSelection = false)
+            }
+            val surrounding = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                ic.getSurroundingText(10_000, 10_000, 0)?.text?.toString()
+            } else {
+                val before = ic.getTextBeforeCursor(10_000, 0)?.toString()
+                val after = ic.getTextAfterCursor(10_000, 0)?.toString()
+                if (before == null && after == null) null else (before ?: "") + (after ?: "")
+            }
+            if (surrounding == null) {
+                HostRead.Unavailable
+            } else if (surrounding.isBlank()) {
+                HostRead.Empty
+            } else {
+                HostRead.Text(surrounding, fromSelection = false)
+            }
+        } catch (_: Exception) {
+            HostRead.Unavailable
+        }
+    }
+
+    private fun readClipboard(): ClipRead {
+        return try {
+            val clipboard = getSystemService(ClipboardManager::class.java) ?: return ClipRead.Empty
+            val clip = clipboard.primaryClip ?: return ClipRead.Empty
+            val text = (0 until clip.itemCount)
                 .mapNotNull { clip.getItemAt(it)?.coerceToText(this)?.toString() }
                 .firstOrNull { it.isNotBlank() }
+                ?: return ClipRead.Empty
+            val sensitive = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                clip.description?.extras?.getBoolean(ClipDescription.EXTRA_IS_SENSITIVE) == true
+            } else {
+                false
+            }
+            ClipRead.Text(text, sensitive)
         } catch (_: Exception) {
-            null
+            ClipRead.Empty
+        }
+    }
+
+    private fun openAdd() {
+        refreshJob?.cancel()
+        panelState.value = PanelState.Add
+        addSources.value = AddSources(readHostText(), readClipboard())
+    }
+
+    private fun saveFrom(source: AddSource, categoryId: Long?) {
+        val raw = when (source) {
+            AddSource.Field -> (readHostText() as? HostRead.Text)?.text
+            AddSource.Clipboard -> (readClipboard() as? ClipRead.Text)?.text
+        }?.take(MAX_TEXT_CHARS)
+        if (raw.isNullOrBlank()) {
+            showStrip("Nothing to save")
+            return
+        }
+        serviceScope.launch {
+            val repository = SnippetRepository.forContext(this@PastilleImeService)
+            val duplicate = repository.findTextDuplicate(raw)
+            if (duplicate != null) {
+                withContext(Dispatchers.Main) {
+                    if (destroyed) return@withContext
+                    panelState.value = PanelState.Browse
+                    showStrip(
+                        message = "Already saved as \"${displayTitle(duplicate.title, duplicate.text)}\"",
+                        actionLabel = "Show",
+                        onAction = { highlightedSnippetId.value = duplicate.id },
+                    )
+                }
+                return@launch
+            }
+            val title = autoTitle(raw)
+            val id = repository.upsert(SnippetRecord(title = title, text = raw, categoryId = categoryId))
+            withContext(Dispatchers.Main) {
+                if (destroyed) return@withContext
+                panelState.value = PanelState.Browse
+                showStrip(
+                    message = "Saved \"${displayTitle(title, raw)}\"",
+                    actionLabel = "Undo",
+                    onAction = {
+                        serviceScope.launch {
+                            SnippetRepository.forContext(this@PastilleImeService).delete(id)
+                            withContext(Dispatchers.Main) {
+                                if (destroyed) return@withContext
+                                showStrip("Removed")
+                            }
+                        }
+                    },
+                )
+                highlightedSnippetId.value = id
+            }
+        }
+    }
+
+    private fun togglePin(snippet: SnippetRecord) {
+        serviceScope.launch {
+            SnippetRepository.forContext(this@PastilleImeService).setPinned(listOf(snippet.id), !snippet.pinned)
+            withContext(Dispatchers.Main) {
+                if (destroyed) return@withContext
+                showStrip(if (snippet.pinned) "Unpinned" else "Pinned")
+            }
+        }
+    }
+
+    private fun editSnippet(snippet: SnippetRecord) {
+        openSnippetInEditor(snippet)
+        panelState.value = PanelState.Browse
+    }
+
+    private fun deleteSnippet(snippet: SnippetRecord) {
+        serviceScope.launch {
+            SnippetRepository.forContext(this@PastilleImeService).delete(snippet.id)
+            withContext(Dispatchers.Main) {
+                if (destroyed) return@withContext
+                panelState.value = PanelState.Browse
+                showStrip(
+                    message = "Deleted \"${displayTitle(snippet.title, snippet.text)}\"",
+                    actionLabel = "Undo",
+                    onAction = {
+                        serviceScope.launch {
+                            SnippetRepository.forContext(this@PastilleImeService).restore(snippet)
+                        }
+                    },
+                )
+            }
+        }
+    }
+
+    private fun moveSnippet(id: Long, categoryId: Long?) {
+        serviceScope.launch {
+            val repository = SnippetRepository.forContext(this@PastilleImeService)
+            repository.setCategory(listOf(id), categoryId)
+            val name = categoryId?.let { repository.getCategories().find { it.id == categoryId }?.name }
+            withContext(Dispatchers.Main) {
+                if (destroyed) return@withContext
+                showStrip(if (name != null) "Moved to $name" else "Moved to All")
+            }
         }
     }
 
@@ -188,7 +387,6 @@ class PastilleImeService :
             }
             screenshots = items
             canReadScreenshots = ScreenshotReader.hasPermission(context)
-            clipboardHasText.value = readClipboardText() != null
         }
 
         LaunchedEffect(categories, selectedCategoryId) {
@@ -207,21 +405,36 @@ class PastilleImeService :
             openCount = openCount.intValue,
             screenshots = screenshots,
             hasScreenshotPermission = canReadScreenshots,
-            clipboardHasText = clipboardHasText.value,
-            statusMessage = statusMessage.value,
-            onStatusShown = { statusMessage.value = null },
-            onNewSnippet = ::openNewSnippet,
+            panelState = panelState.value,
+            addSources = addSources.value,
+            strip = strip.value,
+            highlightedSnippetId = highlightedSnippetId.value,
+            onBack = { panelState.value = PanelState.Browse },
+            onOpenAdd = { openAdd() },
             onSelectCategory = {
                 selectedCategoryId = it
                 settings.keyboardCategoryId = it
             },
-            onSaveClipboard = ::saveClipboardAsSnippet,
             onOpenApp = ::openApp,
             onOpenPermissions = ::openApp,
             onSwitchKeyboard = ::switchKeyboard,
             onSnippetTap = ::pasteSnippet,
-            onSnippetLongPress = ::openSnippetInEditor,
+            onSnippetLongPress = { panelState.value = PanelState.Actions(it.id) },
             onScreenshotTap = ::shareScreenshot,
+            onAddFrom = ::saveFrom,
+            onWriteInApp = ::openNewSnippet,
+            onPinToggle = ::togglePin,
+            onEditSnippet = ::editSnippet,
+            onDeleteSnippet = ::deleteSnippet,
+            onMoveToCategory = ::moveSnippet,
+            onStripDismiss = { key ->
+                if (strip.value?.key == key) strip.value = null
+            },
+            onHighlightShown = { highlightedSnippetId.value = null },
+            onHighlightNotInFilter = {
+                selectedCategoryId = null
+                settings.keyboardCategoryId = null
+            },
         )
     }
 
@@ -238,18 +451,18 @@ class PastilleImeService :
     private fun insertImageSnippet(snippet: SnippetRecord) {
         val name = snippet.imageFile
         if (name == null) {
-            statusMessage.value = "That image is gone"
+            showStrip("That image is gone")
             return
         }
         val file = ImageStore.forContext(this).fileFor(name)
         if (!file.exists()) {
-            statusMessage.value = "That image is gone"
+            showStrip("That image is gone")
             return
         }
         val uri = try {
             FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
         } catch (_: Exception) {
-            statusMessage.value = "That image is gone"
+            showStrip("That image is gone")
             return
         }
         serviceScope.launch { SnippetRepository.forContext(this@PastilleImeService).recordUse(snippet.id) }
@@ -273,21 +486,6 @@ class PastilleImeService :
         startActivity(intent)
     }
 
-    private fun saveClipboardAsSnippet() {
-        val text = readClipboardText()
-        if (text == null) {
-            statusMessage.value = "Clipboard is empty"
-            return
-        }
-        serviceScope.launch {
-            SnippetRepository.forContext(this@PastilleImeService).saveClipboardText(text)
-            withContext(Dispatchers.Main) {
-                if (destroyed) return@withContext
-                statusMessage.value = "Saved from clipboard"
-            }
-        }
-    }
-
     private fun shareScreenshot(item: ScreenshotItem) {
         serviceScope.launch {
             val mimeType = try {
@@ -303,7 +501,7 @@ class PastilleImeService :
             withContext(Dispatchers.Main) {
                 if (destroyed) return@withContext
                 if (contentUri == null) {
-                    statusMessage.value = "Couldn't read that screenshot"
+                    showStrip("Couldn't read that screenshot")
                     return@withContext
                 }
                 insertImage(contentUri, mimeType, "Pastille screenshot")
@@ -342,7 +540,7 @@ class PastilleImeService :
         val clipboard = getSystemService(ClipboardManager::class.java) ?: return
         val clip = ClipData.newUri(contentResolver, label, contentUri)
         clipboard.setPrimaryClip(clip)
-        statusMessage.value = "Copied, long-press to paste"
+        showStrip("Copied, long-press to paste")
     }
 
     private fun copyToSharedCache(item: ScreenshotItem, mimeType: String): Uri {

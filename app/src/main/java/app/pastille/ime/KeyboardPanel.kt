@@ -74,6 +74,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import sh.calvin.reorderable.ReorderableItem
+import sh.calvin.reorderable.rememberReorderableLazyListState
 import sh.calvin.reorderable.rememberReorderableLazyGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.SwapVert
@@ -222,6 +223,7 @@ interface KeyboardActions {
     fun onOpenImageFolders() {}
     fun onSetModeEnabled(mode: KeyboardMode, enabled: Boolean) {}
     fun onOpenReorder() {}
+    fun onReorderFolders(newOrder: List<Long>) {}
     fun onReorderSnippets(shown: List<SnippetRecord>, newOrder: List<Long>) {}
     fun onSetShownSources(bucketIds: Set<Long>) {}
 }
@@ -561,6 +563,7 @@ private fun FolderContent(state: KeyboardUiState, actions: KeyboardActions) {
                     folders.map { ChipEntry(it.id, it.name, Icons.Rounded.Folder) },
                 selectedId = folderId,
                 onSelect = actions::onOpenFolder,
+                onReorder = actions::onReorderFolders,
             )
         }
         AnimatedContent(
@@ -595,8 +598,16 @@ private fun FolderChipRow(
     entries: List<ChipEntry>,
     selectedId: Long?,
     onSelect: (Long?) -> Unit,
+    onReorder: ((List<Long>) -> Unit)? = null,
 ) {
+    val haptics = LocalHapticFeedback.current
     val rowState = rememberLazyListState()
+    var order by remember(entries) { mutableStateOf(entries) }
+    val reorderState = rememberReorderableLazyListState(rowState) { from, to ->
+        val fromIndex = order.indexOfFirst { it.id == from.key }
+        val toIndex = order.indexOfFirst { it.id == to.key }
+        if (fromIndex > 0 && toIndex > 0) order = order.toMutableList().apply { add(toIndex, removeAt(fromIndex)) }
+    }
     LaunchedEffect(selectedId) {
         val index = entries.indexOfFirst { it.id == selectedId }
         if (index >= 0) rowState.animateScrollToItem(index)
@@ -608,13 +619,32 @@ private fun FolderChipRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        items(entries, key = { it.id ?: Long.MIN_VALUE }) { entry ->
-            FilterToggleChip(
-                label = entry.label,
-                icon = entry.icon,
-                selected = entry.id == selectedId,
-                onClick = { onSelect(entry.id) },
-            )
+        items(order, key = { it.id ?: Long.MIN_VALUE }) { entry ->
+            val chip = @Composable { modifier: Modifier ->
+                Box(modifier = modifier) {
+                    FilterToggleChip(
+                        label = entry.label,
+                        icon = entry.icon,
+                        selected = entry.id == selectedId,
+                        onClick = { onSelect(entry.id) },
+                    )
+                }
+            }
+            if (onReorder != null && entry.id != null) {
+                ReorderableItem(reorderState, key = entry.id) { dragging ->
+                    val scale by animateFloatAsState(if (dragging) 1.08f else 1f, label = "chipDrag")
+                    chip(
+                        Modifier
+                            .graphicsLayer { scaleX = scale; scaleY = scale }
+                            .longPressDraggableHandle(
+                                onDragStarted = { haptics.performHapticFeedback(HapticFeedbackType.LongPress) },
+                                onDragStopped = { onReorder(order.mapNotNull { it.id }) },
+                            ),
+                    )
+                }
+            } else {
+                chip(Modifier)
+            }
         }
     }
 }

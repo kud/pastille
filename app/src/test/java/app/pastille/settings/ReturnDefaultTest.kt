@@ -40,3 +40,13 @@ class ReturnKeyboardTargetTest {
         org.junit.Assert.assertNull(returnKeyboardTarget(PastilleSettings.PREVIOUS_KEYBOARD, others))
     }
 }
+
+class TypingKeyboardTest {
+
+    @org.junit.Test
+    fun `voice input is not a keyboard to switch back to`() {
+        org.junit.Assert.assertFalse(isTypingKeyboard(listOf("voice")))
+        org.junit.Assert.assertTrue(isTypingKeyboard(listOf("keyboard", "voice")))
+        org.junit.Assert.assertTrue(isTypingKeyboard(emptyList()))
+    }
+}

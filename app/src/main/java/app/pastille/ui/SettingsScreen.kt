@@ -60,6 +60,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.pastille.ime.ImageSourceReader
+import app.pastille.ime.otherTypingKeyboards
 import app.pastille.ime.KeyboardHeightPreview
 import app.pastille.ime.KeyboardStylePreview
 import app.pastille.settings.KeyboardStyle
@@ -427,11 +428,7 @@ private fun ModesRow(
 private fun ReturnKeyboardRow(settings: PastilleSettings) {
     val context = LocalContext.current
     val keyboards = remember {
-        val manager = context.getSystemService(InputMethodManager::class.java)
-        manager?.enabledInputMethodList
-            ?.filter { it.packageName != context.packageName }
-            ?.map { it.id to it.loadLabel(context.packageManager).toString() }
-            .orEmpty()
+        otherTypingKeyboards(context).map { it.id to it.loadLabel(context.packageManager).toString() }
     }
     var chosen by remember { mutableStateOf(settings.returnKeyboardId) }
     var open by remember { mutableStateOf(false) }

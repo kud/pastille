@@ -510,6 +510,10 @@ class PastilleImeService :
         }
     }
 
+    override fun onReorderFolders(newOrder: List<Long>) {
+        serviceScope.launch { SnippetRepository.forContext(this@PastilleImeService).setCategoryOrder(newOrder) }
+    }
+
     override fun onOpenReorder() {
         panelState.value = PanelState.Reorder
     }
@@ -744,11 +748,7 @@ class PastilleImeService :
 
     override fun onSwitchKeyboard() {
         if (destroyed) return
-        val others = getSystemService(InputMethodManager::class.java)
-            ?.enabledInputMethodList
-            ?.filter { it.packageName != packageName }
-            ?.map { it.id }
-            .orEmpty()
+        val others = otherTypingKeyboards(this).map { it.id }
         val target = returnKeyboardTarget(settings.returnKeyboardId, others)
         if (target != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             runCatching { switchInputMethod(target) }.onSuccess { return }

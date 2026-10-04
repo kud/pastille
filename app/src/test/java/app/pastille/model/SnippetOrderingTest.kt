@@ -44,4 +44,30 @@ class SnippetOrderingTest {
         assertEquals(mapOf(2L to 0, 1L to 1), reassignPositions(shown, listOf(2, 1)))
     }
 
+    @Test
+    fun aSecondDragBeforeTheListRefreshesUsesStoredPositions() {
+        // The screen still shows A=0, B=1, C=2, but the first drag already stored B=0, A=1.
+        val shown = listOf(
+            SnippetRecord(id = 1, text = "a", position = 0),
+            SnippetRecord(id = 2, text = "b", position = 1),
+            SnippetRecord(id = 3, text = "c", position = 2),
+        )
+        val stored = mapOf(1L to 1, 2L to 0, 3L to 2)
+
+        val writes = positionWrites(shown, stored, listOf(3, 2, 1))
+
+        val result = stored + writes
+        assertEquals(listOf(3L, 2L, 1L), result.entries.sortedBy { it.value }.map { it.key })
+        assertEquals(3, result.values.toSet().size)
+    }
+
+    @Test
+    fun unchangedPositionsAreNotRewritten() {
+        val shown = listOf(
+            SnippetRecord(id = 1, text = "a", position = 0),
+            SnippetRecord(id = 2, text = "b", position = 1),
+        )
+        assertEquals(emptyMap<Long, Int>(), positionWrites(shown, mapOf(1L to 0, 2L to 1), listOf(1, 2)))
+    }
+
 }

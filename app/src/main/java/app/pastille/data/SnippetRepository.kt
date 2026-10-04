@@ -8,7 +8,7 @@ import app.pastille.model.SnippetRecord
 import app.pastille.model.moveCategory as reorderCategories
 import app.pastille.model.sortSnippets
 import app.pastille.model.orderCategories
-import app.pastille.model.reassignPositions
+import app.pastille.model.positionWrites
 import app.pastille.model.uniqueTitle
 import app.pastille.share.autoTitle
 import kotlinx.coroutines.flow.Flow
@@ -53,10 +53,9 @@ class SnippetRepository private constructor(
 
     suspend fun setSnippetOrder(shown: List<SnippetRecord>, newOrder: List<Long>) {
         db.withTransaction {
-            val positions = reassignPositions(shown, newOrder)
-            shown.forEach { record ->
-                val position = positions[record.id] ?: return@forEach
-                if (position != record.position) dao.updatePosition(record.id, position)
+            val stored = dao.getByIds(shown.map { it.id }).associate { it.id to it.position }
+            positionWrites(shown, stored, newOrder).forEach { (id, position) ->
+                dao.updatePosition(id, position)
             }
         }
     }

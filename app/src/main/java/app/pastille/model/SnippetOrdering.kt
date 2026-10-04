@@ -18,3 +18,10 @@ fun reassignPositions(shown: List<SnippetRecord>, newOrder: List<Long>): Map<Lon
     return ordered.zip(slots).associate { (record, slot) -> record.id to slot }
 }
 
+// The list on screen can lag behind the database after a quick second drag, so slots and the
+// "already there" check come from the positions stored now, never from the shown records.
+fun positionWrites(shown: List<SnippetRecord>, stored: Map<Long, Int>, newOrder: List<Long>): Map<Long, Int> {
+    val fresh = shown.mapNotNull { record -> stored[record.id]?.let { record.copy(position = it) } }
+    return reassignPositions(fresh, newOrder).filter { (id, position) -> stored[id] != position }
+}
+

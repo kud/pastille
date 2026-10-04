@@ -56,6 +56,9 @@ interface SnippetDao {
     @Query("UPDATE snippets SET position = :position WHERE id = :id")
     suspend fun updatePosition(id: Long, position: Int)
 
+    @Query("SELECT * FROM snippets WHERE id IN (:ids)")
+    suspend fun getByIds(ids: List<Long>): List<SnippetEntity>
+
     @Query("SELECT MIN(position) FROM snippets")
     suspend fun minPosition(): Int?
 }

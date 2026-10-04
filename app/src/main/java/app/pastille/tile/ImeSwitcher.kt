@@ -8,7 +8,8 @@ import app.pastille.settings.PastilleSettings
 
 object ImeSwitcher {
 
-    const val PASTILLE_IME_ID = "app.pastille/.ime.PastilleImeService"
+    // The application id and the code package differ, so the class name is written in full.
+    const val PASTILLE_IME_ID = "app.beansontoast.pastille/app.pastille.ime.PastilleImeService"
 
     fun hasWriteSecureSettings(context: Context): Boolean =
         context.checkSelfPermission(Manifest.permission.WRITE_SECURE_SETTINGS) ==

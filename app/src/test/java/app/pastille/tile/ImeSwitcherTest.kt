@@ -8,7 +8,7 @@ class ImeSwitcherTest {
 
     @Test
     fun parseStripsSubtypes() {
-        val raw = "com.example/.Ime;1;2:app.pastille/.ime.PastilleImeService;0:com.other/.Ime"
+        val raw = "com.example/.Ime;1;2:app.beansontoast.pastille/app.pastille.ime.PastilleImeService;0:com.other/.Ime"
         assertEquals(
             listOf("com.example/.Ime", ImeSwitcher.PASTILLE_IME_ID, "com.other/.Ime"),
             ImeSwitcher.parseEnabledIds(raw),

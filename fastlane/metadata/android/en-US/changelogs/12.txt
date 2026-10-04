@@ -1,0 +1,1 @@
+The app id is now app.beansontoast.pastille. If you installed an earlier build, export a backup first, uninstall it, install this one and import the backup.

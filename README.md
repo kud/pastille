@@ -50,13 +50,13 @@ Pastille needs Android 9 (API 28) or later.
 The Pastille Quick Settings tile opens the keyboard picker. To make it switch straight to Pastille and back, grant one permission over adb, once:
 
 ```sh
-adb shell pm grant app.pastille android.permission.WRITE_SECURE_SETTINGS
+adb shell pm grant app.beansontoast.pastille android.permission.WRITE_SECURE_SETTINGS
 ```
 
 Pastille must be enabled under Settings → System → Keyboards first. The grant survives updates and is removed when you uninstall. On Xiaomi/HyperOS, also enable "USB debugging (Security settings)" in Developer options, or `pm grant` fails. To revoke it:
 
 ```sh
-adb shell pm revoke app.pastille android.permission.WRITE_SECURE_SETTINGS
+adb shell pm revoke app.beansontoast.pastille android.permission.WRITE_SECURE_SETTINGS
 ```
 
 ## Privacy

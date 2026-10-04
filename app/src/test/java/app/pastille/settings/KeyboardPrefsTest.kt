@@ -31,10 +31,9 @@ class KeyboardPrefsTest {
 
     @Test
     fun `grid columns follow the width`() {
-        assertEquals(2, snippetColumns(411))
-        assertEquals(4, snippetColumns(900))
-        assertEquals(3, imageColumns(411))
-        assertEquals(2, imageColumns(300))
-        assertEquals(6, imageColumns(900))
+        assertEquals(2, tileColumns(411))
+        assertEquals(2, tileColumns(300))
+        assertEquals(4, tileColumns(891))
+        assertEquals(4, tileColumns(1400))
     }
 }

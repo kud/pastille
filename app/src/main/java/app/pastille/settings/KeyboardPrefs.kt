@@ -51,6 +51,4 @@ fun panelHeightDp(preset: PanelHeight, landscape: Boolean, windowHeightDp: Int):
     return total.toInt().coerceAtLeast(TOOLBAR_HEIGHT_DP + 96)
 }
 
-fun snippetColumns(widthDp: Int): Int = (widthDp / 168).coerceIn(2, 4)
-
-fun imageColumns(widthDp: Int): Int = (widthDp / 112).coerceIn(2, 6)
+fun tileColumns(widthDp: Int): Int = (widthDp / 195).coerceIn(2, 4)

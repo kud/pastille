@@ -46,6 +46,7 @@ fun ImageThumbnail(
     modifier: Modifier = Modifier,
     targetPx: Int = 256,
     contentScale: ContentScale = ContentScale.Crop,
+    alignment: Alignment = Alignment.Center,
 ) {
     val store = ImageStore.forContext(LocalContext.current)
     var state by remember(fileName, targetPx) { mutableStateOf<StoredThumbState>(StoredThumbState.Loading) }
@@ -61,6 +62,7 @@ fun ImageThumbnail(
                     bitmap = current.bitmap.asImageBitmap(),
                     contentDescription = contentDescription,
                     contentScale = contentScale,
+                    alignment = alignment,
                     modifier = Modifier.fillMaxSize(),
                 )
                 is StoredThumbState.Failed -> ThumbnailPlaceholder(shimmer = false) {

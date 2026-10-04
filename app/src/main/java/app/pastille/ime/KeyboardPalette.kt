@@ -2,18 +2,18 @@ package app.pastille.ime
 
 import android.content.Context
 import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.core.content.ContextCompat
 import app.pastille.settings.KeyboardStyle
 
 @Immutable
@@ -29,8 +29,6 @@ data class KeyboardPalette(
     val accent: Color,
     val onAccent: Color,
     val isLight: Boolean,
-    // M3 Expressive key shapes: only Material You on Android 16+.
-    val expressive: Boolean = false,
 )
 
 // Sampled from Gboard's Dark theme on a 1080×2340 screenshot.
@@ -63,23 +61,42 @@ val GboardLight = KeyboardPalette(
     isLight = true,
 )
 
-// Gboard's dynamic theme: tinted neutral tray, neutral keys, secondary function keys, primary Enter.
-fun gboardMaterialYou(scheme: ColorScheme, dark: Boolean, expressive: Boolean): KeyboardPalette {
-    val tray = if (dark) scheme.surfaceContainerLow else scheme.surfaceContainer
-    return KeyboardPalette(
-        strip = tray,
-        tray = tray,
-        key = if (dark) scheme.surfaceContainerHighest else scheme.surfaceContainerLowest,
-        keyPressed = if (dark) scheme.surfaceBright else scheme.surfaceContainerHigh,
-        stripButton = scheme.secondaryContainer,
-        label = scheme.onSurface,
-        labelSecondary = scheme.onSurfaceVariant,
-        icon = scheme.onSurfaceVariant,
-        accent = scheme.primary,
-        onAccent = scheme.onPrimary,
-        isLight = !dark,
-        expressive = expressive,
-    )
+// Gboard's dynamic theme draws everything from the wallpaper's tonal palettes, read straight from
+// the system so the panel matches Gboard on any phone.
+@RequiresApi(Build.VERSION_CODES.S)
+fun gboardDynamic(context: Context, dark: Boolean): KeyboardPalette {
+    fun tone(id: Int) = Color(ContextCompat.getColor(context, id))
+    return if (dark) {
+        val tray = tone(android.R.color.system_accent1_900)
+        KeyboardPalette(
+            strip = tray,
+            tray = tray,
+            key = tone(android.R.color.system_accent1_800),
+            keyPressed = tone(android.R.color.system_accent1_700),
+            stripButton = tone(android.R.color.system_accent2_200),
+            label = tone(android.R.color.system_accent1_100),
+            labelSecondary = tone(android.R.color.system_accent1_100).copy(alpha = 0.72f),
+            icon = tone(android.R.color.system_accent1_100),
+            accent = tone(android.R.color.system_accent1_600),
+            onAccent = tone(android.R.color.system_accent1_100),
+            isLight = false,
+        )
+    } else {
+        val tray = tone(android.R.color.system_accent1_50)
+        KeyboardPalette(
+            strip = tray,
+            tray = tray,
+            key = tone(android.R.color.system_accent1_100),
+            keyPressed = tone(android.R.color.system_accent1_200),
+            stripButton = tone(android.R.color.system_accent2_200),
+            label = tone(android.R.color.system_accent1_900),
+            labelSecondary = tone(android.R.color.system_accent1_900).copy(alpha = 0.72f),
+            icon = tone(android.R.color.system_accent1_900),
+            accent = tone(android.R.color.system_accent1_600),
+            onAccent = tone(android.R.color.system_accent1_0),
+            isLight = true,
+        )
+    }
 }
 
 fun materialYouAvailable(): Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
@@ -96,8 +113,7 @@ fun keyboardPalette(context: Context, style: KeyboardStyle, dark: Boolean): Keyb
         KeyboardStyle.GboardDark -> GboardDark
         KeyboardStyle.GboardLight -> GboardLight
         KeyboardStyle.MaterialYou -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val scheme = if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-            gboardMaterialYou(scheme, dark, expressive = Build.VERSION.SDK_INT >= 36)
+            gboardDynamic(context, dark)
         } else {
             if (dark) GboardDark else GboardLight
         }

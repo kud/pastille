@@ -11,14 +11,11 @@ import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.snap
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -41,6 +38,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -49,7 +47,6 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -78,6 +75,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.PushPin
@@ -122,6 +120,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
@@ -148,8 +147,7 @@ import app.pastille.model.SnippetRecord
 import app.pastille.settings.KeyboardMode
 import app.pastille.settings.KeyboardStyle
 import app.pastille.settings.TOOLBAR_HEIGHT_DP
-import app.pastille.settings.imageColumns
-import app.pastille.settings.snippetColumns
+import app.pastille.settings.tileColumns
 import app.pastille.share.isMeaningfulImageName
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -573,22 +571,22 @@ private fun SnippetsPage(state: KeyboardUiState, folderId: Long?, actions: Keybo
             )
             else -> BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 LazyVerticalGrid(
-                    columns = GridCells.Fixed(snippetColumns(maxWidth.value.toInt())),
+                    columns = GridCells.Fixed(tileColumns(maxWidth.value.toInt())),
                     state = gridState,
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     items(folders, key = { "folder-${it.id}" }) { category ->
-                        FolderKey(
+                        FolderTile(
                             name = category.name,
                             count = state.snippets.count { it.categoryId == category.id },
                             onClick = { actions.onOpenFolder(category.id) },
                         )
                     }
                     items(items, key = { it.id }) { snippet ->
-                        SnippetKey(
+                        SnippetTile(
                             snippet = snippet,
                             highlighted = snippet.id == state.highlightedSnippetId,
                             onTap = { actions.onSnippetTap(snippet) },
@@ -655,7 +653,7 @@ private fun EmptyState(message: String, button: String, onClick: () -> Unit) {
     }
 }
 
-// Gboard-style key: flat, no ripple, a colour change on press; Expressive palettes also morph the corners.
+// Gboard-style key: flat, no ripple, a colour change on press.
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun KeyButton(
@@ -680,12 +678,7 @@ private fun KeyButton(
         animationSpec = if (reduceMotion) snap() else tween(600),
         label = "keyFlash",
     )
-    val corner by animateDpAsState(
-        targetValue = if (pressed && !reduceMotion) 8.dp else 16.dp,
-        animationSpec = spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessMediumLow),
-        label = "keyCorner",
-    )
-    val shape = if (palette.expressive) RoundedCornerShape(corner) else RoundedCornerShape(50)
+    val shape = RoundedCornerShape(50)
     Row(
         modifier = modifier
             .height(44.dp)
@@ -718,25 +711,93 @@ private fun KeyLabel(text: String, modifier: Modifier = Modifier) {
     )
 }
 
+private val TileShape = RoundedCornerShape(10.dp)
+private val TileHeight = 88.dp
+
+// Gboard clipboard tile: one fixed size for text, folders and images; flat, a colour change on press.
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun FolderKey(name: String, count: Int, onClick: () -> Unit) {
+private fun Tile(
+    onClick: () -> Unit,
+    onLongClick: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+    highlighted: Boolean = false,
+    content: @Composable BoxScope.() -> Unit,
+) {
     val palette = LocalKeyboardPalette.current
-    KeyButton(onClick = onClick, onLongClick = null) {
-        Icon(
-            Icons.Outlined.Folder,
-            contentDescription = null,
-            tint = palette.icon,
-            modifier = Modifier.size(18.dp),
-        )
-        Spacer(Modifier.width(8.dp))
-        KeyLabel(text = name, modifier = Modifier.weight(1f, fill = false))
-        Spacer(Modifier.width(6.dp))
-        Text(text = count.toString(), fontSize = 12.sp, color = palette.labelSecondary, maxLines = 1)
+    val reduceMotion = LocalReduceMotion.current
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val color by animateColorAsState(
+        targetValue = if (pressed) palette.keyPressed else palette.key,
+        animationSpec = tween(60),
+        label = "tileColour",
+    )
+    val flash by animateFloatAsState(
+        targetValue = if (highlighted) 0.25f else 0f,
+        animationSpec = if (reduceMotion) snap() else tween(600),
+        label = "tileFlash",
+    )
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(TileHeight)
+            .clip(TileShape)
+            .background(color)
+            .background(palette.accent.copy(alpha = flash))
+            .combinedClickable(
+                interactionSource = interaction,
+                indication = null,
+                onLongClick = onLongClick,
+                onClick = onClick,
+            ),
+        content = content,
+    )
+}
+
+@Composable
+private fun FolderTile(name: String, count: Int, onClick: () -> Unit) {
+    val palette = LocalKeyboardPalette.current
+    Tile(onClick = onClick, onLongClick = null) {
+        Row(
+            modifier = Modifier.fillMaxSize().padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Outlined.Folder,
+                contentDescription = null,
+                tint = palette.label,
+                modifier = Modifier.size(24.dp),
+            )
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = name,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = palette.label,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = if (count == 1) "1 snippet" else "$count snippets",
+                    fontSize = 14.sp,
+                    color = palette.label.copy(alpha = 0.72f),
+                    maxLines = 1,
+                )
+            }
+            Icon(
+                Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                contentDescription = null,
+                tint = palette.label,
+                modifier = Modifier.size(24.dp),
+            )
+        }
     }
 }
 
 @Composable
-private fun SnippetKey(
+private fun SnippetTile(
     snippet: SnippetRecord,
     highlighted: Boolean,
     onTap: () -> Unit,
@@ -745,7 +806,8 @@ private fun SnippetKey(
 ) {
     val palette = LocalKeyboardPalette.current
     val title = displayTitle(snippet.title, snippet.text).ifBlank { if (snippet.isImage) "Image" else "" }
-    KeyButton(
+    val imageFile = snippet.imageFile
+    Tile(
         onClick = onTap,
         onLongClick = onLongPress,
         highlighted = highlighted,
@@ -767,25 +829,69 @@ private fun SnippetKey(
             )
         },
     ) {
+        if (snippet.isImage && imageFile != null) {
+            ImageThumbnail(
+                fileName = imageFile,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                targetPx = 512,
+                contentScale = ContentScale.Crop,
+                alignment = Alignment.TopCenter,
+            )
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth()
+                    .height(32.dp)
+                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.45f)))),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                Text(
+                    text = title,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(start = 12.dp, end = if (snippet.pinned) 30.dp else 12.dp),
+                )
+            }
+        } else {
+            val preview = snippet.text.trim()
+            val previewShown = preview.isNotEmpty() && preview != title
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(start = 12.dp, top = 12.dp, bottom = 12.dp, end = if (snippet.pinned) 30.dp else 12.dp),
+            ) {
+                Text(
+                    text = title,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = palette.label,
+                    maxLines = if (previewShown) 1 else 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (previewShown) {
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = preview,
+                        fontSize = 14.sp,
+                        color = palette.label.copy(alpha = 0.72f),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
         if (snippet.pinned) {
             Icon(
                 Icons.Filled.PushPin,
                 contentDescription = null,
                 tint = palette.accent,
-                modifier = Modifier.size(14.dp),
+                modifier = Modifier.align(Alignment.TopEnd).padding(8.dp).size(14.dp),
             )
-            Spacer(Modifier.width(6.dp))
         }
-        if (snippet.isImage) {
-            Icon(
-                Icons.Outlined.Image,
-                contentDescription = null,
-                tint = palette.icon,
-                modifier = Modifier.size(18.dp),
-            )
-            Spacer(Modifier.width(6.dp))
-        }
-        KeyLabel(text = title, modifier = Modifier.weight(1f, fill = false))
     }
 }
 
@@ -804,11 +910,11 @@ private fun ImagesContent(state: KeyboardUiState, actions: KeyboardActions) {
     val sources = preferred + state.imageSources.filter { source -> preferred.none { it.bucketId == source.bucketId } }
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         LazyVerticalGrid(
-            columns = GridCells.Fixed(imageColumns(maxWidth.value.toInt())),
+            columns = GridCells.Fixed(tileColumns(maxWidth.value.toInt())),
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            contentPadding = PaddingValues(start = 6.dp, end = 6.dp, bottom = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             item(key = "sources", span = { GridItemSpan(maxLineSpan) }) {
                 LazyRow(
@@ -872,11 +978,12 @@ private fun rememberThumb(image: ImageItem, sizePx: Int): ThumbState {
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ImageTile(image: ImageItem, onTap: () -> Unit, onLongPress: () -> Unit) {
-    val state = rememberThumb(image, 256)
+    val state = rememberThumb(image, 512)
     Box(
         modifier = Modifier
-            .aspectRatio(1f)
-            .clip(RoundedCornerShape(8.dp))
+            .fillMaxWidth()
+            .height(TileHeight)
+            .clip(TileShape)
             .combinedClickable(
                 onClickLabel = "Insert image",
                 onLongClickLabel = "Preview",

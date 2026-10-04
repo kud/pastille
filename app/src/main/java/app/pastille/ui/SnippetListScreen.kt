@@ -1,6 +1,5 @@
 package app.pastille.ui
 
-import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -127,10 +126,8 @@ import app.pastille.crash.CrashLog
 import app.pastille.data.SnippetRepository
 import app.pastille.images.ImageStore
 import app.pastille.images.ImageThumbnail
-import app.pastille.ime.ImageSourceReader
 import app.pastille.model.CategoryRecord
 import app.pastille.model.SnippetRecord
-import app.pastille.settings.PastilleSettings
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -165,6 +162,7 @@ fun SnippetListScreen(
     val categories by remember { repository.observeCategories() }
         .collectAsStateWithLifecycle(initialValue = emptyList())
     var showCreateFolder by remember { mutableStateOf(false) }
+    var showTryIt by remember { mutableStateOf(false) }
 
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json"),
@@ -331,6 +329,10 @@ fun SnippetListScreen(
         query = ""
     }
 
+    if (showTryIt) {
+        TryItDialog(onDismiss = { showTryIt = false })
+    }
+
     if (showCreateFolder) {
         CategoryNameDialog(
             initialName = "",
@@ -387,6 +389,16 @@ fun SnippetListScreen(
                                 },
                             )
                             HorizontalDivider()
+                            DropdownMenuItem(
+                                text = { Text("Try the keyboard") },
+                                leadingIcon = {
+                                    Icon(Icons.Outlined.Edit, contentDescription = null)
+                                },
+                                onClick = {
+                                    showMenu = false
+                                    showTryIt = true
+                                },
+                            )
                             DropdownMenuItem(
                                 text = { Text("Keyboard setup") },
                                 leadingIcon = {
@@ -452,11 +464,8 @@ fun SnippetListScreen(
                 ) {
                 item(key = "onboarding") {
                     Box(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        OnboardingCard(key = refreshTick, onOpenSettings = onOpenSettings)
+                        OnboardingCard(key = refreshTick)
                     }
-                }
-                item(key = "try-it") {
-                    TryItCard()
                 }
                 if (snippets.isEmpty()) {
                     item(key = "empty") {
@@ -612,67 +621,36 @@ private fun Wordmark(collapsedFraction: Float) {
 }
 
 @Composable
-private fun OnboardingCard(key: Int, onOpenSettings: () -> Unit) {
+private fun OnboardingCard(key: Int) {
     val context = LocalContext.current
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission(),
-    ) { _ -> }
-
     val imeEnabled = remember(key) { isPastilleEnabled(context) }
-    val photosGranted = remember(key) { ImageSourceReader.hasPermission(context) }
-    val partialOnly = remember(key) { ImageSourceReader.hasOnlyPartialAccess(context) }
-    val keyboardStyleChosen = remember(key) { PastilleSettings.forContext(context).keyboardStyleChosen }
-
-    if (imeEnabled && photosGranted && !partialOnly && keyboardStyleChosen) return
+    if (imeEnabled) return
 
     OutlinedCard(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
             Text("Get set up", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(8.dp))
-            if (!imeEnabled) {
-                SetupRow(
-                    text = "1. Enable Pastille in system settings",
-                    button = "Enable",
-                    onClick = {
-                        context.startActivity(Intent(AndroidSettings.ACTION_INPUT_METHOD_SETTINGS))
-                    },
-                )
-            }
-            if (!photosGranted || partialOnly) {
-                if (partialOnly) {
-                    Text(
-                        text = "You granted access to selected photos only, so Pastille " +
-                            "cannot see your latest screenshot. Grant full photo access " +
-                            "to fix this.",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    Spacer(Modifier.height(4.dp))
-                }
-                SetupRow(
-                    text = "2. Allow photo access for screenshots",
-                    button = "Allow",
-                    onClick = {
-                        permissionLauncher.launch(photoPermission())
-                    },
-                )
-            }
-            if (!keyboardStyleChosen) {
-                SetupRow(
-                    text = "3. Pick a keyboard style",
-                    button = "Choose",
-                    onClick = onOpenSettings,
-                )
-            }
+            SetupRow(
+                text = "1. Enable Pastille in system settings",
+                button = "Enable",
+                onClick = {
+                    context.startActivity(Intent(AndroidSettings.ACTION_INPUT_METHOD_SETTINGS))
+                },
+            )
         }
     }
 }
 
 @Composable
-private fun TryItCard() {
-    val context = LocalContext.current
-    val show = remember { isPastilleEnabled(context) && !isPastilleCurrent(context) }
-    if (!show) return
-    TryItField(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp))
+private fun TryItDialog(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Done") }
+        },
+        title = { Text("Try the keyboard") },
+        text = { TryItField() },
+    )
 }
 
 @Composable
@@ -1081,21 +1059,6 @@ private fun isPastilleEnabled(context: Context): Boolean {
     val manager = context.getSystemService(InputMethodManager::class.java) ?: return false
     return manager.enabledInputMethodList.any { it.packageName == context.packageName }
 }
-
-private fun isPastilleCurrent(context: Context): Boolean {
-    val current = AndroidSettings.Secure.getString(
-        context.contentResolver,
-        AndroidSettings.Secure.DEFAULT_INPUT_METHOD,
-    ) ?: return false
-    return current.contains(context.packageName)
-}
-
-private fun photoPermission(): String =
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        Manifest.permission.READ_MEDIA_IMAGES
-    } else {
-        Manifest.permission.READ_EXTERNAL_STORAGE
-    }
 
 private fun toast(context: Context, message: String) {
     Toast.makeText(context, message, Toast.LENGTH_SHORT).show()

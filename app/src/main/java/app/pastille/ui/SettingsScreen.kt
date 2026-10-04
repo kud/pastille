@@ -1,6 +1,9 @@
 package app.pastille.ui
 
+import android.Manifest
 import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -32,6 +35,7 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -49,6 +53,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import app.pastille.ime.ImageSourceReader
 import app.pastille.ime.KeyboardHeightPreview
 import app.pastille.ime.KeyboardStylePreview
 import app.pastille.settings.KeyboardStyle
@@ -196,6 +201,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                     },
                 ),
             )
+            PhotoAccessRow()
             Text(
                 text = "Quick Settings tile",
                 style = MaterialTheme.typography.titleSmall,
@@ -300,3 +306,40 @@ private fun StyleRow(
         ),
     )
 }
+
+@Composable
+private fun PhotoAccessRow() {
+    val context = LocalContext.current
+    var granted by remember { mutableStateOf(ImageSourceReader.hasPermission(context)) }
+    var partialOnly by remember { mutableStateOf(ImageSourceReader.hasOnlyPartialAccess(context)) }
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    LifecycleResumeEffect(Unit) {
+        granted = ImageSourceReader.hasPermission(context)
+        partialOnly = ImageSourceReader.hasOnlyPartialAccess(context)
+        onPauseOrDispose { }
+    }
+    ListItem(
+        headlineContent = { Text("Photo access") },
+        supportingContent = {
+            Text(
+                when {
+                    partialOnly -> "Selected photos only, so the keyboard can't see your latest screenshot."
+                    granted -> "Granted. Your recent images appear in the keyboard."
+                    else -> "Needed to show your recent screenshots in the keyboard."
+                },
+            )
+        },
+        trailingContent = if (granted && !partialOnly) {
+            null
+        } else {
+            { TextButton(onClick = { launcher.launch(photoPermission()) }) { Text("Allow") } }
+        },
+    )
+}
+
+private fun photoPermission(): String =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        Manifest.permission.READ_MEDIA_IMAGES
+    } else {
+        Manifest.permission.READ_EXTERNAL_STORAGE
+    }

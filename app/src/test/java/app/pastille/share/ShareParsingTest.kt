@@ -111,7 +111,7 @@ class ShareParsingTest {
             "a".repeat(40) + "…",
             textTitle(null, "a".repeat(60)),
         )
-        assertEquals("", textTitle(null, "short"))
+        assertEquals("short", textTitle(null, "short"))
     }
 
     @Test

@@ -20,6 +20,16 @@ Pastille never connects to the network. The manifest requests no internet permis
 3. Switch to Pastille from any text field with the keyboard switcher.
 4. Grant photo access if you want recent screenshots in the panel.
 
+## Quick Settings tile
+
+The Pastille Quick Settings tile opens the keyboard picker. To make it switch straight to Pastille and back, grant one permission over adb, once:
+
+```sh
+adb shell pm grant app.pastille android.permission.WRITE_SECURE_SETTINGS
+```
+
+Pastille must be enabled under Settings → System → Keyboards first. The grant survives updates and is removed when you uninstall. On Xiaomi/HyperOS, also enable "USB debugging (Security settings)" in Developer options, or `pm grant` fails. To revoke: `adb shell pm revoke app.pastille android.permission.WRITE_SECURE_SETTINGS`.
+
 ## Build
 
 - Android Studio: open this directory and run the `app` configuration on a device or emulator (minSdk 28).

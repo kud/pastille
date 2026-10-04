@@ -7,4 +7,5 @@
         <item name="android:windowNoTitle">true</item>
         <item name="android:backgroundDimEnabled">false</item>
     </style>
+    <style name="Theme.Pastille.Transparent" parent="android:Theme.Translucent.NoTitleBar" />
 </resources>

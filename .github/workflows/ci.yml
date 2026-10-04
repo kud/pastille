@@ -23,3 +23,8 @@ jobs:
           name: pastille-debug-apk
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: room-schemas
+          path: app/schemas/
+          if-no-files-found: error

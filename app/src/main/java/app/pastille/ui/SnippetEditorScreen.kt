@@ -1,32 +1,42 @@
 package app.pastille.ui
 
+import android.app.Activity
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextButtonDefaults
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -39,24 +49,34 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.pastille.data.SnippetRepository
 import app.pastille.images.ImageThumbnail
 import app.pastille.model.SnippetRecord
 import app.pastille.share.autoTitle
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SnippetEditorScreen(
     snippetId: Long?,
     repository: SnippetRepository,
     onDone: () -> Unit,
+    onDeleted: (SnippetRecord) -> Unit,
     initialCategoryId: Long? = null,
 ) {
     val scope = rememberCoroutineScope()
+    val activity = LocalContext.current as? Activity
     var ready by remember { mutableStateOf(snippetId == null) }
     var existing by remember { mutableStateOf<SnippetRecord?>(null) }
     var title by rememberSaveable(snippetId) { mutableStateOf("") }
@@ -64,9 +84,12 @@ fun SnippetEditorScreen(
     var categoryId by rememberSaveable(snippetId) { mutableStateOf(initialCategoryId) }
     // Survives recreation so a reload never overwrites what was typed before a rotation.
     var loaded by rememberSaveable(snippetId) { mutableStateOf(false) }
-    var categoryExpanded by remember { mutableStateOf(false) }
+    var savedId by rememberSaveable(snippetId) { mutableStateOf<Long?>(null) }
+    var deleted by remember { mutableStateOf(false) }
+    var folderExpanded by remember { mutableStateOf(false) }
     var showCreateCategory by remember { mutableStateOf(false) }
     val contentFocus = remember { FocusRequester() }
+    val saveMutex = remember { Mutex() }
     val categories by remember { repository.observeCategories() }
         .collectAsStateWithLifecycle(initialValue = emptyList())
 
@@ -100,71 +123,124 @@ fun SnippetEditorScreen(
         }
     }
 
-    Scaffold(
-        contentWindowInsets = WindowInsets.safeDrawing,
-        topBar = {
-            TopAppBar(
-                title = { Text(if (snippetId == null) "New snippet" else "Edit snippet") },
-                navigationIcon = {
-                    IconButton(onClick = onDone) {
-                        Icon(Icons.Rounded.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    if (snippetId != null) {
-                        IconButton(
-                            onClick = {
-                                scope.launch {
-                                    repository.delete(snippetId)
-                                    onDone()
-                                }
-                            },
-                        ) {
-                            Icon(Icons.Rounded.Delete, contentDescription = "Delete snippet")
-                        }
-                    }
-                    IconButton(
-                        onClick = {
-                            if (text.isBlank() && !isImage) return@IconButton
-                            scope.launch {
-                                val existing = if (snippetId != null) repository.get(snippetId) else null
-                                repository.upsert(
-                                    (existing ?: SnippetRecord(text = text)).copy(
-                                        title = title,
-                                        text = text,
-                                        categoryId = categoryId,
-                                    ),
-                                )
-                                onDone()
-                            }
-                        },
-                        enabled = ready && (text.isNotBlank() || isImage),
-                    ) {
-                        Icon(Icons.Rounded.Check, contentDescription = "Save snippet")
-                    }
-                },
-            )
-        },
-    ) { padding ->
-        Column(
+    suspend fun save() {
+        saveMutex.withLock {
+            if (deleted) return
+            if (snippetId == null) {
+                if (text.isBlank()) return
+                val targetId = savedId
+                if (targetId != null) {
+                    val current = repository.get(targetId) ?: return
+                    if (current.title == title && current.text == text && current.categoryId == categoryId) return
+                    repository.upsert(current.copy(title = title, text = text, categoryId = categoryId))
+                    existing = repository.get(targetId)
+                } else {
+                    val id = repository.upsert(
+                        SnippetRecord(text = text, title = title, categoryId = categoryId),
+                    )
+                    savedId = id
+                    existing = repository.get(id)
+                }
+            } else {
+                if (!ready) return
+                if (!isImage && text.isBlank()) return
+                val current = repository.get(snippetId) ?: return
+                if (current.title == title && current.text == text && current.categoryId == categoryId) {
+                    existing = current
+                    return
+                }
+                repository.upsert(current.copy(title = title, text = text, categoryId = categoryId))
+                existing = repository.get(snippetId)
+            }
+        }
+    }
+
+    fun close() {
+        scope.launch {
+            save()
+            onDone()
+        }
+    }
+
+    fun deleteSnippet() {
+        val id = snippetId ?: return
+        scope.launch {
+            val record = saveMutex.withLock {
+                deleted = true
+                repository.get(id).also { repository.delete(id) }
+            }
+            if (record != null) onDeleted(record) else onDone()
+        }
+    }
+
+    BackHandler {
+        close()
+    }
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
+        if (activity?.isChangingConfigurations != true) {
+            scope.launch(NonCancellable) { save() }
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surface),
+    ) {
+        Row(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(top = 8.dp, end = 8.dp),
+            horizontalArrangement = Arrangement.End,
         ) {
-            OutlinedTextField(
-                value = title,
-                onValueChange = { title = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Title") },
-                placeholder = {
-                    Text(autoTitle(text), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                },
-                supportingText = { Text("Shown on the keyboard button") },
-                singleLine = true,
-            )
-            if (isImage) {
+            IconButton(
+                onClick = ::close,
+                modifier = Modifier.size(48.dp),
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    modifier = Modifier.size(40.dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Outlined.Close, contentDescription = "Close")
+                    }
+                }
+            }
+        }
+        TextField(
+            value = title,
+            onValueChange = { title = it },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            placeholder = {
+                Text(
+                    text = if (text.isBlank()) "Title (optional)" else autoTitle(text),
+                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
+            },
+            singleLine = true,
+            textStyle = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = Color.Transparent,
+                unfocusedContainerColor = Color.Transparent,
+                disabledContainerColor = Color.Transparent,
+                focusedIndicatorColor = MaterialTheme.colorScheme.outline,
+                unfocusedIndicatorColor = MaterialTheme.colorScheme.outlineVariant,
+            ),
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        if (isImage) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+            ) {
                 val imageFile = existing?.imageFile
                 if (imageFile != null) {
                     ImageThumbnail(
@@ -174,61 +250,109 @@ fun SnippetEditorScreen(
                         contentScale = ContentScale.Fit,
                     )
                 }
-            } else {
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { text = it },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .focusRequester(contentFocus),
-                    label = { Text("Content") },
-                    minLines = 6,
-                )
             }
-            ExposedDropdownMenuBox(
-                expanded = categoryExpanded,
-                onExpandedChange = { categoryExpanded = it },
+        } else {
+            BasicTextField(
+                value = text,
+                onValueChange = { text = it },
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .focusRequester(contentFocus),
+                textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                decorationBox = { innerTextField ->
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        if (text.isEmpty()) {
+                            Text(
+                                text = "Content",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        innerTextField()
+                    }
+                },
+            )
+        }
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .imePadding(),
+        ) {
+            HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .padding(horizontal = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                OutlinedTextField(
-                    value = selectedCategoryName,
-                    onValueChange = {},
-                    readOnly = true,
-                    modifier = Modifier.menuAnchor().fillMaxWidth(),
-                    label = { Text("Folder") },
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoryExpanded) },
-                    singleLine = true,
-                )
-                ExposedDropdownMenu(
-                    expanded = categoryExpanded,
-                    onDismissRequest = { categoryExpanded = false },
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("No folder") },
-                        onClick = {
-                            categoryId = null
-                            categoryExpanded = false
-                        },
-                    )
-                    categories.sortedBy { it.position }.forEach { category ->
+                Box {
+                    TextButton(
+                        onClick = { folderExpanded = true },
+                        colors = TextButtonDefaults.textButtonColors(
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        ),
+                    ) {
+                        Icon(
+                            Icons.Outlined.Folder,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(selectedCategoryName, style = MaterialTheme.typography.labelLarge)
+                    }
+                    DropdownMenu(
+                        expanded = folderExpanded,
+                        onDismissRequest = { folderExpanded = false },
+                    ) {
                         DropdownMenuItem(
-                            text = { Text(category.name) },
+                            text = { Text("None (top level)") },
                             onClick = {
-                                categoryId = category.id
-                                categoryExpanded = false
+                                categoryId = null
+                                folderExpanded = false
+                            },
+                        )
+                        categories.sortedBy { it.position }.forEach { category ->
+                            DropdownMenuItem(
+                                text = { Text(category.name) },
+                                onClick = {
+                                    categoryId = category.id
+                                    folderExpanded = false
+                                },
+                            )
+                        }
+                        DropdownMenuItem(
+                            text = { Text("New folder…") },
+                            onClick = {
+                                folderExpanded = false
+                                showCreateCategory = true
                             },
                         )
                     }
-                    DropdownMenuItem(
-                        text = { Text("New folder…") },
-                        onClick = {
-                            categoryExpanded = false
-                            showCreateCategory = true
-                        },
+                }
+                if (snippetId != null) {
+                    IconButton(onClick = ::deleteSnippet) {
+                        Icon(
+                            Icons.Outlined.Delete,
+                            contentDescription = "Delete snippet",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.weight(1f))
+                if (!isImage) {
+                    Text(
+                        text = "Characters: ${text.length}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(end = 8.dp),
                     )
                 }
             }
-            Spacer(Modifier.height(8.dp))
         }
     }
     if (showCreateCategory) {

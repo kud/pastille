@@ -110,6 +110,7 @@ private fun PastilleApp(
     var creating: Boolean by rememberSaveable { mutableStateOf(false) }
     var newCategoryId: Long? by rememberSaveable { mutableStateOf<Long?>(null) }
     var showingSettings by rememberSaveable { mutableStateOf(false) }
+    var pendingUndo by remember { mutableStateOf<SnippetRecord?>(null) }
     val context = LocalContext.current
     val repository = remember { SnippetRepository.forContext(context) }
     val screenStates = rememberSaveableStateHolder()
@@ -161,6 +162,7 @@ private fun PastilleApp(
             snippetId = editingId,
             repository = repository,
             onDone = ::closeEditor,
+            onDeleted = { pendingUndo = it; closeEditor() },
             initialCategoryId = newCategoryId,
         )
     } else if (showingSettings) {
@@ -176,6 +178,8 @@ private fun PastilleApp(
                 },
                 onEdit = { snippet: SnippetRecord -> editingId = snippet.id },
                 onOpenSettings = { showingSettings = true },
+                deletedSnippet = pendingUndo,
+                onDeletedShown = { pendingUndo = null },
             )
         }
     }

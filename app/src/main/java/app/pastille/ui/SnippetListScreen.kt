@@ -159,6 +159,8 @@ fun SnippetListScreen(
     onCreate: (Long?) -> Unit,
     onEdit: (SnippetRecord) -> Unit,
     onOpenSettings: () -> Unit,
+    deletedSnippet: SnippetRecord? = null,
+    onDeletedShown: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -248,17 +250,29 @@ fun SnippetListScreen(
         }
     }
 
+    suspend fun showDeletedSnackbar(snippet: SnippetRecord) {
+        val result = snackbarHostState.showSnackbar(
+            message = "Deleted",
+            actionLabel = "Undo",
+            duration = SnackbarDuration.Short,
+        )
+        if (result == SnackbarResult.ActionPerformed) {
+            repository.restore(snippet)
+        }
+    }
+
     fun deleteSnippet(snippet: SnippetRecord) {
         scope.launch {
             repository.delete(snippet.id)
-            val result = snackbarHostState.showSnackbar(
-                message = "Deleted",
-                actionLabel = "Undo",
-                duration = SnackbarDuration.Short,
-            )
-            if (result == SnackbarResult.ActionPerformed) {
-                repository.restore(snippet)
-            }
+            showDeletedSnackbar(snippet)
+        }
+    }
+
+    LaunchedEffect(deletedSnippet) {
+        if (deletedSnippet != null) {
+            // Clearing the request restarts this effect, so the snackbar runs on the screen's scope.
+            scope.launch { showDeletedSnackbar(deletedSnippet) }
+            onDeletedShown()
         }
     }
 

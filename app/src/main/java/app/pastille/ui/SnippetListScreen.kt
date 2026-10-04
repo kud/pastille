@@ -46,6 +46,8 @@ import androidx.compose.material.icons.rounded.SwapVert
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -89,10 +91,12 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedCard
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
@@ -145,6 +149,7 @@ import app.pastille.images.ImageStore
 import app.pastille.images.ImageThumbnail
 import app.pastille.model.CategoryRecord
 import app.pastille.model.SnippetRecord
+import app.pastille.model.isMissingFolder
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -160,8 +165,8 @@ fun SnippetListScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val flow = remember { repository.observeSnippets() }
     val snippets by flow.collectAsStateWithLifecycle(initialValue = emptyList())
-    var query by remember { mutableStateOf("") }
-    var searching by remember { mutableStateOf(false) }
+    var query by rememberSaveable { mutableStateOf("") }
+    var searching by rememberSaveable { mutableStateOf(false) }
     var refreshTick by remember { mutableStateOf(0) }
     var showMenu by remember { mutableStateOf(false) }
     var showCrashDialog by remember { mutableStateOf(false) }
@@ -172,8 +177,9 @@ fun SnippetListScreen(
     }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { refreshTick++ }
 
-    val categories by remember { repository.observeCategories() }
-        .collectAsStateWithLifecycle(initialValue = emptyList())
+    val loadedCategories by remember { repository.observeCategories() }
+        .collectAsStateWithLifecycle(initialValue = null as List<CategoryRecord>?)
+    val categories = loadedCategories.orEmpty()
     var showCreateFolder by remember { mutableStateOf(false) }
     var showTryIt by remember { mutableStateOf(false) }
 
@@ -272,8 +278,8 @@ fun SnippetListScreen(
     var renamingFolder by remember { mutableStateOf<CategoryRecord?>(null) }
     var deletingFolder by remember { mutableStateOf<CategoryRecord?>(null) }
     val orderedFolders = remember(categories) { categories.sortedBy { it.position } }
-    LaunchedEffect(orderedFolders) {
-        if (selectedTab != ALL_TAB && orderedFolders.none { it.id == selectedTab }) selectedTab = ALL_TAB
+    LaunchedEffect(loadedCategories) {
+        if (isMissingFolder(loadedCategories, selectedTab.takeIf { it != ALL_TAB })) selectedTab = ALL_TAB
     }
     val selectedFolderId = selectedTab.takeIf { it != ALL_TAB }
     val shown = remember(visible, selectedTab) {
@@ -639,7 +645,7 @@ private fun Wordmark(collapsedFraction: Float) {
         Icon(
             painter = painterResource(R.drawable.ic_pastille_mark),
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
+            tint = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.size(lerp(36.dp, 26.dp, collapsedFraction)),
         )
         Spacer(modifier = Modifier.width(10.dp))
@@ -667,9 +673,13 @@ private fun OnboardingCard(key: Int) {
     }
     if (imeEnabled && photosGranted) return
 
-    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+    ) {
         Column(Modifier.padding(16.dp)) {
-            Text("Get set up", style = MaterialTheme.typography.titleMedium)
+            Text("Set up Pastille", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(8.dp))
             if (!imeEnabled) {
                 SetupRow(
@@ -1002,7 +1012,7 @@ private fun SnippetMetaRow(snippet: SnippetRecord, categoryName: String?) {
                 now = System.currentTimeMillis(),
             ),
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         if (categoryName != null) {
             Spacer(modifier = Modifier.width(8.dp))
@@ -1120,7 +1130,7 @@ private fun FolderTabs(
         state = rowState,
         modifier = Modifier.fillMaxWidth().height(48.dp).selectableGroup(),
         contentPadding = PaddingValues(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         item(key = "all") {
@@ -1181,16 +1191,18 @@ private fun FolderTab(
 ) {
     val colors = MaterialTheme.colorScheme
     val container by animateColorAsState(
-        targetValue = if (selected) colors.secondaryContainer else Color.Transparent,
+        targetValue = if (selected) colors.secondaryContainer else colors.surfaceContainerHigh,
         label = "tabContainer",
     )
     Box(
         modifier = modifier
-            .height(36.dp)
+            .minimumInteractiveComponentSize()
+            .height(32.dp)
             .clip(CircleShape)
             .background(container)
+            .semantics { this.selected = selected }
             .combinedClickable(role = Role.Tab, onClick = onClick, onLongClick = onLongClick)
-            .padding(horizontal = 16.dp),
+            .padding(horizontal = 12.dp),
         contentAlignment = Alignment.Center,
     ) {
         val tint = if (selected) colors.onSecondaryContainer else colors.onSurfaceVariant
@@ -1199,7 +1211,7 @@ private fun FolderTab(
             Spacer(Modifier.width(8.dp))
             Text(
                 text = label,
-                style = MaterialTheme.typography.titleSmall,
+                style = MaterialTheme.typography.labelLarge,
                 color = tint,
                 maxLines = 1,
             )
@@ -1217,7 +1229,7 @@ private fun ReorderBanner(onDone: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = "Drag â¡ to reorder. Hold a folder tab to move it.",
+            text = "Drag the handle to reorder. Hold a folder to move it.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.weight(1f),

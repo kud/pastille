@@ -12,6 +12,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import app.pastille.data.SnippetRepository
@@ -56,6 +57,8 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null) {
             launchRequest = intent.toLaunchRequest()
             fromKeyboard = intent.getBooleanExtra(EXTRA_FROM_KEYBOARD, false)
+        } else {
+            fromKeyboard = savedInstanceState.getBoolean(EXTRA_FROM_KEYBOARD, false)
         }
         setContent {
             PastilleTheme {
@@ -70,6 +73,11 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putBoolean(EXTRA_FROM_KEYBOARD, fromKeyboard)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -104,6 +112,7 @@ private fun PastilleApp(
     var showingSettings by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
     val repository = remember { SnippetRepository.forContext(context) }
+    val screenStates = rememberSaveableStateHolder()
 
     LaunchedEffect(launchRequest) {
         when (launchRequest) {
@@ -157,14 +166,17 @@ private fun PastilleApp(
     } else if (showingSettings) {
         SettingsScreen(onBack = ::closeSettings)
     } else {
-        SnippetListScreen(
-            repository = repository,
-            onCreate = { categoryId ->
-                creating = true
-                newCategoryId = categoryId
-            },
-            onEdit = { snippet: SnippetRecord -> editingId = snippet.id },
-            onOpenSettings = { showingSettings = true },
-        )
+        // Keeps the list's open folder tab and search while the editor or settings are on screen.
+        screenStates.SaveableStateProvider("list") {
+            SnippetListScreen(
+                repository = repository,
+                onCreate = { categoryId ->
+                    creating = true
+                    newCategoryId = categoryId
+                },
+                onEdit = { snippet: SnippetRecord -> editingId = snippet.id },
+                onOpenSettings = { showingSettings = true },
+            )
+        }
     }
 }

@@ -33,6 +33,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -58,9 +59,11 @@ fun SnippetEditorScreen(
     val scope = rememberCoroutineScope()
     var ready by remember { mutableStateOf(snippetId == null) }
     var existing by remember { mutableStateOf<SnippetRecord?>(null) }
-    var title by remember { mutableStateOf("") }
-    var text by remember { mutableStateOf("") }
-    var categoryId by remember { mutableStateOf(initialCategoryId) }
+    var title by rememberSaveable(snippetId) { mutableStateOf("") }
+    var text by rememberSaveable(snippetId) { mutableStateOf("") }
+    var categoryId by rememberSaveable(snippetId) { mutableStateOf(initialCategoryId) }
+    // Survives recreation so a reload never overwrites what was typed before a rotation.
+    var loaded by rememberSaveable(snippetId) { mutableStateOf(false) }
     var categoryExpanded by remember { mutableStateOf(false) }
     var showCreateCategory by remember { mutableStateOf(false) }
     val contentFocus = remember { FocusRequester() }
@@ -72,10 +75,13 @@ fun SnippetEditorScreen(
             val record = repository.get(snippetId)
             if (record != null) {
                 existing = record
-                title = record.title
-                text = record.text
-                categoryId = record.categoryId
+                if (!loaded) {
+                    title = record.title
+                    text = record.text
+                    categoryId = record.categoryId
+                }
             }
+            loaded = true
             ready = true
         }
     }
@@ -83,7 +89,7 @@ fun SnippetEditorScreen(
         if (snippetId == null) contentFocus.requestFocus()
     }
     val isImage = existing?.isImage == true
-    val selectedCategoryName = categories.firstOrNull { it.id == categoryId }?.name ?: "None (top level)"
+    val selectedCategoryName = categories.firstOrNull { it.id == categoryId }?.name ?: "No folder"
     val imageRatio = remember(existing?.imageWidth, existing?.imageHeight) {
         val width = existing?.imageWidth
         val height = existing?.imageHeight
@@ -198,7 +204,7 @@ fun SnippetEditorScreen(
                     onDismissRequest = { categoryExpanded = false },
                 ) {
                     DropdownMenuItem(
-                        text = { Text("None (top level)") },
+                        text = { Text("No folder") },
                         onClick = {
                             categoryId = null
                             categoryExpanded = false
@@ -228,7 +234,7 @@ fun SnippetEditorScreen(
     if (showCreateCategory) {
         CategoryNameDialog(
             initialName = "",
-            title = "New category",
+            title = "New folder",
             confirmLabel = "Create",
             onConfirm = { name ->
                 val id = repository.createCategory(name)

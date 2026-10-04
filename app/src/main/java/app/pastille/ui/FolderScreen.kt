@@ -107,6 +107,12 @@ fun FolderScreen(
         }
     }
 
+    fun moveSnippet(snippet: SnippetRecord, categoryId: Long?) {
+        scope.launch {
+            repository.setCategory(listOf(snippet.id), categoryId)
+        }
+    }
+
     fun deleteSnippet(snippet: SnippetRecord) {
         scope.launch {
             repository.delete(snippet.id)
@@ -247,6 +253,8 @@ fun FolderScreen(
                         onCopy = { copySnippet(snippet) },
                         onTogglePin = { togglePin(snippet) },
                         onDelete = { deleteSnippet(snippet) },
+                        folders = loaded.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name }),
+                        onMove = { moveSnippet(snippet, it) },
                     )
                 }
             }

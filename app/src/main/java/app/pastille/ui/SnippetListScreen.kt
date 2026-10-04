@@ -12,7 +12,9 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
@@ -41,16 +43,21 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.outlined.ShortText
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.outlined.BugReport
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.FileUpload
 import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Keyboard
+import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
@@ -75,9 +82,13 @@ import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxState
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -85,6 +96,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -93,6 +105,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -115,6 +128,7 @@ import app.pastille.data.SnippetRepository
 import app.pastille.images.ImageStore
 import app.pastille.images.ImageThumbnail
 import app.pastille.ime.ImageSourceReader
+import app.pastille.model.CategoryRecord
 import app.pastille.model.SnippetRecord
 import app.pastille.settings.PastilleSettings
 import kotlinx.coroutines.launch
@@ -225,6 +239,12 @@ fun SnippetListScreen(
     fun togglePin(snippet: SnippetRecord) {
         scope.launch {
             repository.upsert(snippet.copy(pinned = !snippet.pinned))
+        }
+    }
+
+    fun moveSnippet(snippet: SnippetRecord, categoryId: Long?) {
+        scope.launch {
+            repository.setCategory(listOf(snippet.id), categoryId)
         }
     }
 
@@ -483,6 +503,8 @@ fun SnippetListScreen(
                         onCopy = { copySnippet(snippet) },
                         onTogglePin = { togglePin(snippet) },
                         onDelete = { deleteSnippet(snippet) },
+                        folders = sortedFolders,
+                        onMove = { moveSnippet(snippet, it) },
                     )
                 }
                 }
@@ -547,6 +569,9 @@ fun SnippetListScreen(
                             onCopy = { copySnippet(snippet) },
                             onTogglePin = { togglePin(snippet) },
                             onDelete = { deleteSnippet(snippet) },
+                            folders = sortedFolders,
+                            onMove = { moveSnippet(snippet, it) },
+                            containerColor = SearchBarDefaults.colors().containerColor,
                         )
                     }
                     if (query.isNotBlank() && visible.isEmpty()) {
@@ -666,7 +691,7 @@ private fun SetupRow(text: String, button: String, onClick: () -> Unit) {
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 internal fun SnippetRow(
     snippet: SnippetRecord,
@@ -675,116 +700,231 @@ internal fun SnippetRow(
     onCopy: () -> Unit,
     onTogglePin: () -> Unit,
     onDelete: () -> Unit,
+    folders: List<CategoryRecord> = emptyList(),
+    onMove: ((Long?) -> Unit)? = null,
+    containerColor: Color = MaterialTheme.colorScheme.surface,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
+    var moveMenuOpen by remember { mutableStateOf(false) }
     var expanded by rememberSaveable(snippet.id) { mutableStateOf(false) }
     var overflows by remember(snippet.id) { mutableStateOf(false) }
+    var deleting by remember(snippet.id) { mutableStateOf(false) }
+    val currentOnEdit by rememberUpdatedState(onEdit)
+    val currentOnDelete by rememberUpdatedState(onDelete)
     val imageFile = snippet.imageFile
-    Box(modifier = Modifier.fillMaxWidth()) {
-        if (snippet.isImage && imageFile != null) {
-            Row(
-                modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp)
-                    .combinedClickable(onClick = onEdit, onLongClick = { menuOpen = true })
-                    .padding(start = 16.dp, end = 4.dp, top = 12.dp, bottom = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                ImageThumbnail(
-                    fileName = imageFile,
-                    contentDescription = null,
-                    modifier = Modifier.height(56.dp).width(imageThumbWidthDp(snippet).dp)
-                        .clip(RoundedCornerShape(8.dp)),
-                    contentScale = ContentScale.Crop,
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
+    val swipeState = rememberSwipeToDismissBoxState(
+        confirmValueChange = { value ->
+            when (value) {
+                SwipeToDismissBoxValue.StartToEnd -> {
+                    currentOnEdit()
+                    false
+                }
+                SwipeToDismissBoxValue.EndToStart -> {
+                    if (!deleting) {
+                        deleting = true
+                        currentOnDelete()
+                    }
+                    true
+                }
+                SwipeToDismissBoxValue.Settled -> true
+            }
+        },
+    )
+    SwipeToDismissBox(
+        state = swipeState,
+        backgroundContent = { SwipeBackground(swipeState) },
+    ) {
+        Box(modifier = Modifier.fillMaxWidth().background(containerColor)) {
+            if (snippet.isImage && imageFile != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp)
+                        .combinedClickable(onClick = onEdit, onLongClick = { menuOpen = true })
+                        .padding(start = 16.dp, end = 4.dp, top = 12.dp, bottom = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    ImageThumbnail(
+                        fileName = imageFile,
+                        contentDescription = null,
+                        modifier = Modifier.height(56.dp).width(imageThumbWidthDp(snippet).dp)
+                            .clip(RoundedCornerShape(8.dp)),
+                        contentScale = ContentScale.Crop,
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = snippet.title.ifBlank { "Image" },
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        SnippetMetaRow(snippet = snippet, categoryName = categoryName)
+                    }
+                    IconButton(onClick = onCopy) {
+                        Icon(
+                            imageVector = Icons.Outlined.ContentCopy,
+                            contentDescription = "Copy ${snippet.title.ifBlank { "Image" }}",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp)
+                        .combinedClickable(onClick = onEdit, onLongClick = { menuOpen = true })
+                        .padding(start = 16.dp, end = 4.dp, top = 12.dp, bottom = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                Column(modifier = Modifier.weight(1f).animateContentSize()) {
+                    val title = remember(snippet.title, snippet.text) { rowTitle(snippet.title, snippet.text) }
                     Text(
-                        text = snippet.title.ifBlank { "Image" },
+                        text = title,
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
+                    if (snippet.text.trim() != title) {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = snippet.text,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = if (expanded) Int.MAX_VALUE else 3,
+                            overflow = TextOverflow.Ellipsis,
+                            onTextLayout = { if (!expanded) overflows = it.hasVisualOverflow },
+                        )
+                    }
+                    if (overflows || expanded) {
+                        Text(
+                            text = if (expanded) "Show less" else "Show more",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.heightIn(min = 32.dp).clickable { expanded = !expanded }
+                                .wrapContentHeight(Alignment.CenterVertically),
+                        )
+                    }
                     Spacer(modifier = Modifier.height(6.dp))
                     SnippetMetaRow(snippet = snippet, categoryName = categoryName)
                 }
                 IconButton(onClick = onCopy) {
                     Icon(
                         imageVector = Icons.Outlined.ContentCopy,
-                        contentDescription = "Copy ${snippet.title.ifBlank { "Image" }}",
+                        contentDescription = "Copy ${rowTitle(snippet.title, snippet.text).ifBlank { "snippet" }}",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-            }
-        } else {
-            Row(
-                modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp)
-                    .combinedClickable(onClick = onEdit, onLongClick = { menuOpen = true })
-                    .padding(start = 16.dp, end = 4.dp, top = 12.dp, bottom = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-            Column(modifier = Modifier.weight(1f).animateContentSize()) {
-                if (snippet.title.isNotBlank()) {
-                    Text(
-                        text = snippet.title,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
                 }
-                Text(
-                    text = snippet.text,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = if (expanded) Int.MAX_VALUE else 3,
-                    overflow = TextOverflow.Ellipsis,
-                    onTextLayout = { if (!expanded) overflows = it.hasVisualOverflow },
+            }
+            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                DropdownMenuItem(
+                    text = { Text(if (snippet.pinned) "Unpin" else "Pin") },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = if (snippet.pinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
+                            contentDescription = null,
+                        )
+                    },
+                    onClick = {
+                        menuOpen = false
+                        onTogglePin()
+                    },
                 )
-                if (overflows || expanded) {
-                    Text(
-                        text = if (expanded) "Show less" else "Show more",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.heightIn(min = 32.dp).clickable { expanded = !expanded }
-                            .wrapContentHeight(Alignment.CenterVertically),
+                if (onMove != null && (folders.isNotEmpty() || snippet.categoryId != null)) {
+                    DropdownMenuItem(
+                        text = { Text("Move to folder") },
+                        leadingIcon = {
+                            Icon(Icons.Outlined.Folder, contentDescription = null)
+                        },
+                        onClick = {
+                            menuOpen = false
+                            moveMenuOpen = true
+                        },
                     )
                 }
-                Spacer(modifier = Modifier.height(6.dp))
-                SnippetMetaRow(snippet = snippet, categoryName = categoryName)
-            }
-            IconButton(onClick = onCopy) {
-                Icon(
-                    imageVector = Icons.Outlined.ContentCopy,
-                    contentDescription = "Copy ${snippet.title.ifBlank { "snippet" }}",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                DropdownMenuItem(
+                    text = { Text("Delete") },
+                    leadingIcon = {
+                        Icon(Icons.Outlined.Delete, contentDescription = null)
+                    },
+                    onClick = {
+                        menuOpen = false
+                        onDelete()
+                    },
                 )
             }
+            if (onMove != null) {
+                DropdownMenu(expanded = moveMenuOpen, onDismissRequest = { moveMenuOpen = false }) {
+                    FolderChoice(
+                        name = "None (top level)",
+                        selected = snippet.categoryId == null,
+                        onClick = {
+                            moveMenuOpen = false
+                            onMove(null)
+                        },
+                    )
+                    folders.forEach { folder ->
+                        FolderChoice(
+                            name = folder.name,
+                            selected = snippet.categoryId == folder.id,
+                            onClick = {
+                                moveMenuOpen = false
+                                onMove(folder.id)
+                            },
+                        )
+                    }
+                }
             }
         }
-        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-            DropdownMenuItem(
-                text = { Text(if (snippet.pinned) "Unpin" else "Pin") },
-                leadingIcon = {
-                    Icon(
-                        imageVector = if (snippet.pinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
-                        contentDescription = null,
-                    )
-                },
-                onClick = {
-                    menuOpen = false
-                    onTogglePin()
-                },
-            )
-            DropdownMenuItem(
-                text = { Text("Delete") },
-                leadingIcon = {
-                    Icon(Icons.Outlined.Delete, contentDescription = null)
-                },
-                onClick = {
-                    menuOpen = false
-                    onDelete()
-                },
+    }
+}
+
+@Composable
+private fun FolderChoice(name: String, selected: Boolean, onClick: () -> Unit) {
+    DropdownMenuItem(
+        text = { Text(name) },
+        leadingIcon = {
+            if (selected) {
+                Icon(Icons.Outlined.Check, contentDescription = "Current folder")
+            } else {
+                Spacer(Modifier.size(24.dp))
+            }
+        },
+        enabled = !selected,
+        onClick = onClick,
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SwipeBackground(state: SwipeToDismissBoxState) {
+    val colors = MaterialTheme.colorScheme
+    val direction = state.dismissDirection
+    val armed = state.targetValue != SwipeToDismissBoxValue.Settled
+    val deleting = direction == SwipeToDismissBoxValue.EndToStart
+    val container by animateColorAsState(
+        targetValue = when {
+            !armed -> colors.surfaceContainerHigh
+            deleting -> colors.errorContainer
+            else -> colors.secondaryContainer
+        },
+        label = "swipeContainer",
+    )
+    val content = when {
+        !armed -> colors.onSurfaceVariant
+        deleting -> colors.onErrorContainer
+        else -> colors.onSecondaryContainer
+    }
+    Box(
+        modifier = Modifier.fillMaxSize().background(container).padding(horizontal = 24.dp),
+        contentAlignment = if (deleting) Alignment.CenterEnd else Alignment.CenterStart,
+    ) {
+        if (direction != SwipeToDismissBoxValue.Settled) {
+            Icon(
+                imageVector = if (deleting) Icons.Outlined.Delete else Icons.Outlined.Edit,
+                contentDescription = if (deleting) "Delete" else "Edit",
+                tint = content,
             )
         }
     }
@@ -825,7 +965,23 @@ private fun FolderRow(
 
 @Composable
 private fun SnippetMetaRow(snippet: SnippetRecord, categoryName: String?) {
+    val kind = remember(snippet.isImage, snippet.text) { snippetKind(snippet.isImage, snippet.text) }
     Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(
+            imageVector = when (kind) {
+                SnippetKind.Text -> Icons.AutoMirrored.Outlined.ShortText
+                SnippetKind.Link -> Icons.Outlined.Link
+                SnippetKind.Image -> Icons.Outlined.Image
+            },
+            contentDescription = when (kind) {
+                SnippetKind.Text -> "Text"
+                SnippetKind.Link -> "Link"
+                SnippetKind.Image -> "Image"
+            },
+            modifier = Modifier.size(14.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(modifier = Modifier.width(6.dp))
         Text(
             text = relativeTime(
                 then = snippet.updatedAt.takeIf { it > 0 } ?: snippet.createdAt,

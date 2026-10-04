@@ -5,9 +5,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.material.icons.Icons
@@ -15,7 +17,10 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
@@ -31,8 +36,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.pastille.data.SnippetRepository
+import app.pastille.images.ImageThumbnail
 import app.pastille.model.SnippetRecord
 import kotlinx.coroutines.launch
 
@@ -42,22 +50,42 @@ fun SnippetEditorScreen(
     snippetId: Long?,
     repository: SnippetRepository,
     onDone: () -> Unit,
+    initialCategoryId: Long? = null,
 ) {
     val scope = rememberCoroutineScope()
     var ready by remember { mutableStateOf(snippetId == null) }
+    var existing by remember { mutableStateOf<SnippetRecord?>(null) }
     var title by remember { mutableStateOf("") }
     var text by remember { mutableStateOf("") }
     var pinned by remember { mutableStateOf(false) }
+    var categoryId by remember { mutableStateOf(initialCategoryId) }
+    var categoryExpanded by remember { mutableStateOf(false) }
+    var showCreateCategory by remember { mutableStateOf(false) }
+    val categories by remember { repository.observeCategories() }
+        .collectAsStateWithLifecycle(initialValue = emptyList())
 
     LaunchedEffect(snippetId) {
         if (snippetId != null) {
             val record = repository.get(snippetId)
             if (record != null) {
+                existing = record
                 title = record.title
                 text = record.text
                 pinned = record.pinned
+                categoryId = record.categoryId
             }
             ready = true
+        }
+    }
+    val isImage = existing?.isImage == true
+    val selectedCategoryName = categories.firstOrNull { it.id == categoryId }?.name ?: "None"
+    val imageRatio = remember(existing?.imageWidth, existing?.imageHeight) {
+        val width = existing?.imageWidth
+        val height = existing?.imageHeight
+        if (width != null && height != null && width > 0 && height > 0) {
+            width.toFloat() / height
+        } else {
+            1f
         }
     }
 
@@ -86,7 +114,7 @@ fun SnippetEditorScreen(
                     }
                     IconButton(
                         onClick = {
-                            if (text.isBlank()) return@IconButton
+                            if (text.isBlank() && !isImage) return@IconButton
                             scope.launch {
                                 val existing = if (snippetId != null) repository.get(snippetId) else null
                                 repository.upsert(
@@ -94,12 +122,13 @@ fun SnippetEditorScreen(
                                         title = title,
                                         text = text,
                                         pinned = pinned,
+                                        categoryId = categoryId,
                                     ),
                                 )
                                 onDone()
                             }
                         },
-                        enabled = ready && text.isNotBlank(),
+                        enabled = ready && (text.isNotBlank() || isImage),
                     ) {
                         Icon(Icons.Filled.Check, contentDescription = "Save snippet")
                     }
@@ -121,19 +150,86 @@ fun SnippetEditorScreen(
                 label = { Text("Title (optional)") },
                 singleLine = true,
             )
-            OutlinedTextField(
-                value = text,
-                onValueChange = { text = it },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                label = { Text("Text") },
-            )
+            if (isImage) {
+                val imageFile = existing?.imageFile
+                if (imageFile != null) {
+                    ImageThumbnail(
+                        fileName = imageFile,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 240.dp).aspectRatio(imageRatio),
+                        contentScale = ContentScale.Fit,
+                    )
+                }
+            } else {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    label = { Text("Text") },
+                )
+            }
+            ExposedDropdownMenuBox(
+                expanded = categoryExpanded,
+                onExpandedChange = { categoryExpanded = it },
+            ) {
+                OutlinedTextField(
+                    value = selectedCategoryName,
+                    onValueChange = {},
+                    readOnly = true,
+                    modifier = Modifier.menuAnchor().fillMaxWidth(),
+                    label = { Text("Category") },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoryExpanded) },
+                    singleLine = true,
+                )
+                ExposedDropdownMenu(
+                    expanded = categoryExpanded,
+                    onDismissRequest = { categoryExpanded = false },
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("None") },
+                        onClick = {
+                            categoryId = null
+                            categoryExpanded = false
+                        },
+                    )
+                    categories.sortedBy { it.position }.forEach { category ->
+                        DropdownMenuItem(
+                            text = { Text(category.name) },
+                            onClick = {
+                                categoryId = category.id
+                                categoryExpanded = false
+                            },
+                        )
+                    }
+                    DropdownMenuItem(
+                        text = { Text("New category…") },
+                        onClick = {
+                            categoryExpanded = false
+                            showCreateCategory = true
+                        },
+                    )
+                }
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(checked = pinned, onCheckedChange = { pinned = it })
                 Text("Pinned")
             }
             Spacer(Modifier.height(8.dp))
         }
+    }
+    if (showCreateCategory) {
+        CategoryNameDialog(
+            initialName = "",
+            title = "New category",
+            confirmLabel = "Create",
+            onConfirm = { name ->
+                val id = repository.createCategory(name)
+                categoryId = id
+                null
+            },
+            onDismiss = { showCreateCategory = false },
+        )
     }
 }

@@ -16,6 +16,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import app.pastille.data.SnippetRepository
 import app.pastille.model.SnippetRecord
+import app.pastille.ui.SettingsScreen
 import app.pastille.ui.SnippetEditorScreen
 import app.pastille.ui.SnippetListScreen
 import app.pastille.ui.theme.PastilleTheme
@@ -77,6 +78,7 @@ private fun PastilleApp(
 ) {
     var editingId: Long? by rememberSaveable { mutableStateOf<Long?>(null) }
     var creating: Boolean by rememberSaveable { mutableStateOf(false) }
+    var showingSettings by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
     val repository = remember { SnippetRepository.forContext(context) }
 
@@ -92,12 +94,17 @@ private fun PastilleApp(
             }
             null -> return@LaunchedEffect
         }
+        showingSettings = false
         onLaunchRequestHandled()
     }
 
-    BackHandler(enabled = editingId != null || creating) {
-        editingId = null
-        creating = false
+    BackHandler(enabled = editingId != null || creating || showingSettings) {
+        if (editingId != null || creating) {
+            editingId = null
+            creating = false
+        } else {
+            showingSettings = false
+        }
     }
 
     if (editingId != null || creating) {
@@ -109,11 +116,14 @@ private fun PastilleApp(
                 creating = false
             },
         )
+    } else if (showingSettings) {
+        SettingsScreen(onBack = { showingSettings = false })
     } else {
         SnippetListScreen(
             repository = repository,
             onCreate = { creating = true },
             onEdit = { snippet: SnippetRecord -> editingId = snippet.id },
+            onOpenSettings = { showingSettings = true },
         )
     }
 }

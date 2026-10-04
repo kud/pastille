@@ -1,5 +1,6 @@
 package app.pastille.tile
 
+import android.annotation.SuppressLint
 import android.app.PendingIntent
 import android.content.Intent
 import android.os.Build
@@ -29,10 +30,15 @@ class PastilleTileService : TileService() {
                 )
                 startActivityAndCollapse(pendingIntent)
             } else {
-                @Suppress("DEPRECATION")
-                startActivityAndCollapse(intent)
+                startActivityAndCollapseLegacy(intent)
             }
         }
+    }
+
+    @SuppressLint("StartActivityAndCollapseDeprecated")
+    @Suppress("DEPRECATION")
+    private fun startActivityAndCollapseLegacy(intent: Intent) {
+        startActivityAndCollapse(intent)
     }
 
     private fun refreshTile() {

@@ -77,6 +77,7 @@ import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import sh.calvin.reorderable.rememberReorderableLazyGridState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.DragIndicator
 import androidx.compose.material.icons.rounded.SwapVert
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.PhotoCamera
@@ -563,7 +564,6 @@ private fun FolderContent(state: KeyboardUiState, actions: KeyboardActions) {
                     folders.map { ChipEntry(it.id, it.name, Icons.Rounded.Folder) },
                 selectedId = folderId,
                 onSelect = actions::onOpenFolder,
-                onReorder = actions::onReorderFolders,
             )
         }
         AnimatedContent(
@@ -606,7 +606,7 @@ private fun FolderChipRow(
     val reorderState = rememberReorderableLazyListState(rowState) { from, to ->
         val fromIndex = order.indexOfFirst { it.id == from.key }
         val toIndex = order.indexOfFirst { it.id == to.key }
-        if (fromIndex > 0 && toIndex > 0) order = order.toMutableList().apply { add(toIndex, removeAt(fromIndex)) }
+        if (fromIndex >= 0 && toIndex >= 0) order = order.toMutableList().apply { add(toIndex, removeAt(fromIndex)) }
     }
     LaunchedEffect(selectedId) {
         val index = entries.indexOfFirst { it.id == selectedId }
@@ -622,12 +622,16 @@ private fun FolderChipRow(
         items(order, key = { it.id ?: Long.MIN_VALUE }) { entry ->
             val chip = @Composable { modifier: Modifier ->
                 Box(modifier = modifier) {
-                    FilterToggleChip(
-                        label = entry.label,
-                        icon = entry.icon,
-                        selected = entry.id == selectedId,
-                        onClick = { onSelect(entry.id) },
-                    )
+                    if (onReorder != null) {
+                        DragChip(label = entry.label, icon = entry.icon, movable = entry.id != null)
+                    } else {
+                        FilterToggleChip(
+                            label = entry.label,
+                            icon = entry.icon,
+                            selected = entry.id == selectedId,
+                            onClick = { onSelect(entry.id) },
+                        )
+                    }
                 }
             }
             if (onReorder != null && entry.id != null) {
@@ -636,7 +640,7 @@ private fun FolderChipRow(
                     chip(
                         Modifier
                             .graphicsLayer { scaleX = scale; scaleY = scale }
-                            .longPressDraggableHandle(
+                            .draggableHandle(
                                 onDragStarted = { haptics.performHapticFeedback(HapticFeedbackType.LongPress) },
                                 onDragStopped = { onReorder(order.mapNotNull { it.id }) },
                             ),
@@ -790,7 +794,7 @@ private val TileHeight = 88.dp
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun Tile(
-    onClick: () -> Unit,
+    onClick: (() -> Unit)?,
     onLongClick: (() -> Unit)?,
     modifier: Modifier = Modifier,
     highlighted: Boolean = false,
@@ -817,11 +821,17 @@ private fun Tile(
             .clip(TileShape)
             .background(color)
             .background(palette.accent.copy(alpha = flash))
-            .combinedClickable(
-                interactionSource = interaction,
-                indication = null,
-                onLongClick = onLongClick,
-                onClick = onClick,
+            .then(
+                if (onClick == null) {
+                    Modifier
+                } else {
+                    Modifier.combinedClickable(
+                        interactionSource = interaction,
+                        indication = null,
+                        onLongClick = onLongClick,
+                        onClick = onClick,
+                    )
+                },
             ),
         content = content,
     )
@@ -841,7 +851,7 @@ private fun SnippetTile(
     val title = displayTitle(snippet.title, snippet.text).ifBlank { if (snippet.isImage) "Image" else "" }
     val imageFile = snippet.imageFile
     Tile(
-        onClick = if (interactive) onTap else ({}),
+        onClick = if (interactive) onTap else null,
         onLongClick = if (interactive) onLongPress else null,
         highlighted = highlighted,
         modifier = modifier.semantics(mergeDescendants = true) {
@@ -1721,7 +1731,17 @@ private fun ReorderContent(state: KeyboardUiState, actions: KeyboardActions) {
         val toIndex = order.indexOfFirst { it.id == to.key }
         if (fromIndex >= 0 && toIndex >= 0) order = order.toMutableList().apply { add(toIndex, removeAt(fromIndex)) }
     }
-    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+    val folders = state.categories.sortedBy { it.position }
+    Column(modifier = Modifier.fillMaxSize()) {
+    if (folders.size > 1) {
+        FolderChipRow(
+            entries = folders.map { ChipEntry(it.id, it.name, Icons.Rounded.Folder) },
+            selectedId = null,
+            onSelect = {},
+            onReorder = actions::onReorderFolders,
+        )
+    }
+    BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxWidth()) {
         LazyVerticalGrid(
             columns = GridCells.Fixed(tileColumns(maxWidth.value.toInt())),
             state = gridState,
@@ -1753,5 +1773,23 @@ private fun ReorderContent(state: KeyboardUiState, actions: KeyboardActions) {
                 }
             }
         }
+    }
+    }
+}
+
+@Composable
+private fun DragChip(label: String, icon: ImageVector, movable: Boolean) {
+    val palette = LocalKeyboardPalette.current
+    Row(
+        modifier = Modifier
+            .height(32.dp)
+            .clip(RoundedCornerShape(50))
+            .background(palette.key)
+            .padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(if (movable) Icons.Rounded.DragIndicator else icon, contentDescription = null, tint = palette.icon, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(6.dp))
+        Text(label, style = MaterialTheme.typography.labelLarge, color = palette.label, maxLines = 1)
     }
 }

@@ -13,6 +13,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import app.pastille.ime.ImageSourceReader
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -113,6 +115,8 @@ import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -123,6 +127,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalView
+import android.view.HapticFeedbackConstants
+import app.pastille.ime.PastilleMotion
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
@@ -641,6 +650,7 @@ fun SnippetListScreen(
                                     onEdit = { onEdit(snippet) },
                                     onCopy = { copySnippet(snippet) },
                                     onDelete = { deleteSnippet(snippet) },
+                                    onSwipeStartToEnd = { onEdit(snippet) },
                                     folders = orderedFolders,
                                     onMove = { moveSnippet(snippet, it) },
                                 )
@@ -751,6 +761,7 @@ internal fun SnippetRow(
     onEdit: () -> Unit,
     onCopy: () -> Unit,
     onDelete: () -> Unit,
+    onSwipeStartToEnd: () -> Unit,
     folders: List<CategoryRecord> = emptyList(),
     onMove: ((Long?) -> Unit)? = null,
     containerColor: Color = MaterialTheme.colorScheme.surface,
@@ -760,30 +771,39 @@ internal fun SnippetRow(
     var expanded by rememberSaveable(snippet.id) { mutableStateOf(false) }
     var overflows by remember(snippet.id) { mutableStateOf(false) }
     var deleting by remember(snippet.id) { mutableStateOf(false) }
-    val currentOnEdit by rememberUpdatedState(onEdit)
+    val currentOnSwipeStartToEnd by rememberUpdatedState(onSwipeStartToEnd)
     val currentOnDelete by rememberUpdatedState(onDelete)
     val imageFile = snippet.imageFile
+    val swipe = remember { SwipeGeometry() }
     val swipeState = rememberSwipeToDismissBoxState(
         confirmValueChange = { value ->
             when (value) {
                 SwipeToDismissBoxValue.StartToEnd -> {
-                    currentOnEdit()
+                    if (swipe.pastThreshold(value)) {
+                        swipe.committed = true
+                        currentOnSwipeStartToEnd()
+                    }
                     false
                 }
                 SwipeToDismissBoxValue.EndToStart -> {
-                    if (!deleting) {
+                    val confirmed = deleting || swipe.pastThreshold(value)
+                    if (confirmed && !deleting) {
                         deleting = true
+                        swipe.committed = true
                         currentOnDelete()
                     }
-                    true
+                    confirmed
                 }
                 SwipeToDismissBoxValue.Settled -> true
             }
         },
+        positionalThreshold = { distance -> distance * swipeFraction(swipe.direction()) },
     )
+    swipe.state = swipeState
     SwipeToDismissBox(
         state = swipeState,
-        backgroundContent = { SwipeBackground(swipeState) },
+        modifier = Modifier.onSizeChanged { swipe.width = it.width.toFloat() },
+        backgroundContent = { SwipeBackground(swipeState, swipe) },
     ) {
         Box(modifier = Modifier.fillMaxWidth().background(containerColor)) {
             if (snippet.isImage && imageFile != null) {
@@ -934,35 +954,91 @@ private fun FolderChoice(name: String, selected: Boolean, onClick: () -> Unit) {
     )
 }
 
+// The swipe-right action lives here and in the row's onSwipeStartToEnd, nowhere else.
+private val StartToEndIcon: ImageVector get() = Icons.Rounded.Edit
+private const val START_TO_END_LABEL = "Edit"
+
+@OptIn(ExperimentalMaterial3Api::class)
+private class SwipeGeometry {
+    var state: SwipeToDismissBoxState? = null
+    var width by mutableFloatStateOf(0f)
+
+    // Set when an action fires, so the snap-back doesn't play the "below threshold" haptic.
+    var committed = false
+
+    fun direction(): SwipeToDismissBoxValue = state?.dismissDirection ?: SwipeToDismissBoxValue.Settled
+
+    fun offset(): Float = state?.let { runCatching { it.requireOffset() }.getOrNull() } ?: 0f
+
+    fun pastThreshold(direction: SwipeToDismissBoxValue): Boolean =
+        swipePastThreshold(direction, offset(), width)
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SwipeBackground(state: SwipeToDismissBoxState) {
+private fun SwipeBackground(state: SwipeToDismissBoxState, swipe: SwipeGeometry) {
     val colors = MaterialTheme.colorScheme
     val direction = state.dismissDirection
-    val armed = state.targetValue != SwipeToDismissBoxValue.Settled
+    val armed by remember(state, swipe) { derivedStateOf { swipe.pastThreshold(state.dismissDirection) } }
     val deleting = direction == SwipeToDismissBoxValue.EndToStart
+    val view = LocalView.current
+    var wasArmed by remember { mutableStateOf(false) }
+    LaunchedEffect(armed) {
+        if (armed && !wasArmed) {
+            view.performHapticFeedback(
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    HapticFeedbackConstants.GESTURE_THRESHOLD_ACTIVATE
+                } else {
+                    HapticFeedbackConstants.CONTEXT_CLICK
+                },
+            )
+        } else if (!armed && wasArmed && !swipe.committed &&
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
+        ) {
+            view.performHapticFeedback(HapticFeedbackConstants.GESTURE_THRESHOLD_DEACTIVATE)
+        }
+        wasArmed = armed
+    }
+    LaunchedEffect(direction) {
+        if (direction == SwipeToDismissBoxValue.Settled) swipe.committed = false
+    }
+    val feedbackSpec = tween<Color>(PastilleMotion.SHORT_MS, easing = PastilleMotion.Standard)
     val container by animateColorAsState(
         targetValue = when {
             !armed -> colors.surfaceContainerHigh
             deleting -> colors.errorContainer
             else -> colors.secondaryContainer
         },
+        animationSpec = feedbackSpec,
         label = "swipeContainer",
     )
-    val content = when {
-        !armed -> colors.onSurfaceVariant
-        deleting -> colors.onErrorContainer
-        else -> colors.onSecondaryContainer
-    }
+    val content by animateColorAsState(
+        targetValue = when {
+            !armed -> colors.onSurfaceVariant
+            deleting -> colors.onErrorContainer
+            else -> colors.onSecondaryContainer
+        },
+        animationSpec = feedbackSpec,
+        label = "swipeContent",
+    )
+    val iconScale by animateFloatAsState(
+        targetValue = if (armed) 1f else 0.85f,
+        animationSpec = tween(PastilleMotion.SHORT_MS, easing = PastilleMotion.Standard),
+        label = "swipeIconScale",
+    )
     Box(
         modifier = Modifier.fillMaxSize().background(container).padding(horizontal = 24.dp),
         contentAlignment = if (deleting) Alignment.CenterEnd else Alignment.CenterStart,
     ) {
         if (direction != SwipeToDismissBoxValue.Settled) {
             Icon(
-                imageVector = if (deleting) Icons.Rounded.Delete else Icons.Rounded.Edit,
-                contentDescription = if (deleting) "Delete" else "Edit",
+                imageVector = if (deleting) Icons.Rounded.Delete else StartToEndIcon,
+                contentDescription = if (deleting) "Delete" else START_TO_END_LABEL,
                 tint = content,
+                modifier = Modifier.graphicsLayer {
+                    scaleX = iconScale
+                    scaleY = iconScale
+                },
             )
         }
     }

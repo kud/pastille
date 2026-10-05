@@ -50,6 +50,7 @@ import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import app.pastille.MainActivity
 import app.pastille.data.SnippetRepository
 import app.pastille.images.ImageStore
+import app.pastille.images.copyToSharedCache
 import app.pastille.images.mimeTypeForFile
 import app.pastille.model.CategoryRecord
 import app.pastille.model.SnippetRecord
@@ -71,8 +72,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
-import java.io.IOException
 
 class PastilleImeService :
     InputMethodService(),
@@ -679,7 +678,7 @@ class PastilleImeService :
                 null
             } ?: "image/png"
             val contentUri = try {
-                copyToSharedCache(image, mimeType)
+                copyToSharedCache(this@PastilleImeService, image.uri, mimeType)
             } catch (_: Exception) {
                 null
             }
@@ -727,18 +726,6 @@ class PastilleImeService :
         val clip = ClipData.newUri(contentResolver, label, contentUri)
         clipboard.setPrimaryClip(clip)
         showStrip("Copied, long-press to paste")
-    }
-
-    private fun copyToSharedCache(image: ImageItem, mimeType: String): Uri {
-        val dir = File(cacheDir, "shared").apply { mkdirs() }
-        val extension = if (mimeType == "image/jpeg") "jpg" else mimeType.substringAfter('/')
-        val out = File(dir, "image-${System.currentTimeMillis()}.$extension")
-        val input = contentResolver.openInputStream(image.uri)
-            ?: throw IOException("Cannot open ${image.uri}")
-        input.use { stream ->
-            out.outputStream().use { output -> stream.copyTo(output) }
-        }
-        return FileProvider.getUriForFile(this, "$packageName.fileprovider", out)
     }
 
     override fun onOpenApp() {

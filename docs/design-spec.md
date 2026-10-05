@@ -1066,3 +1066,31 @@ The Settings screen was one long column of `ListItem`s under `primary` section h
 **Motion**
 
 - [x] §11.13 applies unchanged: ripple on press, Material defaults for switches, radios and segmented buttons, the style preview's 150ms crossfade and the height preview's `ENTER_MS` resize. The cards and tiles themselves never animate.
+
+## 13. Quick Settings tile: the snippet picker sheet
+
+The tile opens a sheet of snippets and images to copy, over whatever app is open. It no longer switches keyboards.
+
+**Tile**
+
+- [ ] Label "Pastille", subtitle "Snippets", the Pastille mark as the icon.
+- [ ] A stateless button, always `STATE_INACTIVE`, like Android's screen recorder and QR scanner tiles. It is no longer an on/off toggle.
+- [ ] Locked → unlock first (`unlockAndRun`). Snippets never show over the keyguard.
+
+**Sheet**
+
+```
+  ─────                       [⌨]
+ [🔍 Search snippets          ]
+ (Snippets | Images)
+ (All) (▭ Personal) (▭ Prompts)
+ ┌────┐ ┌────┐ ┌────┐
+ │ …  │ │ …  │ │ …  │
+```
+
+- [ ] A `ModalBottomSheet` in a translucent `PickerActivity`. It opens at half height and drags to full. It wears the keyboard palette, so it reads as the panel.
+- [ ] The content is the keyboard panel's own layout (shared composables, not a copy): the Snippets/Images switch, the folder chips, the 88dp tile grid, and recent images under Images. `ShareSheet` is not reused: that is a save flow, this is a pick flow.
+- [ ] **Search** sits at the top and is not focused on open, so the keyboard doesn't jump up. Under Snippets it matches title or text across every folder, and the folder chips hide while it has a query. Under Images it matches the file name.
+- [ ] **Tap** copies, records the use, then closes the sheet. Text is a plain clip; an image is a `FileProvider` URI clip. Android 13+ shows its own clipboard confirmation; below 13, a "Copied" toast.
+- [ ] **Long-press** opens the actions in the sheet: Edit in app, Delete (with Undo in a strip at the bottom), Share for image snippets, and the Folder chips to move it. On a recent image: Copy and Share.
+- [ ] **[⌨]** in the header opens the system keyboard picker. The keyboard switch lives here now.

@@ -206,7 +206,17 @@ The design spec's single-panel state machine (`Browse | Add | Actions(snippetId)
 
 ## 8. Quick Settings tile (feature 6)
 
-### Mechanics
+### Now: the tile opens the snippet picker sheet
+
+The tile no longer switches keyboards. It is a stateless button, always `STATE_INACTIVE`, labelled "Pastille" with the subtitle "Snippets" and the Pastille mark as its icon, like Android's screen recorder and QR scanner tiles.
+
+- **Launch:** `onClick` starts `picker.PickerActivity` through the same two branches as before (`startActivityAndCollapse(PendingIntent)` on API 34+, the deprecated `Intent` overload below), wrapped in `unlockAndRun` when `isLocked`. Snippets never show over the keyguard.
+- **Container:** `PickerActivity` is translucent like `ShareActivity` (`Theme.Pastille.Translucent`, `excludeFromRecents`, `taskAffinity=""`) and holds a `ModalBottomSheet` that opens at half height and drags to full. It uses the keyboard palette (`keyboardPalette` with the saved keyboard style), so the sheet looks like the panel.
+- **Shared cards:** the panel's mode switch, folder chips, snippet tiles, image tiles and both grids live in `ime/SnippetCards.kt` (`SnippetGrid`, `ImageGrid`, `ModeSwitch`, `FolderChipRow`). `KeyboardPanel` and the sheet both call them; the sheet passes its own `KeyboardActions`, so tap and long-press mean copy and actions there. The keyboard's behaviour is unchanged by the extraction.
+- **Copy:** every copy, from the sheet and from the app, goes through `clipboard.copySnippet()`. Text is a plain clip; an image snippet is a `FileProvider` URI clip; a recent image is first copied to `cache/shared/` with `images.copyToSharedCache` (the same fallback the keyboard uses, now shared). A tapped snippet also calls `recordUse` on the application's `backgroundScope`, so closing the sheet can't cancel it. Below Android 13 the sheet shows a "Copied" toast; 13+ shows the system confirmation.
+- **[⌨] in the header** starts `ImePickerActivity`, the system keyboard picker, and closes the sheet. `ImeSwitcher.toggle` and the adb `WRITE_SECURE_SETTINGS` fast path below are no longer reached from the tile.
+
+### Before: keyboard switching (kept for reference)
 
 - `PastilleTileService : TileService`, `BIND_QUICK_SETTINGS_TILE`, monochrome icon (reuse `ic_launcher_monochrome`), label "Pastille". `onStartListening` sets `STATE_ACTIVE` when Pastille is the current IME, else `STATE_INACTIVE`.
 - **Fast path** (`checkSelfPermission(WRITE_SECURE_SETTINGS) == GRANTED`):

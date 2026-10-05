@@ -3,4 +3,6 @@
     <string name="app_name">Pastille</string>
     <string name="share_label">Save to Pastille</string>
     <string name="tile_label">Pastille</string>
+    <string name="tile_subtitle">Snippets</string>
+    <string name="picker_label">Pastille snippets</string>
 </resources>

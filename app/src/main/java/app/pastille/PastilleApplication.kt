@@ -14,7 +14,8 @@ import kotlinx.coroutines.launch
 
 class PastilleApplication : Application() {
 
-    private val startupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    // Outlives any one screen: startup chores, and writes a closing sheet must not cancel.
+    val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onCreate() {
         super.onCreate()
@@ -31,10 +32,10 @@ class PastilleApplication : Application() {
             }
             previous?.uncaughtException(thread, throwable)
         }
-        startupScope.launch {
+        backgroundScope.launch {
             runCatching { SnippetRepository.forContext(this@PastilleApplication).backfillTitles() }
         }
-        startupScope.launch {
+        backgroundScope.launch {
             runCatching {
                 val referenced =
                     DatabaseHolder.get(this@PastilleApplication).snippets().allImageFiles().toSet()

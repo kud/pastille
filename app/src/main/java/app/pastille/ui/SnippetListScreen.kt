@@ -841,7 +841,7 @@ fun SnippetListScreen(
                                     onDelete = { deleteSnippet(snippet) },
                                     onSwipeStartToEnd = { openOrganise(snippet) },
                                     folders = orderedFolders,
-                                    onMove = { moveSnippet(snippet, it) },
+                                    onMove = if (snippet.sticker) null else ({ moveSnippet(snippet, it) }),
                                 )
                             }
                         }

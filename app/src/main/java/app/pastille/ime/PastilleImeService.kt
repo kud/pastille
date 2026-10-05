@@ -664,6 +664,7 @@ class PastilleImeService :
 
     override fun onSnippetTap(snippet: SnippetRecord) {
         if (snippet.isImage) {
+            if (panelState.value is PanelState.Actions) panelState.value = PanelState.Browse
             insertImageSnippet(snippet)
             return
         }

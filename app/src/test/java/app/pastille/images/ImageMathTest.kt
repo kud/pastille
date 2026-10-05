@@ -1,6 +1,8 @@
 package app.pastille.images
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -43,7 +45,7 @@ class ImageMathTest {
         assertEquals("gif", extensionFor("image/gif"))
         assertEquals("png", extensionFor("image/png"))
         assertEquals("jpg", extensionFor("image/jpeg"))
-        assertEquals("jpg", extensionFor("image/webp"))
+        assertEquals("webp", extensionFor("image/webp"))
         assertEquals("jpg", extensionFor("image/heic"))
         assertEquals("jpg", extensionFor(""))
     }
@@ -95,7 +97,64 @@ class ImageMathTest {
         assertEquals(listOf("old.png"), staleShared(files, now))
     }
 
+    @Test
+    fun storedNameMatchesTheStemWhateverTheExtension() {
+        val present = listOf(".tmp-abc", "0123.jpg", "4567.png")
+        assertEquals("0123.jpg", storedNameForStem("0123", present))
+        assertEquals("4567.png", storedNameForStem("4567", present))
+        assertNull(storedNameForStem("89ab", present))
+    }
+
+    @Test
+    fun isAnimatedWebpReadsTheVp8xAnimationFlag() {
+        assertTrue(isAnimatedWebp(webpHeader("VP8X", flags = 0x02)))
+        assertTrue(isAnimatedWebp(webpHeader("VP8X", flags = 0x12)))
+        assertFalse(isAnimatedWebp(webpHeader("VP8X", flags = 0x10)))
+        assertFalse(isAnimatedWebp(webpHeader("VP8 ", flags = 0x02)))
+        assertFalse(isAnimatedWebp(webpHeader("VP8L", flags = 0x02)))
+    }
+
+    @Test
+    fun isAnimatedWebpIsFalseOnShortOrGarbageInput() {
+        assertFalse(isAnimatedWebp(ByteArray(0)))
+        assertFalse(isAnimatedWebp(webpHeader("VP8X", flags = 0x02).copyOf(20)))
+        assertFalse(isAnimatedWebp(ByteArray(64) { (it * 37).toByte() }))
+    }
+
+    @Test
+    fun storagePlanKeepsAnimationAndTransparency() {
+        assertEquals(StoragePlan.Copy, storagePlan("image/webp", 3000, 3000, MB, animated = true))
+        assertEquals(StoragePlan.Copy, storagePlan("image/webp", 512, 512, MB, animated = false))
+        assertEquals(StoragePlan.Copy, storagePlan("image/gif", 3000, 3000, MB, animated = false))
+        assertEquals(StoragePlan.Copy, storagePlan("image/png", 1000, 1000, MB, animated = false))
+    }
+
+    @Test
+    fun storagePlanRefusesOversizedAnimations() {
+        assertTrue(storagePlan("image/webp", 512, 512, 16 * MB, animated = true) is StoragePlan.Refuse)
+        assertTrue(storagePlan("image/gif", 512, 512, 16 * MB, animated = false) is StoragePlan.Refuse)
+    }
+
+    @Test
+    fun storagePlanTranscodesLargeOrOtherImages() {
+        assertEquals(StoragePlan.Transcode(2048), storagePlan("image/webp", 4000, 3000, MB, animated = false))
+        assertEquals(StoragePlan.Transcode(2048), storagePlan("image/png", 4000, 3000, MB, animated = false))
+        assertEquals(StoragePlan.Transcode(2048), storagePlan("image/jpeg", 4000, 3000, MB, animated = false))
+        assertEquals(StoragePlan.Transcode(2048), storagePlan("image/jpeg", 800, 600, MB, animated = false))
+        assertEquals(StoragePlan.Transcode(2048), storagePlan(null, 800, 600, MB, animated = false))
+    }
+
+    private fun webpHeader(chunk: String, flags: Int): ByteArray {
+        val bytes = ByteArray(30)
+        "RIFF".forEachIndexed { i, c -> bytes[i] = c.code.toByte() }
+        "WEBP".forEachIndexed { i, c -> bytes[8 + i] = c.code.toByte() }
+        chunk.forEachIndexed { i, c -> bytes[12 + i] = c.code.toByte() }
+        bytes[20] = flags.toByte()
+        return bytes
+    }
+
     private companion object {
+        const val MB = 1024L * 1024
         const val NOW = 1_000_000_000L
         const val HOUR = 60 * 60 * 1000L
     }

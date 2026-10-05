@@ -68,26 +68,33 @@ class ImageStore(private val appContext: Context) {
                 }
             } ?: throw ImageImportException("Unreadable image")
             val bounds = boundsOf(sourceTmp) ?: throw ImageImportException("Unreadable image")
-            val mime = declaredMime?.takeIf { it.isNotBlank() } ?: bounds.outMimeType?.lowercase()
-            val ext = extensionFor(mime ?: "image/jpeg")
-            val fileName = hashName(digest.digest(), ext)
+            // A copy keeps the bytes, so trust what the decoder found over what the sender declared.
+            val mime = bounds.outMimeType?.lowercase()?.takeIf { it.isNotBlank() }
+                ?: declaredMime?.takeIf { it.isNotBlank() }
+            val stem = hashStem(digest.digest())
+            val present = dir.listFiles()?.filter { it.isFile }?.map { it.name } ?: emptyList()
+            storedNameForStem(stem, present)?.let { existingName ->
+                val existing = boundsOf(File(dir, existingName))
+                    ?: throw ImageImportException("Unreadable image")
+                return@withContext StoredImage(existingName, existing.outWidth, existing.outHeight, true)
+            }
+            val plan = storagePlan(
+                mime = mime,
+                width = bounds.outWidth,
+                height = bounds.outHeight,
+                bytes = sourceTmp.length(),
+                animated = mime == "image/webp" && isAnimatedWebp(headerOf(sourceTmp)),
+            )
+            val ext = when (plan) {
+                is StoragePlan.Refuse -> throw ImageImportException(plan.reason)
+                StoragePlan.Copy -> {
+                    sourceTmp.copyTo(outTmp, overwrite = true)
+                    extensionFor(mime ?: "image/jpeg")
+                }
+                is StoragePlan.Transcode -> transcode(sourceTmp, outTmp, plan.maxEdge)
+            }
+            val fileName = "$stem.$ext"
             val target = File(dir, fileName)
-            if (target.exists()) {
-                val existing = boundsOf(target) ?: throw ImageImportException("Unreadable image")
-                return@withContext StoredImage(fileName, existing.outWidth, existing.outHeight, true)
-            }
-            val width = bounds.outWidth
-            val height = bounds.outHeight
-            when {
-                mime == "image/gif" -> {
-                    if (sourceTmp.length() > MAX_GIF_BYTES) throw ImageImportException("Image too large")
-                    sourceTmp.copyTo(outTmp, overwrite = true)
-                }
-                mime == "image/png" && maxOf(width, height) <= MAX_EDGE -> {
-                    sourceTmp.copyTo(outTmp, overwrite = true)
-                }
-                else -> transcode(sourceTmp, outTmp, mime == "image/png")
-            }
             if (!outTmp.renameTo(target) && !target.exists()) {
                 outTmp.copyTo(target)
             }
@@ -138,13 +145,14 @@ class ImageStore(private val appContext: Context) {
         return bitmap
     }
 
-    private fun transcode(source: File, dest: File, keepPng: Boolean) {
+    // Returns the extension actually written: PNG when the decoded bitmap has alpha, else JPEG.
+    private fun transcode(source: File, dest: File, maxEdge: Int): String {
         val bounds = boundsOf(source) ?: throw ImageImportException("Unreadable image")
-        val (targetWidth, targetHeight) = targetSize(bounds.outWidth, bounds.outHeight, MAX_EDGE)
+        val (targetWidth, targetHeight) = targetSize(bounds.outWidth, bounds.outHeight, maxEdge)
         val decoded = BitmapFactory.decodeFile(
             source.absolutePath,
             BitmapFactory.Options().apply {
-                inSampleSize = sampleSizeFor(bounds.outWidth, bounds.outHeight, MAX_EDGE)
+                inSampleSize = sampleSizeFor(bounds.outWidth, bounds.outHeight, maxEdge)
             },
         ) ?: throw ImageImportException("Unreadable image")
         var current = decoded
@@ -156,23 +164,38 @@ class ImageStore(private val appContext: Context) {
                     current = scaled
                 }
             }
-            if (!keepPng) {
-                val oriented = applyOrientation(current, source)
-                if (oriented !== current) {
-                    current.recycle()
-                    current = oriented
-                }
+            val oriented = applyOrientation(current, source)
+            if (oriented !== current) {
+                current.recycle()
+                current = oriented
             }
+            val keepAlpha = current.hasAlpha()
             dest.outputStream().use { out ->
-                if (keepPng) {
+                if (keepAlpha) {
                     current.compress(Bitmap.CompressFormat.PNG, 100, out)
                 } else {
                     current.compress(Bitmap.CompressFormat.JPEG, 90, out)
                 }
             }
+            return if (keepAlpha) "png" else "jpg"
         } finally {
             current.recycle()
         }
+    }
+
+    private fun headerOf(file: File): ByteArray = try {
+        file.inputStream().use { stream ->
+            val buffer = ByteArray(WEBP_HEADER_BYTES)
+            var filled = 0
+            while (filled < buffer.size) {
+                val read = stream.read(buffer, filled, buffer.size - filled)
+                if (read <= 0) break
+                filled += read
+            }
+            buffer.copyOf(filled)
+        }
+    } catch (_: IOException) {
+        ByteArray(0)
     }
 
     private fun applyOrientation(bitmap: Bitmap, source: File): Bitmap {
@@ -231,9 +254,8 @@ class ImageStore(private val appContext: Context) {
     }
 
     companion object {
-        const val MAX_EDGE = 2048
+        const val MAX_EDGE = STORAGE_MAX_EDGE
         const val MAX_SOURCE_BYTES = 40L * 1024 * 1024
-        const val MAX_GIF_BYTES = 15L * 1024 * 1024
 
         private val thumbnails = object : LruCache<String, Bitmap>(8 * 1024 * 1024) {
             override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount

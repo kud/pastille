@@ -246,6 +246,7 @@ fun PickerSheet(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SheetHeader(onSwitchKeyboard: () -> Unit) {
     val palette = LocalKeyboardPalette.current

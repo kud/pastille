@@ -70,6 +70,13 @@ android {
 
     testOptions {
         unitTests.isIncludeAndroidResources = true
+        // CI shows only the log: print why a test failed, not just where.
+        unitTests.all {
+            it.testLogging {
+                events("failed")
+                exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+            }
+        }
     }
 
     sourceSets {

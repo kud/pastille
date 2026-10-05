@@ -93,17 +93,38 @@ class DefaultHeaderHarnessTest {
         assertNotEquals(before.height, bounds("bar").height)
     }
 
+    private val listGestures: List<Pair<String, () -> Unit>> = listOf(
+        "slow swipe up" to { compose.onNodeWithTag("list").performTouchInput { swipeUp(durationMillis = 800) } },
+        "fling up" to { compose.onNodeWithTag("list").performTouchInput { swipeUp(durationMillis = 60) } },
+        "short drag up" to { compose.onNodeWithTag("list").performTouchInput { swipeUp(startY = centerY, endY = centerY - 60f) } },
+        "fling down" to { compose.onNodeWithTag("list").performTouchInput { swipeDown(durationMillis = 60) } },
+    )
+
+    private val headerGestures: List<Pair<String, () -> Unit>> = listOf(
+        "header drag up" to { compose.onNodeWithTag("bar").performTouchInput { swipeUp(startY = bottom - 4f, endY = top + 4f) } },
+        "header drag down" to { compose.onNodeWithTag("bar").performTouchInput { swipeDown(startY = top + 4f, endY = bottom - 4f) } },
+    )
+
     @Test
-    fun `with the default behaviour, the list still never shows a void`() {
+    fun `default behaviour, list gestures only`() {
         compose.setContent { Harness(TopAppBarDefaults.exitUntilCollapsedScrollBehavior()) }
+        assertNoVoid(listGestures)
+    }
+
+    @Test
+    fun `default behaviour without snap, list gestures only`() {
+        compose.setContent { Harness(TopAppBarDefaults.exitUntilCollapsedScrollBehavior(snapAnimationSpec = null)) }
+        assertNoVoid(listGestures)
+    }
+
+    @Test
+    fun `default behaviour, list and header gestures`() {
+        compose.setContent { Harness(TopAppBarDefaults.exitUntilCollapsedScrollBehavior()) }
+        assertNoVoid(listGestures + headerGestures)
+    }
+
+    private fun assertNoVoid(gestures: List<Pair<String, () -> Unit>>) {
         val log = StringBuilder()
-        val gestures = listOf<Pair<String, () -> Unit>>(
-            "slow swipe up" to { compose.onNodeWithTag("list").performTouchInput { swipeUp(durationMillis = 800) } },
-            "fling up" to { compose.onNodeWithTag("list").performTouchInput { swipeUp(durationMillis = 60) } },
-            "header drag up" to { compose.onNodeWithTag("bar").performTouchInput { swipeUp(startY = bottom - 4f, endY = top + 4f) } },
-            "header drag down" to { compose.onNodeWithTag("bar").performTouchInput { swipeDown(startY = top + 4f, endY = bottom - 4f) } },
-            "fling down" to { compose.onNodeWithTag("list").performTouchInput { swipeDown(durationMillis = 60) } },
-        )
         repeat(4) { round ->
             gestures.forEach { (name, gesture) ->
                 gesture()

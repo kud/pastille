@@ -16,7 +16,7 @@ class BinTimeTest {
 
     @Test
     fun `partial days round up`() {
-        assertEquals(27, binDaysLeft(deletedAt = 0, now = 3 * day - 1))
+        assertEquals(28, binDaysLeft(deletedAt = 0, now = 3 * day - 1))
         assertEquals(27, binDaysLeft(deletedAt = 0, now = 3 * day))
         assertEquals(1, binDaysLeft(deletedAt = 0, now = 30 * day - 1))
     }

@@ -214,7 +214,7 @@ Panel layout, **Add** state:
   - **Write in Pastille app:** leading `Icons.Outlined.EditNote`, trailing `Icons.AutoMirrored.Outlined.OpenInNew` at 18dp; deep-links to the editor (section 4).
 - [ ] Empty source: row disabled (`ListItemDefaults.colors` disabled roles = `onSurface` at 0.38 alpha) with supporting text "Text field is empty" / "Clipboard is empty" / "Not available in this field" / "This app doesn't share its text". Never hide the row; a disabled row with a reason teaches how it works.
 - [ ] Source reading order (implementation detail for Engineering to confirm): `getSelectedText(0)` if a selection exists, else `getExtractedText(ExtractedTextRequest(), 0)?.text`, else `getTextBeforeCursor(N) + getTextAfterCursor(N)`. Read when Add opens and again on `onUpdateSelection`, so the preview is live.
-- [ ] **Category row (Build B):** under a `HorizontalDivider`, a `labelMedium` "Category" then a single-select `FilterChip` `LazyRow` (styling from section 3), first chip "None", preselected to the Browse tab's current category. The chosen category applies to whichever source is tapped next. Categories can't be *created* here (no typing); the last chip is an `AssistChip` "New in app" with an `OpenInNew` icon.
+- [ ] **Category row (Build B):** under a `HorizontalDivider`, a `labelMedium` "Category" then a single-select `FilterChip` `LazyRow` (styling from section 3), first chip "None", preselected to the Browse tab's current category. The chosen category applies to whichever source is tapped next. Categories can't be _created_ here (no typing); the last chip is an `AssistChip` "New in app" with an `OpenInNew` icon.
 - [ ] **On save:** return to Browse, scroll to the new card, give it a 600ms `secondaryContainer` highlight that fades out, and show the status strip "Saved "<title>"" + "Undo".
 - [ ] **Duplicate:** if identical text already exists, don't create a second one. Status strip: "Already saved as "<title>"" + "Show", which scrolls to and highlights it.
 - [ ] **Host field untouched:** saving never clears or edits the host field.
@@ -259,7 +259,7 @@ The text itself can't be edited in the panel. The **Edit** button opens a two-ro
 
 ### 7.4 Experimental: edit through the host field and the previous keyboard ⚠ feasibility unconfirmed
 
-There's no clean way to type *inside* the panel. Android runs one IME at a time, and `switchToPreviousInputMethod()` hides Pastille entirely. The workable version uses the host field as the editor:
+There's no clean way to type _inside_ the panel. Android runs one IME at a time, and `switchToPreviousInputMethod()` hides Pastille entirely. The workable version uses the host field as the editor:
 
 1. "Edit in this text field" inserts the snippet text at the cursor (`commitText`), stores a **pending edit** (snippet id + inserted range) in DataStore, and calls `switchToPreviousInputMethod()`.
 2. The user edits the text with their normal keyboard and switches back to Pastille (globe key or IME switcher).
@@ -318,14 +318,14 @@ Replace the two arrows with:
 
 ### 8.4 Colour roles
 
-| Element | Role |
-|---|---|
-| Bar container, expanded | `surface` |
+| Element                           | Role                                                                   |
+| --------------------------------- | ---------------------------------------------------------------------- |
+| Bar container, expanded           | `surface`                                                              |
 | Bar container, collapsed/scrolled | `surfaceContainer` (`LargeTopAppBar` colours `scrolledContainerColor`) |
-| Wordmark | `onSurface` |
-| Pastille mark | `primary` |
-| Action icons | `onSurfaceVariant` |
-| Menu container / items | defaults (`surfaceContainer` / `onSurface`) |
+| Wordmark                          | `onSurface`                                                            |
+| Pastille mark                     | `primary`                                                              |
+| Action icons                      | `onSurfaceVariant`                                                     |
+| Menu container / items            | defaults (`surfaceContainer` / `onSurface`)                            |
 
 The colour change on scroll is the elevation cue, so no shadow is needed. These are the same roles in light and dark, with dynamic colour on Android 12+.
 
@@ -482,23 +482,23 @@ UI copy says **"folder"** everywhere. Code can keep `category`.
   - **Open Pastille:** `IconButton` with `Icons.Outlined.Settings`, tooltip "Open Pastille". Opens the app's main screen.
   - **Switch keyboard:** `IconButton` with `Icons.Outlined.Keyboard`, tooltip "Switch keyboard".
 - [ ] **Remove** the standalone save-clipboard icon (`ContentPasteGo`). Clipboard saving lives in the Add state's "From clipboard" row (§7.1). Two adjacent icons for adding was the confusion.
-- [ ] I'm reversing my §3 call on the gear: on a keyboard the gear is *the* convention for "go to this keyboard's app" (Gboard does exactly this), and the convention beats literal semantics. `OpenInNew` stays only on text links that say where they go ("Edit in Pastille ↗").
+- [ ] I'm reversing my §3 call on the gear: on a keyboard the gear is _the_ convention for "go to this keyboard's app" (Gboard does exactly this), and the convention beats literal semantics. `OpenInNew` stays only on text links that say where they go ("Edit in Pastille ↗").
 - [ ] Width check at 360dp: segmented about 176dp, Add 40dp, two icons 96dp, padding 24dp, about 336dp in total. If the label scale pushes past that (large font settings), the segments drop to icons only (`Icons.Outlined.ShortText` and `Icons.Outlined.Image`, with the same content descriptions). Decide with `BoxWithConstraints` at < 360dp available.
 
 ### 10.3 Looking at home next to Gboard
 
 **Not achievable:** reading Gboard's actual theme. It's private to Gboard; there's no API or shared setting. Custom Gboard themes (photo backgrounds, solid colour themes, the "key borders" toggle) can't be followed.
 
-**Achievable:** Gboard's default theme *is* Material You from the wallpaper. With dynamic colour on (it already is), using the same tonal roles as Gboard makes Pastille sit beside it as a sibling. Roles:
+**Achievable:** Gboard's default theme _is_ Material You from the wallpaper. With dynamic colour on (it already is), using the same tonal roles as Gboard makes Pastille sit beside it as a sibling. Roles:
 
-| Gboard element | Pastille element | Role, light | Role, dark |
-|---|---|---|---|
-| Keyboard background | Panel background | `surfaceContainer` | `surfaceContainer` |
-| Letter keys | Title buttons, folder buttons | `surfaceContainerLowest` | `surfaceBright` |
-| Function keys (shift, delete) | Add button, active segment | `secondaryContainer` | `secondaryContainer` |
-| Enter key | (nothing; only one accent, and we don't need it) | — | — |
-| Key labels | Button text | `onSurface` | `onSurface` |
-| Toolbar icons | Toolbar icons | `onSurfaceVariant` | `onSurfaceVariant` |
+| Gboard element                | Pastille element                                 | Role, light              | Role, dark           |
+| ----------------------------- | ------------------------------------------------ | ------------------------ | -------------------- |
+| Keyboard background           | Panel background                                 | `surfaceContainer`       | `surfaceContainer`   |
+| Letter keys                   | Title buttons, folder buttons                    | `surfaceContainerLowest` | `surfaceBright`      |
+| Function keys (shift, delete) | Add button, active segment                       | `secondaryContainer`     | `secondaryContainer` |
+| Enter key                     | (nothing; only one accent, and we don't need it) | —                        | —                    |
+| Key labels                    | Button text                                      | `onSurface`              | `onSurface`          |
+| Toolbar icons                 | Toolbar icons                                    | `onSurfaceVariant`       | `onSurfaceVariant`   |
 
 - [ ] Add a `keySurface` helper: `if (isDark) surfaceBright else surfaceContainerLowest`. That's the "raised key on a tinted tray" look; cards on `surfaceContainerHighest` read as cards, not keys.
 - [ ] **Shapes:** keys are rounded rectangles, `RoundedCornerShape(8.dp)`, not pills. Chips stay M3 default (8dp). Tune against their phone; Gboard versions vary between about 6 and 10dp.
@@ -568,7 +568,7 @@ One level only, no nesting. A snippet is either at the top level (no folder) or 
 There are three motions, and each has a different meaning, so they never blur together:
 
 - **Modes slide sideways**, because they sit side by side in the switch.
-- **Folders zoom**, because you go *into* them.
+- **Folders zoom**, because you go _into_ them.
 - **Add and actions rise**, because they come up over the browse view.
 
 Everything is about 220ms and stays inside the fixed 224dp content area.
@@ -659,18 +659,18 @@ The owner's Gboard uses its plain **Dark** theme, not Material You, so dynamic c
 
 ### 11.1 Gboard Dark, sampled from their screenshot (1080×2340, about 2.625 px/dp)
 
-| Token | Hex | Where it was sampled |
-|---|---|---|
-| `strip` | `#292E32` | Gboard's top icon strip |
-| `tray` | `#363B3F` | key area, and the nav-bar area below it (Gboard's tray runs under the gesture bar) |
-| `key` | `#565B5F` | the visible key fills: `?123` and the space bar |
-| `keyPressed` | `#646A6E` | **derived**, not visible in the screenshot: `key` lightened about 6% L. Tune on device |
-| `stripButton` | `#45494C` | the circle behind Gboard's mic in the strip |
-| `label` | `#FFFFFF` | key and space-bar text |
-| `labelSecondary` | `#B1B2B5` | the small hint digits on keys |
-| `icon` | `#ACADB1` | strip icons (clipboard, GIF, emoji, translate), consistent across all five |
-| `accent` | `#5F97F6` | the Enter key, Gboard's only colour |
-| `onAccent` | `#FFFFFF` | the Enter glyph |
+| Token            | Hex       | Where it was sampled                                                                   |
+| ---------------- | --------- | -------------------------------------------------------------------------------------- |
+| `strip`          | `#292E32` | Gboard's top icon strip                                                                |
+| `tray`           | `#363B3F` | key area, and the nav-bar area below it (Gboard's tray runs under the gesture bar)     |
+| `key`            | `#565B5F` | the visible key fills: `?123` and the space bar                                        |
+| `keyPressed`     | `#646A6E` | **derived**, not visible in the screenshot: `key` lightened about 6% L. Tune on device |
+| `stripButton`    | `#45494C` | the circle behind Gboard's mic in the strip                                            |
+| `label`          | `#FFFFFF` | key and space-bar text                                                                 |
+| `labelSecondary` | `#B1B2B5` | the small hint digits on keys                                                          |
+| `icon`           | `#ACADB1` | strip icons (clipboard, GIF, emoji, translate), consistent across all five             |
+| `accent`         | `#5F97F6` | the Enter key, Gboard's only colour                                                    |
+| `onAccent`       | `#FFFFFF` | the Enter glyph                                                                        |
 
 Geometry measured from the same screenshot:
 
@@ -684,36 +684,36 @@ Geometry measured from the same screenshot:
 
 I don't have a screenshot of Gboard Light, so these are my best recollection of its default light theme and **must be re-sampled** before release. The owner: one screenshot from the other phone with Gboard open, and I'll replace them. Sampling is the same `magick -crop … -resize 1x1` average used for 11.1.
 
-| Token | Provisional hex |
-|---|---|
-| `strip` | `#E8EAED` |
-| `tray` | `#F1F3F4` |
-| `key` | `#FFFFFF` |
-| `keyPressed` | `#E3E5E8` |
-| `stripButton` | `#DADCE0` |
-| `label` | `#202124` |
-| `labelSecondary` | `#5F6368` |
-| `icon` | `#5F6368` |
-| `accent` | `#1A73E8` |
-| `onAccent` | `#FFFFFF` |
+| Token            | Provisional hex |
+| ---------------- | --------------- |
+| `strip`          | `#E8EAED`       |
+| `tray`           | `#F1F3F4`       |
+| `key`            | `#FFFFFF`       |
+| `keyPressed`     | `#E3E5E8`       |
+| `stripButton`    | `#DADCE0`       |
+| `label`          | `#202124`       |
+| `labelSecondary` | `#5F6368`       |
+| `icon`           | `#5F6368`       |
+| `accent`         | `#1A73E8`       |
+| `onAccent`       | `#FFFFFF`       |
 
 ### 11.3 How the palette reaches the UI
 
 - [ ] `data class KeyboardPalette(strip, tray, key, keyPressed, stripButton, label, labelSecondary, icon, accent, onAccent)`, with `GboardDark`, `GboardLight` and `fromMaterialYou(colorScheme)` constructors.
 - [ ] The panel root wraps its content in `MaterialTheme(colorScheme = palette.toColorScheme(base))`, so every M3 component from §7–§10 (chips, `ListItem`s, buttons, segmented control) picks up the palette with no per-component work:
 
-| M3 role | ← palette |
-|---|---|
-| `surface`, `surfaceContainer`, `surfaceContainerLow` | `tray` |
-| `surfaceContainerHigh`, `surfaceContainerHighest`, `surfaceBright`, `surfaceContainerLowest` | `key` |
-| `onSurface` | `label` |
-| `onSurfaceVariant` | `icon` |
-| `outline`, `outlineVariant` | `key` |
-| `secondaryContainer` | `stripButton` |
-| `onSecondaryContainer` | `label` |
-| `primary` | `accent` |
-| `onPrimary` | `onAccent` |
-| `error` | the base scheme's `error` (unchanged) |
+| M3 role                                                                                      | ← palette                             |
+| -------------------------------------------------------------------------------------------- | ------------------------------------- |
+| `surface`, `surfaceContainer`, `surfaceContainerLow`                                         | `tray`                                |
+| `surfaceContainerHigh`, `surfaceContainerHighest`, `surfaceBright`, `surfaceContainerLowest` | `key`                                 |
+| `onSurface`                                                                                  | `label`                               |
+| `onSurfaceVariant`                                                                           | `icon`                                |
+| `outline`, `outlineVariant`                                                                  | `key`                                 |
+| `secondaryContainer`                                                                         | `stripButton`                         |
+| `onSecondaryContainer`                                                                       | `label`                               |
+| `primary`                                                                                    | `accent`                              |
+| `onPrimary`                                                                                  | `onAccent`                            |
+| `error`                                                                                      | the base scheme's `error` (unchanged) |
 
 - [ ] Also provide `LocalKeyboardPalette` for the three things M3 roles don't cover: `strip` (toolbar background), `keyPressed`, and `labelSecondary`.
 - [ ] `fromMaterialYou`: superseded by the Gboard-dynamic mapping in §11.9.
@@ -778,16 +778,16 @@ The owner's Android 16 phone runs Gboard in its Material You (dynamic) theme; th
 
 Gboard's dynamic theme is a tinted neutral tray with lighter (or darker) neutral letter keys, secondary-tinted function keys, and a primary Enter key. Mapped from `dynamicLight/DarkColorScheme`:
 
-| Token | Light | Dark |
-|---|---|---|
-| `tray` | `surfaceContainer` | `surfaceContainerLow` |
-| `strip` | same as `tray` (Gboard's dynamic strip doesn't two-tone; verify) | same as `tray` |
-| `key` (title and folder buttons, like letter keys) | `surfaceContainerLowest` | `surfaceContainerHighest` |
-| `keyPressed` | `surfaceContainerHigh` | `surfaceBright` |
-| `stripButton` (selected mode pill, like function keys) | `secondaryContainer` | `secondaryContainer` |
-| `label` | `onSurface` | `onSurface` |
-| `labelSecondary`, `icon` | `onSurfaceVariant` | `onSurfaceVariant` |
-| `accent` / `onAccent` (like Enter) | `primary` / `onPrimary` | `primary` / `onPrimary` |
+| Token                                                  | Light                                                            | Dark                      |
+| ------------------------------------------------------ | ---------------------------------------------------------------- | ------------------------- |
+| `tray`                                                 | `surfaceContainer`                                               | `surfaceContainerLow`     |
+| `strip`                                                | same as `tray` (Gboard's dynamic strip doesn't two-tone; verify) | same as `tray`            |
+| `key` (title and folder buttons, like letter keys)     | `surfaceContainerLowest`                                         | `surfaceContainerHighest` |
+| `keyPressed`                                           | `surfaceContainerHigh`                                           | `surfaceBright`           |
+| `stripButton` (selected mode pill, like function keys) | `secondaryContainer`                                             | `secondaryContainer`      |
+| `label`                                                | `onSurface`                                                      | `onSurface`               |
+| `labelSecondary`, `icon`                               | `onSurfaceVariant`                                               | `onSurfaceVariant`        |
+| `accent` / `onAccent` (like Enter)                     | `primary` / `onPrimary`                                          | `primary` / `onPrimary`   |
 
 - [ ] The nav-bar area takes `tray` (11.6 applies unchanged).
 
@@ -847,18 +847,19 @@ That confirms 2.625 px/dp and a 411dp-wide screen.
 
 **Presets (portrait; total panel height, nav bar excluded)**
 
-| Preset | Total | Content | Snippets visible, top level / in a folder | Photos visible (chips showing) |
-|---|---|---|---|---|
-| Compact | 272dp | 224dp | 8 / 6 | 1 row + a third |
-| Gboard | 320dp | 272dp | 8 + peek / 8 | 1 row + three-quarters |
-| **Comfortable (default)** | **368dp** | **320dp** | **10 + peek / 10** | **2 rows + a peek** |
-| Tall | 432dp | 384dp | 12 + peek / 12 | 2½ rows |
+| Preset                    | Total     | Content   | Snippets visible, top level / in a folder | Photos visible (chips showing) |
+| ------------------------- | --------- | --------- | ----------------------------------------- | ------------------------------ |
+| Compact                   | 272dp     | 224dp     | 8 / 6                                     | 1 row + a third                |
+| Gboard                    | 320dp     | 272dp     | 8 + peek / 8                              | 1 row + three-quarters         |
+| **Comfortable (default)** | **368dp** | **320dp** | **10 + peek / 10**                        | **2 rows + a peek**            |
+| Tall                      | 432dp     | 384dp     | 12 + peek / 12                            | 2½ rows                        |
 
 - [ ] **Default: Comfortable, 368dp total**, 49dp taller than Gboard on purpose. It's the smallest height that meets the owner's goals on their phone:
   - 10 title buttons visible even inside a folder
   - two full rows of photos with a peek of the third, which tells you it scrolls
 
   On their 891dp-tall screen that's 41% of the height.
+
 - [ ] **Portrait cap:** `min(preset, 0.5 × window height)`, so a small or split-screen window keeps at least half for the host app.
 - [ ] **Landscape** is stored separately (`panel_height_landscape`), with the same four names as fractions of window height: Compact 38%, Gboard 44%, Comfortable 50% (default), Tall 55%. 55% is the hard cap, so the host's text field and its last messages stay usable. Wider grids (below) compensate for the lower height.
 - [ ] Content area = total − 48dp toolbar. Every "224dp" in §7–§10 now means `contentHeight`. **Constant height still holds:** Browse, Add, Actions, Style, Preview and both modes all use the same `contentHeight` for the chosen preset. Only the setting changes it.
@@ -938,26 +939,26 @@ The owner's model is now Gboard's clipboard panel: a fixed height, and a 2-colum
 
 ### 11.12 Addendum: calm, neutral-first accents in the app, every API level (overrides §2 and §8.4 accent roles) — **Build B**
 
-The owner, twice: "a bit too neon" (Android 16, cyan FAB `#00C4FF` and links) and "really cool but too neon vibe" (Android 12, lilac focus outline `#D0BCFF`, purple FAB `#4F378B`, lilac links, Settings headers and switch). Two causes. On API 34+, `dynamic*ColorScheme` reads Android 16's vibrant role resources. On every level, M3's `primary` is drawn from the **accent1** palette, the most chromatic one. They don't want it in either case. *(History: the first draft of this section moved `primary` to `system_accent1_*`; Android 12 showed that wasn't calm enough.)*
+The owner, twice: "a bit too neon" (Android 16, cyan FAB `#00C4FF` and links) and "really cool but too neon vibe" (Android 12, lilac focus outline `#D0BCFF`, purple FAB `#4F378B`, lilac links, Settings headers and switch). Two causes. On API 34+, `dynamic*ColorScheme` reads Android 16's vibrant role resources. On every level, M3's `primary` is drawn from the **accent1** palette, the most chromatic one. They don't want it in either case. _(History: the first draft of this section moved `primary` to `system_accent1_*`; Android 12 showed that wasn't calm enough.)_
 
 **The rule: neutral first, accent in small doses, and the accent comes from the low-chroma `accent2` palette.** It still follows the wallpaper, since accent2 is the wallpaper's own secondary palette, just quieter.
 
 **The fix lives in one place, `Theme.kt`.** Keep `dynamic*ColorScheme(context)` for surfaces, neutrals, secondary, tertiary and error. Then `.copy(...)` the primary family from `system_accent2_*`, on **every** API 31+ level, not only 34+. No per-component colour overrides. FAB, `TextButton`, focused `OutlinedTextField` outline and label, tab indicator, `Switch`, Settings section headers (`colorScheme.primary`), pin glyph and links all inherit the change.
 
-| Role | Dark | Light |
-|---|---|---|
+| Role                                                                                  | Dark                       | Light                      |
+| ------------------------------------------------------------------------------------- | -------------------------- | -------------------------- |
 | `primary` (links, focus outline and label, headers, tab indicator, pin, switch track) | `system_accent2_200` (T80) | `system_accent2_600` (T40) |
-| `onPrimary` (switch thumb, filled-button text) | `system_accent2_800` (T20) | `system_accent2_0` (T100) |
-| `primaryContainer` (the "New snippet" FAB) | `system_accent2_700` (T30) | `system_accent2_100` (T90) |
-| `onPrimaryContainer` (FAB icon and label) | `system_accent2_100` (T90) | `system_accent2_900` (T10) |
-| `inversePrimary` | `system_accent2_600` | `system_accent2_200` |
-| `surfaceTint` | = `primary` above | = `primary` above |
+| `onPrimary` (switch thumb, filled-button text)                                        | `system_accent2_800` (T20) | `system_accent2_0` (T100)  |
+| `primaryContainer` (the "New snippet" FAB)                                            | `system_accent2_700` (T30) | `system_accent2_100` (T90) |
+| `onPrimaryContainer` (FAB icon and label)                                             | `system_accent2_100` (T90) | `system_accent2_900` (T10) |
+| `inversePrimary`                                                                      | `system_accent2_600`       | `system_accent2_200`       |
+| `surfaceTint`                                                                         | = `primary` above          | = `primary` above          |
 
 - [ ] Read them with `colorResource(android.R.color.system_accent2_*)` inside the `SDK_INT >= S` branch.
-- [ ] **Below Android 12** (static fallback), use the same idea with M3 baseline *secondary* values in place of the purple primaries:
+- [ ] **Below Android 12** (static fallback), use the same idea with M3 baseline _secondary_ values in place of the purple primaries:
   - Dark: `primary #CCC2DC`, `onPrimary #332D41`, `primaryContainer #4A4458`, `onPrimaryContainer #E8DEF8`.
   - Light: `primary #625B71`, `onPrimary #FFFFFF`, `primaryContainer #E8DEF8`, `onPrimaryContainer #1D192B`.
-- [ ] ⚠ **Check first:** `#D0BCFF` and `#4F378B` are *exactly* M3's static baseline dark `primary` and `primaryContainer`. A real purple wallpaper rarely lands on those values, so on their Android 12 phone the editor or the whole app is probably not getting dynamic colour (a screen outside `PastilleTheme`, or `dynamicColor = false` somewhere). Confirm that every activity, the editor and the share sheet are wrapped in `PastilleTheme`, or the fix won't reach them.
+- [ ] ⚠ **Check first:** `#D0BCFF` and `#4F378B` are _exactly_ M3's static baseline dark `primary` and `primaryContainer`. A real purple wallpaper rarely lands on those values, so on their Android 12 phone the editor or the whole app is probably not getting dynamic colour (a screen outside `PastilleTheme`, or `dynamicColor = false` somewhere). Confirm that every activity, the editor and the share sheet are wrapped in `PastilleTheme`, or the fix won't reach them.
 - [ ] The FAB keeps its default colours (`primaryContainer`); don't set `containerColor`. In dark it becomes a muted slate tint of the wallpaper with pale text, a step above the surface.
 - [ ] The focused text field keeps the M3 2dp outline. The change from a 1dp `outline` to a 2dp pale `primary` (T80, low chroma) is still clearly visible, so focus stays obvious without the glow.
 - [ ] "Add your first snippet" (`FilledTonalButton`, `secondaryContainer`) is unchanged; it was already accent2.
@@ -972,10 +973,10 @@ The owner: "We need effect between main root and opening a folder", then "nice a
 **Principles**
 
 - **Every motion means something**, and the meaning is the same in the app and the keyboard:
-  - *sideways (X)*: a sibling or the next screen;
-  - *zoom (Z)*: into a folder;
-  - *rise (Y)*: something coming up over the view;
-  - *fade*: things appearing or leaving in place.
+  - _sideways (X)_: a sibling or the next screen;
+  - _zoom (Z)_: into a folder;
+  - _rise (Y)_: something coming up over the view;
+  - _fade_: things appearing or leaving in place.
 - **Quick:** nothing runs longer than 220ms, and nothing bounces (no springs with `dampingRatio < 1`).
 - **Never in the way of pasting:** a tile's `onClick` commits the text at once, and no animation delays it, gates it or waits for one to finish. Taps during a transition are honoured, never queued or debounced (`AnimatedContent` retargets).
 
@@ -1000,25 +1001,25 @@ Every spec below is made from these values; no literals elsewhere.
 
 **Where each one goes**
 
-| Place | Motion | Spec |
-|---|---|---|
-| **App screens**: list ↔ editor, list ↔ settings, folder ↔ editor | X | `AnimatedContent` keyed on a `Screen` sealed type (`List`, `Folder(id)`, `Settings`, `Editor(id?, categoryId?)`), each with a depth (List 0, Folder/Settings 1, Editor 2). Deeper = forward: incoming `slideIn(+AxisOffset)` `ENTER_MS` `EmphasizedDecelerate`, plus `fadeIn(ENTER_MS − 60, delay 60)`; outgoing `slideOut(−AxisOffset)` `EXIT_MS` `EmphasizedAccelerate`, plus `fadeOut(EXIT_MS)`. Shallower = mirrored. The same shape as §10.6.1. `SizeTransform(clip = false)`, no size animation. |
-| **App folder** open / close | Z | List ↔ `Folder(id)` overrides the X rule with the §10.6.2 zoom: open `scaleIn(ZOOM_IN)` + fade, and the list `scaleOut(ZOOM_OUT)` + fade; close mirrored. `transformOrigin` = the tapped `FolderRow`'s centre, from `onGloballyPositioned`, on open; `Center` on close. |
-| **Keyboard folder** open / close | Z | Already built (§10.6.2). Verify it still plays with the §11.11 tiles. If it cuts, the tile grid is being rendered outside `FolderContent`'s `AnimatedContent`. Add the same tapped-tile `transformOrigin`. **No container transform** (the tile literally growing into the view): at keyboard scale it's heavy and fussy, and zooming from the tile gives the same "I went into that" for free. |
-| **Back gesture** (app and keyboard) | — | Plays the backward version of whichever transition brought you there. Predictive back is out of scope. |
-| **Snippets ↔ Images** (keyboard) | X | §10.6.1, unchanged. The selected-pill background crossfade (§11.4) moves from 120ms to `SHORT_MS` with `Standard`. |
-| **Keyboard Add / Actions states**, status strip | Y | §10.6.3, unchanged. |
-| **List items**: add, delete, undo, reorder (app `LazyColumn`, keyboard grid) | fade + placement | `Modifier.animateItem(fadeInSpec = tween(SHORT_MS, easing = Standard), placementSpec = tween(ENTER_MS, easing = Standard), fadeOutSpec = tween(QUICK_MS))` on every item with a stable key. Undo brings the item back with the same fade-in while its neighbours part. No slide-in from an edge. |
-| **Swipe actions** (where `SwipeToDismissBox` exists) | colour | The background behind the row goes from `surfaceContainerHigh` to the action colour when the threshold is crossed (`animateColorAsState`, `SHORT_MS`, `Standard`). The icon scales 0.85 → 1 on the same trigger, with `HapticFeedbackConstants.GESTURE_THRESHOLD_ACTIVATE` (API 30+, else `CONTEXT_CLICK`). Below the threshold, it settles back with the component's default. On commit, the row leaves through `animateItem`'s fade-out. |
-| **Press feedback**, keyboard tiles | colour only | `key` → `keyPressed`, `tween(PRESS_MS)`, no ripple (§11.5). **Remove the `keyCorner` spring** in `KeyboardPanel`'s key composable (`animateDpAsState`, `dampingRatio = 0.6f`). That's the Expressive corner morph §11.9 dropped, and it bounces. The shape is fixed. |
-| **Press feedback**, app rows and buttons | ripple | Material's default ripple. Nothing added. |
-| **Long-press menu** (app) | — | `DropdownMenu`'s own scale-and-fade from its anchor, as shipped. A `LONG_PRESS` haptic at press time. |
-| **Long-press** (keyboard) | Y | A `LONG_PRESS` haptic at press time, then the Actions state rises (§10.6.3). |
-| **FAB** | — | `ExtendedFloatingActionButton`'s built-in expand/collapse on scroll. It travels with its screen in screen transitions and never animates on its own. |
-| **Settings switches, segmented buttons, radio rows** | — | Material defaults, untouched; they're already quiet. |
-| **Style picker tiles** (keyboard §11.9, app §11.7) | colour + check | Border `animateColorAsState(SHORT_MS, Standard)`. The check badge uses `scaleIn(0.6f) + fadeIn`, `SHORT_MS`, `Standard`, and fades out over `QUICK_MS`. Palette crossfade 150ms, as specced. |
-| **Empty states** (app list, folder, keyboard) | fade | The empty-state block uses `fadeIn(ENTER_MS − 60, delay 60)` when it appears and `fadeOut(QUICK_MS)` when the first item arrives. No illustration motion. |
-| **Post-save highlight** | colour | §7.1 / §11.5, unchanged (600ms flash once the transition settles). It's the one deliberately longer motion, because it's a "here it is" cue rather than a transition. |
+| Place                                                                        | Motion           | Spec                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ---------------------------------------------------------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **App screens**: list ↔ editor, list ↔ settings, folder ↔ editor             | X                | `AnimatedContent` keyed on a `Screen` sealed type (`List`, `Folder(id)`, `Settings`, `Editor(id?, categoryId?)`), each with a depth (List 0, Folder/Settings 1, Editor 2). Deeper = forward: incoming `slideIn(+AxisOffset)` `ENTER_MS` `EmphasizedDecelerate`, plus `fadeIn(ENTER_MS − 60, delay 60)`; outgoing `slideOut(−AxisOffset)` `EXIT_MS` `EmphasizedAccelerate`, plus `fadeOut(EXIT_MS)`. Shallower = mirrored. The same shape as §10.6.1. `SizeTransform(clip = false)`, no size animation.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| **App folder** open / close                                                  | Z                | List ↔ `Folder(id)` overrides the X rule with the §10.6.2 zoom: open `scaleIn(ZOOM_IN)` + fade, and the list `scaleOut(ZOOM_OUT)` + fade; close mirrored. `transformOrigin` = the tapped `FolderRow`'s centre, from `onGloballyPositioned`, on open; `Center` on close.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| **Keyboard folder** open / close                                             | Z                | Already built (§10.6.2). Verify it still plays with the §11.11 tiles. If it cuts, the tile grid is being rendered outside `FolderContent`'s `AnimatedContent`. Add the same tapped-tile `transformOrigin`. **No container transform** (the tile literally growing into the view): at keyboard scale it's heavy and fussy, and zooming from the tile gives the same "I went into that" for free.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| **Back gesture** (app and keyboard)                                          | —                | Plays the backward version of whichever transition brought you there. Predictive back is out of scope.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| **Snippets ↔ Images** (keyboard)                                             | X                | §10.6.1, unchanged. The selected-pill background crossfade (§11.4) moves from 120ms to `SHORT_MS` with `Standard`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| **Keyboard Add / Actions states**, status strip                              | Y                | §10.6.3, unchanged.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| **List items**: add, delete, undo, reorder (app `LazyColumn`, keyboard grid) | fade + placement | `Modifier.animateItem(fadeInSpec = tween(SHORT_MS, easing = Standard), placementSpec = tween(ENTER_MS, easing = Standard), fadeOutSpec = tween(QUICK_MS))` on every item with a stable key. Undo brings the item back with the same fade-in while its neighbours part. No slide-in from an edge.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| **Swipe actions** (where `SwipeToDismissBox` exists)                         | colour           | **Thresholds:** delete (end to start) commits only once the row has travelled **40%** of its width; the secondary action (start to end, edit today) at **25%**. A fast flick doesn't count on its own: M3's fling threshold isn't configurable, so `confirmValueChange` refuses any action whose real offset (`requireOffset()`, against the width from `onSizeChanged`) is short of its threshold, and the row snaps back. The rule lives in `SwipeRules.kt`. **Feedback switches exactly at the threshold:** the background goes from `surfaceContainerHigh` to the action colour (`animateColorAsState`, `SHORT_MS`, `Standard`), the icon scales 0.85 → 1, and `HapticFeedbackConstants.GESTURE_THRESHOLD_ACTIVATE` plays (API 34+, else `CONTEXT_CLICK`). Dragging back below the threshold reverts the colour and scale, with `GESTURE_THRESHOLD_DEACTIVATE` on API 34+ (nothing below). The snap-back after an action has fired plays no haptic. On commit, the row leaves through `animateItem`'s fade-out, and the Undo snackbar is unchanged. |
+| **Press feedback**, keyboard tiles                                           | colour only      | `key` → `keyPressed`, `tween(PRESS_MS)`, no ripple (§11.5). **Remove the `keyCorner` spring** in `KeyboardPanel`'s key composable (`animateDpAsState`, `dampingRatio = 0.6f`). That's the Expressive corner morph §11.9 dropped, and it bounces. The shape is fixed.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| **Press feedback**, app rows and buttons                                     | ripple           | Material's default ripple. Nothing added.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| **Long-press menu** (app)                                                    | —                | `DropdownMenu`'s own scale-and-fade from its anchor, as shipped. A `LONG_PRESS` haptic at press time.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| **Long-press** (keyboard)                                                    | Y                | A `LONG_PRESS` haptic at press time, then the Actions state rises (§10.6.3).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| **FAB**                                                                      | —                | `ExtendedFloatingActionButton`'s built-in expand/collapse on scroll. It travels with its screen in screen transitions and never animates on its own.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| **Settings switches, segmented buttons, radio rows**                         | —                | Material defaults, untouched; they're already quiet.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| **Style picker tiles** (keyboard §11.9, app §11.7)                           | colour + check   | Border `animateColorAsState(SHORT_MS, Standard)`. The check badge uses `scaleIn(0.6f) + fadeIn`, `SHORT_MS`, `Standard`, and fades out over `QUICK_MS`. Palette crossfade 150ms, as specced.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| **Empty states** (app list, folder, keyboard)                                | fade             | The empty-state block uses `fadeIn(ENTER_MS − 60, delay 60)` when it appears and `fadeOut(QUICK_MS)` when the first item arrives. No illustration motion.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| **Post-save highlight**                                                      | colour           | §7.1 / §11.5, unchanged (600ms flash once the transition settles). It's the one deliberately longer motion, because it's a "here it is" cue rather than a transition.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 
 **Reduced motion: fades only.** This amends §10.6, where reduced motion meant no transitions at all.
 

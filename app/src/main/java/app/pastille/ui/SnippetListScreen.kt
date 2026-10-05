@@ -130,6 +130,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.testTag
 import android.view.HapticFeedbackConstants
 import app.pastille.ime.PastilleMotion
 import androidx.compose.ui.focus.FocusRequester
@@ -438,6 +439,7 @@ fun SnippetListScreen(
                         )
                     }
                 } else LargeTopAppBar(
+                    modifier = Modifier.testTag(TOP_BAR_TAG),
                     title = { Wordmark(collapsedFraction = scrollBehavior.state.collapsedFraction) },
                     actions = {
                         IconButton(onClick = { searching = true }) {
@@ -581,7 +583,7 @@ fun SnippetListScreen(
                     ReorderBanner(onDone = { reordering = false })
                 }
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize().testTag(SNIPPET_LIST_TAG),
                     state = listState,
                     contentPadding = PaddingValues(bottom = 88.dp),
                 ) {
@@ -666,7 +668,7 @@ fun SnippetListScreen(
 
 @Composable
 private fun Wordmark(collapsedFraction: Float) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    Row(modifier = Modifier.testTag(WORDMARK_TAG), verticalAlignment = Alignment.CenterVertically) {
         Icon(
             painter = painterResource(R.drawable.ic_pastille_mark),
             contentDescription = null,
@@ -1193,6 +1195,9 @@ private fun toast(context: Context, message: String) {
 }
 
 private const val ALL_TAB = -1L
+internal const val TOP_BAR_TAG = "top-bar"
+internal const val SNIPPET_LIST_TAG = "snippet-list"
+internal const val WORDMARK_TAG = "wordmark"
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable

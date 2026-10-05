@@ -22,6 +22,7 @@ Sections 2 and below record the v1 → v2 design as it was decided. The database
 | 2 | `MIGRATION_1_2` | `categories`, and `categoryId` / image columns on `snippets` (§2). |
 | 3 | `MIGRATION_2_3` | `snippets.position` for the manual order, seeded from pinned-then-recent. |
 | 4 | `MIGRATION_3_4` | The bin: nullable `snippets.deletedAt` with an index (§2.1). |
+| 5 | `MIGRATION_4_5` | Tags: `tags` and `snippet_tags` (§2.2). |
 
 ### 2.1 The bin (v4)
 
@@ -30,6 +31,15 @@ Sections 2 and below record the v1 → v2 design as it was decided. The database
 - `allImageFiles()` deliberately does **not** filter: a binned image keeps its file.
 - **At app start** (`PastilleApplication`, `cleanUpAtStart`): one transaction deletes the rows binned more than 30 days ago, **then** the orphan sweep runs. That order is what lets the sweep delete a purged image's file while keeping a binned one's; `BinTest` pins it. No WorkManager: a phone that never opens the app has nothing to purge for.
 - "Delete forever" and "Empty bin" are the only other hard deletes (plus the share sheet's Undo, which undoes a create).
+
+### 2.2 Tags (v5)
+
+- `tags(id, name COLLATE NOCASE, createdAt)` with a unique index on `name`; `snippet_tags(snippetId, tagId)` with a composite primary key and an index on `tagId`. No SQLite foreign keys: every hard delete of a snippet (delete forever, empty bin, purge, share Undo) removes its `snippet_tags` rows in the same transaction, then drops tags nobody carries.
+- Names are stored normalised: lowercased, no spaces, no leading `#` (`normaliseTag`). The UI shows them in sentence case (`displayTag`), never all caps.
+- `observeSnippets()` combines the snippets flow with one `snippet_tags JOIN tags` flow and attaches tags in memory: never a query per row. Binned snippets keep their links.
+- Filtering by several tags keeps the snippets carrying all of them; search also matches tag names (`model/Tags.kt`).
+- **Backup v3:** each snippet carries `"tags": ["work", "otp"]` by name. `decode` accepts versions 1–3; older files have no tags. Import creates missing tags, matching names case-insensitively.
+- The keyboard shows no tags in v1.
 
 ## 1. Naming
 

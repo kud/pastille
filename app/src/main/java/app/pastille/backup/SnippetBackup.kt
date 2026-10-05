@@ -22,6 +22,8 @@ data class BackupSnippet(
     val lastUsedAt: Long = 0,
     val category: String? = null,
     val position: Int = 0,
+    // v3: tag names. Older files have none.
+    val tags: List<String> = emptyList(),
 )
 
 @Serializable
@@ -42,7 +44,7 @@ data class BackupContents(
 )
 
 object SnippetBackup {
-    const val CURRENT_VERSION = 2
+    const val CURRENT_VERSION = 3
 
     private val json = Json {
         prettyPrint = true
@@ -69,6 +71,7 @@ object SnippetBackup {
                         lastUsedAt = it.lastUsedAt,
                         category = it.categoryId?.let(namesById::get),
                         position = it.position,
+                        tags = it.tags,
                     )
                 },
             ),
@@ -92,6 +95,7 @@ object SnippetBackup {
                         updatedAt = it.updatedAt,
                         lastUsedAt = it.lastUsedAt,
                         position = it.position,
+                        tags = it.tags,
                     ),
                     category = it.category,
                 )

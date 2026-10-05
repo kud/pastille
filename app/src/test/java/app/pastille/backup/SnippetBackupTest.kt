@@ -86,19 +86,19 @@ class SnippetBackupTest {
 
     @Test
     fun unknownVersionIsRejected() {
-        val raw = """{"version": 3, "snippets": []}"""
+        val raw = """{"version": 4, "snippets": []}"""
 
         try {
             SnippetBackup.decode(raw)
             fail("expected IllegalArgumentException for unknown version")
         } catch (e: IllegalArgumentException) {
-            assertTrue(e.message!!.contains("3"))
+            assertTrue(e.message!!.contains("4"))
         }
     }
 
     @Test
     fun futurePayloadShapeStillRejectedOnVersion() {
-        val raw = SnippetBackup.encode(samples, categories).replace("\"version\": 2", "\"version\": 99")
+        val raw = SnippetBackup.encode(samples, categories).replace("\"version\": 3", "\"version\": 99")
 
         try {
             SnippetBackup.decode(raw)
@@ -126,5 +126,26 @@ class SnippetBackupTest {
 
         assertEquals(2, decoded.snippets.size)
         assertTrue(decoded.snippets.none { it.record.imageFile != null })
+    }
+
+    @Test
+    fun version3RoundTripsTags() {
+        val tagged = samples.map { if (it.id == 1L) it.copy(tags = listOf("email", "work")) else it }
+
+        val decoded = SnippetBackup.decode(SnippetBackup.encode(tagged, categories))
+
+        assertTrue(SnippetBackup.encode(tagged, categories).contains("\"version\": 3"))
+        assertEquals(listOf("email", "work"), decoded.snippets.single { it.record.title == "greeting" }.record.tags)
+        assertEquals(emptyList<String>(), decoded.snippets.single { it.record.title == "" }.record.tags)
+    }
+
+    @Test
+    fun version2FileStillImportsWithoutTags() {
+        val raw = """{"version": 2, "categories": [{"name": "Work"}], "snippets": [{"text": "hello", "category": "Work"}]}"""
+
+        val decoded = SnippetBackup.decode(raw)
+
+        assertEquals("Work", decoded.snippets.single().category)
+        assertTrue(decoded.snippets.single().record.tags.isEmpty())
     }
 }

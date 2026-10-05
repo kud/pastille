@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -26,19 +27,22 @@ const val TOP_LEVEL_LABEL = "None (top level)"
 fun movedMessage(folderName: String?): String = "Moved to ${folderName ?: "top level"}"
 
 /**
- * Swipe right on a row opens this: where the snippet lives. Tapping a folder moves it at once and
- * closes the sheet; there is no Save button.
+ * Swipe right on a row opens this: where the snippet lives and what it is tagged. Tapping a folder
+ * moves it at once and the tags apply as they change; there is no Save button. The sheet stays open
+ * and closes on a swipe down or a tap outside.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun OrganiseSheet(
     snippet: SnippetRecord,
     folders: List<CategoryRecord>,
+    allTags: List<String>,
     onMove: (Long?) -> Unit,
+    onTagsChange: (List<String>) -> Unit,
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, bottom = 24.dp)) {
+        Column(modifier = Modifier.fillMaxWidth().imePadding().padding(start = 24.dp, end = 24.dp, bottom = 24.dp)) {
             Text(
                 text = rowTitle(snippet.title, snippet.text).ifBlank { if (snippet.isImage) "Image" else "Snippet" },
                 style = MaterialTheme.typography.titleSmall,
@@ -67,6 +71,14 @@ fun OrganiseSheet(
                     )
                 }
             }
+            Spacer(Modifier.height(16.dp))
+            Text(
+                text = "Tags",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(4.dp))
+            TagEditor(tags = snippet.tags, allTags = allTags, onTagsChange = onTagsChange)
         }
     }
 }

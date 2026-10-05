@@ -17,6 +17,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
@@ -71,6 +72,7 @@ import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.ShortText
 import androidx.compose.material.icons.automirrored.rounded.DriveFileMove
 import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ContentCopy
@@ -161,7 +163,9 @@ import app.pastille.images.ImageStore
 import app.pastille.images.ImageThumbnail
 import app.pastille.model.CategoryRecord
 import app.pastille.model.SnippetRecord
+import app.pastille.model.filterByTags
 import app.pastille.model.isMissingFolder
+import app.pastille.model.matchesQuery
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -201,6 +205,10 @@ fun SnippetListScreen(
     var showCreateFolder by remember { mutableStateOf(false) }
     var showTryIt by remember { mutableStateOf(false) }
     var organisingId by rememberSaveable { mutableStateOf<Long?>(null) }
+    // The folder the snippet had when the sheet opened, for the snackbar's Undo.
+    var organisingFrom by rememberSaveable { mutableStateOf<Long?>(null) }
+    val allTagNames by remember { repository.observeTagNames() }
+        .collectAsStateWithLifecycle(initialValue = emptyList())
     val organising = organisingId?.let { id -> snippets.firstOrNull { it.id == id } }
 
     val exportLauncher = rememberLauncherForActivityResult(
@@ -269,12 +277,18 @@ fun SnippetListScreen(
         }
     }
 
-    fun organiseMove(snippet: SnippetRecord, target: Long?) {
+    fun openOrganise(snippet: SnippetRecord) {
+        organisingFrom = snippet.categoryId
+        organisingId = snippet.id
+    }
+
+    // With tags in the sheet it stays open on a tap; the move is reported once it closes.
+    fun closeOrganise(snippet: SnippetRecord?) {
         organisingId = null
-        val previous = snippet.categoryId
-        if (target == previous) return
+        val previous = organisingFrom
+        val target = snippet?.categoryId
+        if (snippet == null || target == previous) return
         scope.launch {
-            repository.setCategory(listOf(snippet.id), target)
             val result = snackbarHostState.showSnackbar(
                 message = movedMessage(target?.let { id -> categories.firstOrNull { it.id == id }?.name }),
                 actionLabel = "Undo",
@@ -312,15 +326,14 @@ fun SnippetListScreen(
         }
     }
 
-    val visible = remember(snippets, query) {
-        if (query.isBlank()) {
-            snippets
-        } else {
-            snippets.filter {
-                it.title.contains(query, ignoreCase = true) ||
-                    it.text.contains(query, ignoreCase = true)
-            }
-        }
+    val tagsInUse = remember(snippets) { snippets.flatMap { it.tags }.distinct().sorted() }
+    var selectedTags by rememberSaveable { mutableStateOf(listOf<String>()) }
+    LaunchedEffect(tagsInUse) {
+        if (snippets.isEmpty()) return@LaunchedEffect
+        if (selectedTags.any { it !in tagsInUse }) selectedTags = selectedTags.filter { it in tagsInUse }
+    }
+    val visible = remember(snippets, query, selectedTags) {
+        filterByTags(snippets.filter { matchesQuery(it, query) }, selectedTags.toSet())
     }
     val haptics = LocalHapticFeedback.current
     var selectedTab by rememberSaveable { mutableLongStateOf(ALL_TAB) }
@@ -433,8 +446,10 @@ fun SnippetListScreen(
         OrganiseSheet(
             snippet = organising,
             folders = orderedFolders,
-            onMove = { target -> organiseMove(organising, target) },
-            onDismiss = { organisingId = null },
+            allTags = allTagNames,
+            onMove = { target -> scope.launch { repository.setCategory(listOf(organising.id), target) } },
+            onTagsChange = { tags -> scope.launch { repository.setTags(organising.id, tags) } },
+            onDismiss = { closeOrganise(organising) },
         )
     }
 
@@ -623,6 +638,16 @@ fun SnippetListScreen(
                         },
                         onRename = { renamingFolder = it },
                         onDelete = { deletingFolder = it },
+                        onAdd = { showCreateFolder = true },
+                    )
+                }
+                if (tagsInUse.isNotEmpty() && !reordering) {
+                    TagFilterRow(
+                        tags = tagsInUse,
+                        selected = selectedTags.toSet(),
+                        onToggle = { tag ->
+                            selectedTags = if (tag in selectedTags) selectedTags - tag else selectedTags + tag
+                        },
                     )
                 }
                 if (reordering) {
@@ -699,7 +724,7 @@ fun SnippetListScreen(
                                     onEdit = { onEdit(snippet) },
                                     onCopy = { copySnippet(snippet) },
                                     onDelete = { deleteSnippet(snippet) },
-                                    onSwipeStartToEnd = { organisingId = snippet.id },
+                                    onSwipeStartToEnd = { openOrganise(snippet) },
                                     folders = orderedFolders,
                                     onMove = { moveSnippet(snippet, it) },
                                 )
@@ -1129,7 +1154,7 @@ private fun FolderRow(
 @Composable
 private fun SnippetMetaRow(snippet: SnippetRecord, categoryName: String?) {
     val kind = remember(snippet.isImage, snippet.text) { snippetKind(snippet.isImage, snippet.text) }
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    MetaLine(tags = snippet.tags) {
         Icon(
             imageVector = when (kind) {
                 SnippetKind.Text -> Icons.AutoMirrored.Rounded.ShortText
@@ -1154,12 +1179,8 @@ private fun SnippetMetaRow(snippet: SnippetRecord, categoryName: String?) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         if (categoryName != null) {
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = categoryName,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Spacer(modifier = Modifier.width(6.dp))
+            FolderPill(categoryName)
         }
     }
 }
@@ -1256,6 +1277,7 @@ private fun FolderTabs(
     onDropped: () -> Unit,
     onRename: (CategoryRecord) -> Unit,
     onDelete: (CategoryRecord) -> Unit,
+    onAdd: () -> Unit,
 ) {
     val haptics = LocalHapticFeedback.current
     val rowState = rememberLazyListState()
@@ -1316,6 +1338,11 @@ private fun FolderTabs(
                         )
                     }
                 }
+            }
+        }
+        if (!reordering) {
+            item(key = "add-folder") {
+                AddFolderChip(onClick = onAdd)
             }
         }
     }
@@ -1413,29 +1440,36 @@ private fun SearchField(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    // Iris (Jotter review): a full-width pill with ✕, in place of the bar.
+    Surface(
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).height(56.dp),
     ) {
-        IconButton(onClick = onClose) {
-            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Close search")
-        }
-        TextField(
-            value = query,
-            onValueChange = onQueryChange,
-            placeholder = { Text("Search snippets") },
-            singleLine = true,
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = Color.Transparent,
-                unfocusedContainerColor = Color.Transparent,
-                focusedIndicatorColor = Color.Transparent,
-                unfocusedIndicatorColor = Color.Transparent,
-            ),
-            modifier = modifier.weight(1f),
-        )
-        if (query.isNotEmpty()) {
-            IconButton(onClick = { onQueryChange("") }) {
-                Icon(Icons.Rounded.Close, contentDescription = "Clear search")
+        Row(
+            modifier = Modifier.fillMaxSize().padding(start = 16.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Rounded.Search,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            TextField(
+                value = query,
+                onValueChange = onQueryChange,
+                placeholder = { Text("Search snippets and #tags") },
+                singleLine = true,
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = Color.Transparent,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                ),
+                modifier = modifier.weight(1f),
+            )
+            IconButton(onClick = onClose) {
+                Icon(Icons.Rounded.Close, contentDescription = "Close search")
             }
         }
     }
@@ -1460,4 +1494,26 @@ private fun rememberListDrivenScrollBehavior(): TopAppBarScrollBehavior {
 @OptIn(ExperimentalMaterial3Api::class)
 private class ListDrivenScrollBehavior(listDriven: TopAppBarScrollBehavior) : TopAppBarScrollBehavior by listDriven {
     override val isPinned: Boolean = true
+}
+
+/** Iris (Jotter review): the folder row ends with an outlined "+ Add" chip that creates a folder. */
+@Composable
+private fun AddFolderChip(onClick: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    Box(
+        modifier = Modifier
+            .minimumInteractiveComponentSize()
+            .height(32.dp)
+            .clip(CircleShape)
+            .border(1.dp, colors.outlineVariant, CircleShape)
+            .clickable(role = Role.Button, onClickLabel = "New folder", onClick = onClick)
+            .padding(horizontal = 12.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.Add, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(4.dp))
+            Text("Add", style = MaterialTheme.typography.labelLarge, color = colors.onSurfaceVariant, maxLines = 1)
+        }
+    }
 }

@@ -11,7 +11,9 @@ import app.pastille.model.orderCategories
 import app.pastille.model.positionWrites
 import app.pastille.model.uniqueTitle
 import app.pastille.share.autoTitle
+import app.pastille.model.normaliseTag
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 
 data class ExportResult(
@@ -24,12 +26,37 @@ class SnippetRepository private constructor(
     private val db: PastilleDatabase,
     private val dao: SnippetDao,
     private val categoryDao: CategoryDao,
+    private val tagDao: TagDao,
 ) {
 
+    // Tags are attached in memory from one snippet_tags flow: never a query per row.
     fun observeSnippets(): Flow<List<SnippetRecord>> =
-        dao.observeAll().map { entities -> sortSnippets(entities.map { it.toRecord() }) }
+        combine(dao.observeAll(), tagDao.observeSnippetTags()) { entities, links ->
+            val tagsBySnippet = links.groupBy({ it.snippetId }, { it.name })
+            sortSnippets(entities.map { it.toRecord().copy(tags = tagsBySnippet[it.id].orEmpty()) })
+        }
 
-    suspend fun get(id: Long): SnippetRecord? = dao.getById(id)?.toRecord()
+    suspend fun get(id: Long): SnippetRecord? =
+        dao.getById(id)?.toRecord()?.let { record -> record.copy(tags = tagDao.tagsFor(listOf(id)).map { it.name }) }
+
+    /** Every tag name, for suggestions. */
+    fun observeTagNames(): Flow<List<String>> = tagDao.observeAll().map { tags -> tags.map { it.name } }
+
+    /** Replaces a snippet's tags; names are normalised, and tags nobody carries any more go. */
+    suspend fun setTags(snippetId: Long, names: List<String>, now: Long = System.currentTimeMillis()) {
+        db.withTransaction {
+            tagDao.unlinkSnippet(snippetId)
+            linkTags(snippetId, names, now)
+            tagDao.deleteUnused()
+        }
+    }
+
+    private suspend fun linkTags(snippetId: Long, names: List<String>, now: Long) {
+        names.map(::normaliseTag).filter { it.isNotEmpty() }.distinct().forEach { name ->
+            val tagId = tagDao.findByName(name)?.id ?: tagDao.insert(TagEntity(name = name, createdAt = now))
+            tagDao.link(SnippetTagEntity(snippetId = snippetId, tagId = tagId))
+        }
+    }
 
     suspend fun upsert(record: SnippetRecord, now: Long = System.currentTimeMillis()): Long {
         val entity = SnippetEntity(
@@ -152,14 +179,17 @@ class SnippetRepository private constructor(
     // Live and binned rows alike: a file goes only once no row at all names it.
     suspend fun referencedImageFiles(): Set<String> = dao.allImageFiles().toSet()
 
+    // Snippet rows and their snippet_tags rows go together, in the caller's transaction.
     private suspend fun hardDelete(ids: List<Long>) {
         if (ids.isEmpty()) return
         dao.deleteByIds(ids)
+        tagDao.unlinkSnippets(ids)
+        tagDao.deleteUnused()
     }
 
     suspend fun deleteMany(ids: List<Long>) {
         if (ids.isEmpty()) return
-        dao.deleteByIds(ids)
+        db.withTransaction { hardDelete(ids) }
     }
 
     fun observeCategories(): Flow<List<CategoryRecord>> =
@@ -217,7 +247,9 @@ class SnippetRepository private constructor(
     }
 
     suspend fun exportJson(): ExportResult {
-        val records = dao.getAll().map { it.toRecord() }
+        val entities = dao.getAll()
+        val tagsBySnippet = tagDao.tagsFor(entities.map { it.id }).groupBy({ it.snippetId }, { it.name })
+        val records = entities.map { it.toRecord().copy(tags = tagsBySnippet[it.id].orEmpty()) }
         val skipped = records.count { it.isImage }
         return ExportResult(
             json = SnippetBackup.encode(records, getCategories()),
@@ -248,7 +280,7 @@ class SnippetRepository private constructor(
             ordered.forEachIndexed { index, entry ->
                 if (dao.findTextDuplicate(entry.record.text) != null) return@forEachIndexed
                 val categoryId = entry.category?.let { nameToId[it.lowercase()] }
-                dao.upsert(
+                val newId = dao.upsert(
                     SnippetEntity(
                         title = resolveTitle(entry.record.copy(id = 0, categoryId = categoryId)),
                         text = entry.record.text,
@@ -260,6 +292,7 @@ class SnippetRepository private constructor(
                         position = base + index,
                     ),
                 )
+                linkTags(newId, entry.record.tags, now)
                 imported++
             }
             imported
@@ -311,6 +344,6 @@ class SnippetRepository private constructor(
         }
 
         internal fun forDatabase(db: PastilleDatabase): SnippetRepository =
-            SnippetRepository(db, db.snippets(), db.categories())
+            SnippetRepository(db, db.snippets(), db.categories(), db.tags())
     }
 }

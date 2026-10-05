@@ -87,10 +87,6 @@ class PastilleSettings private constructor(private val prefs: SharedPreferences)
         get() = prefs.getString(KEY_RETURN_KEYBOARD_ID, null)
         set(value) = prefs.edit().apply { if (value == null) remove(KEY_RETURN_KEYBOARD_ID) else putString(KEY_RETURN_KEYBOARD_ID, value) }.apply()
 
-    var previousImeId: String?
-        get() = prefs.getString(KEY_PREVIOUS_IME_ID, null)
-        set(value) = prefs.edit().putString(KEY_PREVIOUS_IME_ID, value).apply()
-
     var clipboardClearDelay: ClipboardClearDelay
         get() = ClipboardClearDelay.fromKey(prefs.getString(KEY_CLIPBOARD_CLEAR_DELAY, null))
         set(value) = prefs.edit().putString(KEY_CLIPBOARD_CLEAR_DELAY, value.key).apply()
@@ -98,7 +94,6 @@ class PastilleSettings private constructor(private val prefs: SharedPreferences)
     companion object {
         private const val PREFS_NAME = "pastille_settings"
         private const val KEY_CLIPBOARD_CLEAR_DELAY = "clipboard_clear_delay"
-        private const val KEY_PREVIOUS_IME_ID = "previous_ime_id"
         private const val KEY_RETURN_KEYBOARD_ID = "return_keyboard_id"
         const val PREVIOUS_KEYBOARD = "previous"
         private const val KEY_RETURN_TO_PREVIOUS_KEYBOARD = "return_to_previous_keyboard"

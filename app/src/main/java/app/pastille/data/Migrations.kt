@@ -44,3 +44,10 @@ val MIGRATION_4_5 = object : Migration(4, 5) {
         db.execSQL("CREATE INDEX IF NOT EXISTS `index_snippet_tags_tagId` ON `snippet_tags` (`tagId`)")
     }
 }
+
+// Stickers: an image snippet carrying one mark. No CHECK (ALTER can't add one) and no index.
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `snippets` ADD COLUMN `sticker` INTEGER NOT NULL DEFAULT 0")
+    }
+}

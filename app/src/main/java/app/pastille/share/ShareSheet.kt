@@ -24,6 +24,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Link
+import androidx.compose.material.icons.rounded.EmojiEmotions
+import androidx.compose.material.icons.rounded.Image
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -60,6 +65,7 @@ fun ShareSheet(
     state: ShareUiState,
     categories: List<CategoryRecord>,
     onSelectCategory: (Long?) -> Unit,
+    onSelectSaveAs: (Boolean) -> Unit,
     onUndo: () -> Unit,
     onEdit: () -> Unit,
     onDismiss: () -> Unit,
@@ -126,7 +132,18 @@ fun ShareSheet(
                     )
                 }
             }
-            if (!failed) {
+            val sharesImages = state.kind == ShareKind.SINGLE_IMAGE || state.kind == ShareKind.MULTI_IMAGE
+            if (!failed && sharesImages) {
+                Spacer(modifier = Modifier.height(16.dp))
+                SaveAsRow(
+                    sticker = state.saveAsSticker,
+                    enabled = !state.saving && !removed,
+                    onSelect = onSelectSaveAs,
+                    modifier = Modifier.graphicsLayer { alpha = if (removed) 0.38f else 1f },
+                )
+            }
+            // Stickers have no folder.
+            if (!failed && !(sharesImages && state.saveAsSticker)) {
                 Spacer(modifier = Modifier.height(16.dp))
                 Box(modifier = Modifier.graphicsLayer { alpha = if (removed) 0.38f else 1f }) {
                     LazyRow(
@@ -204,6 +221,8 @@ private fun HeaderRow(state: ShareUiState, onUndo: () -> Unit) {
         state.status == ShareStatus.FAILED -> "Couldn't save this"
         state.status == ShareStatus.REMOVED -> "Removed"
         state.status == ShareStatus.ALREADY -> "Already in Pastille"
+        state.saveAsSticker && state.savedCount == 1 -> "Saved as a sticker"
+        state.saveAsSticker -> "Saved ${state.savedCount} stickers"
         state.kind == ShareKind.MULTI_IMAGE -> {
             val saved = state.imageFiles.size
             if (state.totalImages > saved) {
@@ -390,6 +409,42 @@ private fun MultiImagePreview(state: ShareUiState) {
                 }
             }
         }
+    }
+}
+
+// "Save as: Image / Sticker", single-select, remembered for the next share.
+@Composable
+private fun SaveAsRow(sticker: Boolean, enabled: Boolean, onSelect: (Boolean) -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier.selectableGroup(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "Save as",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        FilterChip(
+            selected = !sticker,
+            onClick = { onSelect(false) },
+            enabled = enabled,
+            label = { Text("Image") },
+            leadingIcon = {
+                Icon(Icons.Rounded.Image, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize))
+            },
+            modifier = Modifier.semantics { role = Role.RadioButton },
+        )
+        FilterChip(
+            selected = sticker,
+            onClick = { onSelect(true) },
+            enabled = enabled,
+            label = { Text("Sticker") },
+            leadingIcon = {
+                Icon(Icons.Rounded.EmojiEmotions, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize))
+            },
+            modifier = Modifier.semantics { role = Role.RadioButton },
+        )
     }
 }
 

@@ -28,9 +28,11 @@ enum class PanelHeight(val key: String, val label: String, val portraitDp: Int, 
     }
 }
 
-enum class KeyboardMode(val key: String) {
-    Snippets("snippets"),
-    Images("images"),
+// Declared in tab-bar order: Snippets, Stickers, Images.
+enum class KeyboardMode(val key: String, val label: String) {
+    Snippets("snippets", "Snippets"),
+    Stickers("stickers", "Stickers"),
+    Images("images", "Images"),
     ;
 
     companion object {
@@ -53,9 +55,14 @@ fun panelHeightDp(preset: PanelHeight, landscape: Boolean, windowHeightDp: Int):
 
 fun tileColumns(widthDp: Int): Int = (widthDp / 195).coerceIn(2, 4)
 
-// With one mode switched off the keyboard shows only the other, whatever was last open.
-fun effectiveMode(saved: KeyboardMode, snippetsEnabled: Boolean, imagesEnabled: Boolean): KeyboardMode = when {
-    !snippetsEnabled && imagesEnabled -> KeyboardMode.Images
-    !imagesEnabled -> KeyboardMode.Snippets
-    else -> saved
+// A switched-off mode gives way to the first enabled one in bar order.
+fun effectiveMode(saved: KeyboardMode, enabled: Set<KeyboardMode>): KeyboardMode = when {
+    saved in enabled -> saved
+    else -> KeyboardMode.entries.firstOrNull { it in enabled } ?: KeyboardMode.Snippets
 }
+
+// Square sticker cells about 72dp wide: columns follow the width, rows the panel height.
+fun stickerColumns(widthDp: Int): Int = ((widthDp - 12) / 72).coerceIn(4, 10)
+
+// The last enabled mode can't be switched off.
+fun canSwitchOff(mode: KeyboardMode, enabled: Set<KeyboardMode>): Boolean = mode !in enabled || enabled.size > 1

@@ -66,7 +66,9 @@ import app.pastille.ime.KeyboardHeightPreview
 import app.pastille.ime.KeyboardStylePreview
 import app.pastille.ime.otherTypingKeyboards
 import app.pastille.settings.ClipboardClearDelay
+import app.pastille.settings.KeyboardMode
 import app.pastille.settings.KeyboardStyle
+import app.pastille.settings.canSwitchOff
 import app.pastille.settings.PanelHeight
 import app.pastille.settings.PastilleSettings
 
@@ -111,8 +113,7 @@ private fun KeyboardGroup(settings: PastilleSettings) {
     var panelPortrait by remember { mutableStateOf(settings.panelHeightPortrait) }
     var panelLandscape by remember { mutableStateOf(settings.panelHeightLandscape) }
     var previewLandscape by remember { mutableStateOf(false) }
-    var snippetsOn by remember { mutableStateOf(settings.snippetsEnabled) }
-    var imagesOn by remember { mutableStateOf(settings.imagesEnabled) }
+    var enabledModes by remember { mutableStateOf(settings.enabledModes()) }
     var returnAfterSnippet by remember { mutableStateOf(settings.returnAfterSnippet) }
     fun chooseStyle(style: KeyboardStyle) {
         selectedStyle = style
@@ -160,15 +161,10 @@ private fun KeyboardGroup(settings: PastilleSettings) {
         SettingsRow(title = "Show in the keyboard", subtitle = "At least one stays on", icon = Icons.Rounded.Dashboard)
         SettingsRowDetail {
             ModesRow(
-                snippetsOn = snippetsOn,
-                imagesOn = imagesOn,
-                onSnippets = {
-                    snippetsOn = it
-                    settings.snippetsEnabled = it
-                },
-                onImages = {
-                    imagesOn = it
-                    settings.imagesEnabled = it
+                enabled = enabledModes,
+                onChange = { mode, on ->
+                    settings.setModeEnabled(mode, on)
+                    enabledModes = settings.enabledModes()
                 },
             )
         }
@@ -388,26 +384,21 @@ private fun ToggleRow(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ModesRow(
-    snippetsOn: Boolean,
-    imagesOn: Boolean,
-    onSnippets: (Boolean) -> Unit,
-    onImages: (Boolean) -> Unit,
+    enabled: Set<KeyboardMode>,
+    onChange: (KeyboardMode, Boolean) -> Unit,
 ) {
+    val modes = KeyboardMode.entries
     MultiChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-        SegmentedButton(
-            checked = snippetsOn,
-            onCheckedChange = { if (it || imagesOn) onSnippets(it) },
-            shape = SegmentedButtonDefaults.itemShape(0, 2),
-            icon = { SegmentedButtonDefaults.Icon(active = snippetsOn) },
-            label = { Text("Snippets") },
-        )
-        SegmentedButton(
-            checked = imagesOn,
-            onCheckedChange = { if (it || snippetsOn) onImages(it) },
-            shape = SegmentedButtonDefaults.itemShape(1, 2),
-            icon = { SegmentedButtonDefaults.Icon(active = imagesOn) },
-            label = { Text("Images") },
-        )
+        modes.forEachIndexed { index, mode ->
+            val on = mode in enabled
+            SegmentedButton(
+                checked = on,
+                onCheckedChange = { if (it || canSwitchOff(mode, enabled)) onChange(mode, it) },
+                shape = SegmentedButtonDefaults.itemShape(index, modes.size),
+                icon = { SegmentedButtonDefaults.Icon(active = on) },
+                label = { Text(mode.label, maxLines = 1) },
+            )
+        }
     }
 }
 

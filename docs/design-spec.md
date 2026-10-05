@@ -1138,3 +1138,36 @@ A snippet lives in one folder and can carry any number of tags.
 
 - [ ] The folder chip row ends with an outlined **"+ Add"** chip (`outlineVariant` border, `Icons.Rounded.Add`), which opens the New folder dialog.
 - [ ] **Search** is a full-width pill (`surfaceContainerHigh`, `CircleShape`, 56dp, 16dp side margins) with a leading search icon and a trailing ✕ that closes it, in place of the old bar with a back arrow.
+
+## 15. Stickers: **a third keyboard tab, overrides §10.1's two modes**
+
+A sticker is a saved image marked as a sticker. There are no packs, no downloads and nothing from the network: Pastille pastes your own things.
+
+### 15.1 Keyboard
+
+- [ ] Tabs, in order: **Snippets · Stickers · Images**. Pills show icons (`ShortText`, `EmojiEmotions`, `Image`, 20dp), and only the selected one also shows its label. Under 400dp all three are icons only. Each keeps `Role.Tab` and its label as `contentDescription`.
+- [ ] Right-hand actions: Snippets has Add and Reorder, Stickers has Add ("Add stickers", which opens the app's picker), Images has none. Switch keyboard and Settings are always shown.
+- [ ] The last tab reopens. Switching slides on X, with direction by index. Settings › "Show in the keyboard" includes Stickers (on by default).
+- [ ] `StickerGrid`: columns = `((width − 12) / 72dp)` clamped to 4–10, square cells, 4dp gaps, padding 6/4/6/20dp. That is 5 columns and just under 4 rows at 411dp with the default height. One flat grid in manual order, with no folders and no pin.
+- [ ] Cells have no chrome. The sticker is `Fit`, centred, at a 6dp inset on `tray`, never cropped. Opaque images are clipped to 8dp corners. Press: a `keyPressed` 10dp square over 60ms, with no ripple, scale or spring.
+- [ ] Tap inserts with the real MIME type, then "Return after an image" applies. Fallback: the real type, then a PNG copy (static stickers only), then the clipboard. Animated stickers are never transcoded.
+- [ ] Long-press: the Actions state rises. Its preview is 120dp, `Fit` on `tray`, and plays if animated; tapping it inserts. Buttons: Edit in app, Move to snippets, Delete. Image snippets' Actions gain "Make sticker".
+- [ ] Animation: the first frame in the grid, playing only in the Actions preview. With reduced motion it doesn't play.
+- [ ] Empty: "No stickers yet", with "Add stickers" and "Or share images to Pastille and choose Sticker."
+- [ ] Stickers never appear under Snippets, `All` included.
+
+### 15.2 App
+
+- [ ] A fixed "Stickers" chip straight after "All", which isn't draggable and has no rename or delete. Selecting it shows a grid: `(width − 32) / 88dp` clamped to 3–6 columns, `surfaceContainerLow` 12dp cells, the sticker `Fit` at a 10dp inset. No swipes. Reorder through the overflow Reorder mode.
+- [ ] Tap: the Organise sheet with a 160dp preview, a Description field, a Sticker switch and Delete. Long-press: Move to snippets, Delete.
+- [ ] FAB "Add stickers" (`AddPhotoAlternate`): the photo picker, up to 20 images. Snackbars: "Added 6 stickers · Undo", "Added 4 stickers · 2 moved from snippets", "Added 20 of 34 stickers".
+- [ ] Share sheet, for images: a "Save as: Image / Sticker" row that remembers the last choice. Sticker hides the folder and pin rows.
+- [ ] Any image snippet's Organise sheet has the Sticker switch. Importing into Stickers flips an existing image snippet to a sticker rather than duplicating it, and says so.
+
+### 15.3 Not doing
+
+GIF search, network sticker search, packs, stores, Emoji Kitchen, AI stickers or suggestions, avatar stickers, cropping, background removal, a recents strip, autoplaying grids, and sticker folders in v1.
+
+### 15.4 Motion
+
+Only the selected pill's width change is new: `SHORT_MS` with `Standard`, snapping under reduced motion. Everything else uses existing tokens: the X slide between tabs, `animateItem` on cells, and the Actions state rising (§10.6.3).

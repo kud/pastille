@@ -10,6 +10,7 @@ import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
@@ -34,6 +35,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -97,6 +99,8 @@ import androidx.compose.material.icons.rounded.EditNote
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.FolderOff
 import androidx.compose.material.icons.rounded.Image
+import androidx.compose.material.icons.rounded.EmojiEmotions
+import androidx.compose.material.icons.automirrored.rounded.ShortText
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.Keyboard
 import androidx.compose.material.icons.rounded.Settings
@@ -150,6 +154,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -157,6 +162,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.pastille.images.ImageThumbnail
+import app.pastille.images.StickerThumbnail
 import app.pastille.model.CategoryRecord
 import app.pastille.model.SnippetRecord
 import app.pastille.settings.KeyboardMode
@@ -164,6 +170,7 @@ import app.pastille.settings.KeyboardStyle
 import app.pastille.settings.PanelHeight
 import app.pastille.settings.TOOLBAR_HEIGHT_DP
 import app.pastille.settings.tileColumns
+import app.pastille.settings.stickerColumns
 import app.pastille.share.isMeaningfulImageName
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -171,41 +178,70 @@ import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+internal fun modeIcon(mode: KeyboardMode): ImageVector = when (mode) {
+    KeyboardMode.Snippets -> Icons.AutoMirrored.Rounded.ShortText
+    KeyboardMode.Stickers -> Icons.Rounded.EmojiEmotions
+    KeyboardMode.Images -> Icons.Rounded.Image
+}
+
+// Icon pills in bar order; only the selected one shows its label, and under 400dp none do.
 @Composable
-internal fun ModeSwitch(mode: KeyboardMode, onChange: (KeyboardMode) -> Unit) {
+internal fun ModeSwitch(
+    mode: KeyboardMode,
+    enabled: Set<KeyboardMode>,
+    onChange: (KeyboardMode) -> Unit,
+    compact: Boolean = false,
+) {
     Row(
         modifier = Modifier.padding(start = 8.dp).selectableGroup(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ModeTab(label = "Snippets", selected = mode == KeyboardMode.Snippets) { onChange(KeyboardMode.Snippets) }
-        ModeTab(label = "Images", selected = mode == KeyboardMode.Images) { onChange(KeyboardMode.Images) }
+        KeyboardMode.entries.filter { it in enabled }.forEach { tab ->
+            ModeTab(
+                icon = modeIcon(tab),
+                label = tab.label,
+                selected = mode == tab,
+                showLabel = mode == tab && !compact,
+            ) { onChange(tab) }
+        }
     }
 }
 
 @Composable
-private fun ModeTab(label: String, selected: Boolean, onClick: () -> Unit) {
+private fun ModeTab(icon: ImageVector, label: String, selected: Boolean, showLabel: Boolean, onClick: () -> Unit) {
     val palette = LocalKeyboardPalette.current
+    val reduceMotion = LocalReduceMotion.current
     val background by animateColorAsState(
         targetValue = if (selected) palette.stripButton else Color.Transparent,
         animationSpec = tween(PastilleMotion.EXIT_MS),
         label = "modePill",
     )
-    Box(
+    val tint = if (selected) palette.onStripButton else palette.icon
+    Row(
         modifier = Modifier
             .minimumInteractiveComponentSize()
             .height(32.dp)
             .clip(RoundedCornerShape(50))
             .background(background)
             .selectable(selected = selected, role = Role.Tab, onClick = onClick)
-            .padding(horizontal = 12.dp),
-        contentAlignment = Alignment.Center,
+            .semantics { contentDescription = label }
+            .animateContentSize(
+                if (reduceMotion) snap() else tween(PastilleMotion.SHORT_MS, easing = PastilleMotion.Standard),
+            )
+            .padding(horizontal = if (showLabel) 12.dp else 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelLarge,
-            color = if (selected) palette.onStripButton else palette.icon,
-            maxLines = 1,
-        )
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
+        if (showLabel) {
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                color = tint,
+                maxLines = 1,
+                modifier = Modifier.clearAndSetSemantics { },
+            )
+        }
     }
 }
 
@@ -626,5 +662,99 @@ internal fun ImageGrid(
                 )
             }
         }
+    }
+}
+
+// One flat grid of stickers in manual order, shared by the keyboard and the picker sheet. Columns
+// come from the width, so a sticker keeps its size and a taller panel shows more rows.
+@Composable
+internal fun StickerGrid(
+    stickers: List<SnippetRecord>,
+    actions: KeyboardActions,
+    modifier: Modifier = Modifier,
+    tapVerb: String = "Insert",
+) {
+    val haptics = LocalHapticFeedback.current
+    val density = LocalDensity.current
+    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+        val widthDp = maxWidth.value.toInt()
+        val columns = stickerColumns(widthDp)
+        val cellDp = (widthDp - 12 - 4 * (columns - 1)).toFloat() / columns
+        val targetPx = with(density) { cellDp.dp.roundToPx() }
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(columns),
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 6.dp, end = 6.dp, top = 4.dp, bottom = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            items(stickers, key = { it.id }) { sticker ->
+                StickerCell(
+                    sticker = sticker,
+                    targetPx = targetPx,
+                    tapVerb = tapVerb,
+                    onTap = { actions.onSnippetTap(sticker) },
+                    onLongPress = {
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        actions.onSnippetLongPress(sticker)
+                    },
+                    actions = actions,
+                    modifier = Modifier.animateItem(),
+                )
+            }
+        }
+    }
+}
+
+// No chrome: the sticker alone, at a 6dp inset. A pressed square fades in under the finger, and nothing else moves.
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun StickerCell(
+    sticker: SnippetRecord,
+    targetPx: Int,
+    tapVerb: String,
+    onTap: () -> Unit,
+    onLongPress: () -> Unit,
+    actions: KeyboardActions,
+    modifier: Modifier = Modifier,
+) {
+    val palette = LocalKeyboardPalette.current
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val pressAlpha by animateFloatAsState(
+        targetValue = if (pressed) 1f else 0f,
+        animationSpec = tween(PastilleMotion.PRESS_MS),
+        label = "stickerPress",
+    )
+    val title = sticker.title.ifBlank { "Sticker" }
+    val imageFile = sticker.imageFile ?: return
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .aspectRatio(1f)
+            .clip(TileShape)
+            .background(palette.keyPressed.copy(alpha = palette.keyPressed.alpha * pressAlpha))
+            .combinedClickable(
+                interactionSource = interaction,
+                indication = null,
+                onLongClick = onLongPress,
+                onClick = onTap,
+            )
+            .semantics(mergeDescendants = true) {
+                contentDescription = "$tapVerb sticker, $title"
+                customActions = listOf(
+                    CustomAccessibilityAction("Edit") {
+                        actions.onEditSnippet(sticker)
+                        true
+                    },
+                    CustomAccessibilityAction("Delete") {
+                        actions.onDeleteSnippet(sticker)
+                        true
+                    },
+                )
+            }
+            .padding(6.dp),
+    ) {
+        StickerThumbnail(fileName = imageFile, targetPx = targetPx, modifier = Modifier.fillMaxSize())
     }
 }

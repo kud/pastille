@@ -89,7 +89,7 @@ class MigrationTest {
             ApplicationProvider.getApplicationContext(),
             PastilleDatabase::class.java,
             DB_NAME,
-        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build()
+        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6).build()
         helper.closeWhenFinished(database)
 
         val snippets = runBlocking { database.snippets().getAll() }
@@ -167,6 +167,35 @@ class MigrationTest {
             db.execSQL("INSERT INTO snippet_tags (snippetId, tagId) VALUES (1, 1)")
             fail("expected the composite primary key to reject a duplicate link")
         } catch (_: SQLException) {
+        }
+    }
+
+    @Test
+    fun migration5To6KeepsImageAndTextRowsAsSnippets() {
+        helper.createDatabase(DB_NAME, 5).apply {
+            execSQL(
+                "INSERT INTO snippets (id, title, text, pinned, createdAt, updatedAt, lastUsedAt, position) " +
+                    "VALUES (1, 'greeting', 'hello there', 0, 10, 20, 30, 0)",
+            )
+            execSQL(
+                "INSERT INTO snippets (id, title, text, pinned, createdAt, updatedAt, lastUsedAt, imageFile, imageWidth, imageHeight, position) " +
+                    "VALUES (2, 'cat', '', 0, 11, 21, 31, 'abc.webp', 512, 512, 1)",
+            )
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(DB_NAME, 6, true, MIGRATION_5_6)
+
+        db.query("SELECT id, imageFile, sticker FROM snippets ORDER BY id").use { cursor ->
+            assertEquals(2, cursor.count)
+            assertTrue(cursor.moveToNext())
+            assertEquals(1L, cursor.getLong(0))
+            assertTrue(cursor.isNull(1))
+            assertEquals(0, cursor.getInt(2))
+            assertTrue(cursor.moveToNext())
+            assertEquals(2L, cursor.getLong(0))
+            assertEquals("abc.webp", cursor.getString(1))
+            assertEquals(0, cursor.getInt(2))
         }
     }
 

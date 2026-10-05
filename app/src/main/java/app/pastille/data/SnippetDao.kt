@@ -8,9 +8,11 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface SnippetDao {
-    @Query("SELECT * FROM snippets WHERE deletedAt IS NULL ORDER BY position ASC, lastUsedAt DESC")
+    // Every snippet reader carries `sticker = 0`: stickers live only in their own tab.
+    @Query("SELECT * FROM snippets WHERE deletedAt IS NULL AND sticker = 0 ORDER BY position ASC, lastUsedAt DESC")
     fun observeAll(): Flow<List<SnippetEntity>>
 
+    // The export: stickers stay in, so its summary counts them with the image snippets it leaves out.
     @Query("SELECT * FROM snippets WHERE deletedAt IS NULL ORDER BY position ASC, lastUsedAt DESC")
     suspend fun getAll(): List<SnippetEntity>
 
@@ -29,7 +31,7 @@ interface SnippetDao {
     @Query("UPDATE snippets SET categoryId = NULL WHERE categoryId = :categoryId")
     suspend fun clearCategory(categoryId: Long)
 
-    @Query("SELECT * FROM snippets WHERE imageFile IS NULL AND text = :text AND deletedAt IS NULL LIMIT 1")
+    @Query("SELECT * FROM snippets WHERE imageFile IS NULL AND text = :text AND deletedAt IS NULL AND sticker = 0 LIMIT 1")
     suspend fun findTextDuplicate(text: String): SnippetEntity?
 
     @Query("SELECT * FROM snippets WHERE imageFile = :name AND deletedAt IS NULL LIMIT 1")
@@ -80,4 +82,13 @@ interface SnippetDao {
 
     @Query("SELECT id FROM snippets WHERE deletedAt IS NOT NULL AND deletedAt < :cutoff")
     suspend fun expiredBinnedIds(cutoff: Long): List<Long>
+
+    @Query("SELECT * FROM snippets WHERE sticker = 1 AND imageFile IS NOT NULL AND deletedAt IS NULL ORDER BY position ASC")
+    fun observeStickers(): Flow<List<SnippetEntity>>
+
+    @Query("SELECT MAX(position) FROM snippets WHERE sticker = 1")
+    suspend fun maxStickerPosition(): Int?
+
+    @Query("UPDATE snippets SET sticker = :sticker, categoryId = :categoryId, position = :position WHERE id = :id")
+    suspend fun setSticker(id: Long, sticker: Boolean, categoryId: Long?, position: Int)
 }

@@ -94,3 +94,9 @@ fun isAnimatedWebp(header: ByteArray): Boolean {
     return ascii(0, "RIFF") && ascii(8, "WEBP") && ascii(12, "VP8X") &&
         (header[20].toInt() and 0x02) != 0
 }
+
+private const val MB = 1024 * 1024
+
+// An eighth of the app's memory class, between 8 and 32 MB.
+fun thumbnailCacheBytes(memoryClassMb: Int): Int =
+    (memoryClassMb.toLong() * MB / 8).coerceIn(8L * MB, 32L * MB).toInt()

@@ -167,6 +167,19 @@ import app.pastille.model.filterByTags
 import app.pastille.model.isMissingFolder
 import app.pastille.model.matchesQuery
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import android.net.Uri
+import android.provider.OpenableColumns
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.compose.material.icons.rounded.AddPhotoAlternate
+import androidx.compose.material.icons.rounded.EmojiEmotions
+import app.pastille.settings.PastilleSettings
+import app.pastille.share.imageTitle
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -178,12 +191,15 @@ fun SnippetListScreen(
     onOpenBin: () -> Unit = {},
     deletedSnippet: SnippetRecord? = null,
     onDeletedShown: () -> Unit = {},
+    addStickersRequested: Boolean = false,
+    onAddStickersHandled: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     val flow = remember { repository.observeSnippets() }
     val snippets by flow.collectAsStateWithLifecycle(initialValue = emptyList())
+    val stickers by remember { repository.observeStickers() }.collectAsStateWithLifecycle(initialValue = emptyList())
     var query by rememberSaveable { mutableStateOf("") }
     var searching by rememberSaveable { mutableStateOf(false) }
     var refreshTick by remember { mutableStateOf(0) }
@@ -198,6 +214,10 @@ fun SnippetListScreen(
         CrashLog.forContext(context).entries().isNotEmpty()
     }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { refreshTick++ }
+    val settings = remember { PastilleSettings.forContext(context) }
+    val stickersModeOn = remember(refreshTick) { settings.stickersEnabled }
+    // The chip shows once a sticker exists, and while the Stickers keyboard mode is on, so the empty state has a way in.
+    val showStickersChip = stickers.isNotEmpty() || stickersModeOn
 
     val loadedCategories by remember { repository.observeCategories() }
         .collectAsStateWithLifecycle(initialValue = null as List<CategoryRecord>?)
@@ -209,7 +229,7 @@ fun SnippetListScreen(
     var organisingFrom by rememberSaveable { mutableStateOf<Long?>(null) }
     val allTagNames by remember { repository.observeTagNames() }
         .collectAsStateWithLifecycle(initialValue = emptyList())
-    val organising = organisingId?.let { id -> snippets.firstOrNull { it.id == id } }
+    val organising = organisingId?.let { id -> snippets.firstOrNull { it.id == id } ?: stickers.firstOrNull { it.id == id } }
 
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json"),
@@ -318,6 +338,55 @@ fun SnippetListScreen(
         }
     }
 
+    fun setSticker(snippet: SnippetRecord, on: Boolean) {
+        scope.launch {
+            val before = repository.get(snippet.id) ?: return@launch
+            if (!repository.setSticker(snippet.id, on)) return@launch
+            val result = snackbarHostState.showSnackbar(
+                message = if (on) "Moved to stickers" else "Moved to snippets",
+                actionLabel = "Undo",
+                duration = SnackbarDuration.Short,
+            )
+            if (result == SnackbarResult.ActionPerformed) repository.restore(before)
+        }
+    }
+
+    fun importStickers(uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        scope.launch {
+            val adding = launch {
+                snackbarHostState.showSnackbar(addingStickersMessage(uris.size), duration = SnackbarDuration.Indefinite)
+            }
+            val fallbackDate = DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)
+                .withLocale(Locale.getDefault())
+                .format(LocalDate.now())
+            val names = withContext(Dispatchers.IO) { uris.map { displayNameOf(context, it) } }
+            val store = ImageStore.forContext(context)
+            val imported = repository.importImages(
+                uris = uris,
+                categoryId = null,
+                sticker = true,
+                importer = store,
+                titleFor = { index -> imageTitle(null, names.getOrNull(index), fallbackDate) },
+            )
+            adding.cancel()
+            val result = snackbarHostState.showSnackbar(
+                message = stickerImportMessage(imported),
+                actionLabel = if (imported.savedCount > 0) "Undo" else null,
+                duration = SnackbarDuration.Short,
+            )
+            if (result == SnackbarResult.ActionPerformed) repository.undoImport(imported, store::delete)
+        }
+    }
+
+    val stickerPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickMultipleVisualMedia(SnippetRepository.MAX_IMPORT),
+    ) { uris -> importStickers(uris) }
+
+    fun pickStickers() {
+        stickerPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+    }
+
     LaunchedEffect(deletedSnippet) {
         if (deletedSnippet != null) {
             // Clearing the request restarts this effect, so the snackbar runs on the screen's scope.
@@ -342,12 +411,34 @@ fun SnippetListScreen(
     var deletingFolder by remember { mutableStateOf<CategoryRecord?>(null) }
     val orderedFolders = remember(categories) { categories.sortedBy { it.position } }
     LaunchedEffect(loadedCategories) {
-        if (isMissingFolder(loadedCategories, selectedTab.takeIf { it != ALL_TAB })) selectedTab = ALL_TAB
+        if (isMissingFolder(loadedCategories, selectedTab.takeIf { it >= 0 })) selectedTab = ALL_TAB
     }
-    val selectedFolderId = selectedTab.takeIf { it != ALL_TAB }
-    val shown = remember(visible, selectedTab) {
-        if (selectedTab == ALL_TAB) visible else visible.filter { it.categoryId == selectedTab }
+    LaunchedEffect(addStickersRequested) {
+        if (!addStickersRequested) return@LaunchedEffect
+        selectedTab = STICKERS_TAB
+        searching = false
+        query = ""
+        reordering = false
+        onAddStickersHandled()
+        pickStickers()
     }
+    LaunchedEffect(showStickersChip) {
+        if (!showStickersChip && selectedTab == STICKERS_TAB) selectedTab = ALL_TAB
+    }
+    val onStickers = selectedTab == STICKERS_TAB
+    val selectedFolderId = selectedTab.takeIf { it >= 0 }
+    // Search finds stickers by description too, as rows carrying a "Sticker" pill.
+    val matchingStickers = remember(stickers, query) {
+        if (query.isBlank()) emptyList() else stickers.filter { matchesQuery(it, query) }
+    }
+    val shown = remember(visible, selectedTab, matchingStickers) {
+        when (selectedTab) {
+            ALL_TAB -> visible + matchingStickers
+            STICKERS_TAB -> matchingStickers
+            else -> visible.filter { it.categoryId == selectedTab }
+        }
+    }
+    val stickerGridShown = onStickers && query.isBlank()
     val searchFocus = remember { FocusRequester() }
     LaunchedEffect(searching) { if (searching) searchFocus.requestFocus() }
     var snippetDragOrder by remember(shown, reordering) { mutableStateOf(shown) }
@@ -450,6 +541,15 @@ fun SnippetListScreen(
             onMove = { target -> scope.launch { repository.setCategory(listOf(organising.id), target) } },
             onTagsChange = { tags -> scope.launch { repository.setTags(organising.id, tags) } },
             onDismiss = { closeOrganise(organising) },
+            onSetSticker = { on ->
+                organisingId = null
+                setSticker(organising, on)
+            },
+            onRename = { title -> scope.launch { repository.setTitle(organising.id, title) } },
+            onDelete = {
+                organisingId = null
+                deleteSnippet(organising)
+            },
         )
     }
 
@@ -533,7 +633,7 @@ fun SnippetListScreen(
                                 leadingIcon = {
                                     Icon(Icons.Rounded.SwapVert, contentDescription = null)
                                 },
-                                enabled = snippets.size > 1 || orderedFolders.size > 1,
+                                enabled = snippets.size > 1 || orderedFolders.size > 1 || stickers.size > 1,
                                 onClick = {
                                     showMenu = false
                                     searching = false
@@ -607,7 +707,11 @@ fun SnippetListScreen(
                 )
             },
             floatingActionButton = {
-                if (!reordering) {
+                if (!reordering && onStickers) {
+                    FloatingActionButton(onClick = ::pickStickers) {
+                        Icon(Icons.Rounded.AddPhotoAlternate, contentDescription = "Add stickers")
+                    }
+                } else if (!reordering) {
                     FloatingActionButton(onClick = { onCreate(selectedFolderId) }) {
                         Icon(Icons.Rounded.Edit, contentDescription = "New snippet")
                     }
@@ -620,9 +724,10 @@ fun SnippetListScreen(
                     .fillMaxSize()
                     .padding(padding),
             ) {
-                if (orderedFolders.isNotEmpty()) {
+                if (orderedFolders.isNotEmpty() || showStickersChip) {
                     FolderTabs(
                         folders = if (reordering) folderDragOrder else orderedFolders,
+                        showStickers = showStickersChip,
                         selectedId = selectedTab,
                         reordering = reordering,
                         onSelect = { selectedTab = it },
@@ -641,7 +746,7 @@ fun SnippetListScreen(
                         onAdd = { showCreateFolder = true },
                     )
                 }
-                if (tagsInUse.isNotEmpty() && !reordering) {
+                if (tagsInUse.isNotEmpty() && !reordering && !onStickers) {
                     TagFilterRow(
                         tags = tagsInUse,
                         selected = selectedTags.toSet(),
@@ -653,7 +758,17 @@ fun SnippetListScreen(
                 if (reordering) {
                     ReorderBanner(onDone = { reordering = false })
                 }
-                LazyColumn(
+                if (stickerGridShown) {
+                    StickerManageGrid(
+                        stickers = stickers,
+                        reordering = reordering,
+                        onOpen = ::openOrganise,
+                        onMoveToSnippets = { setSticker(it, false) },
+                        onDelete = ::deleteSnippet,
+                        onReorder = { order -> scope.launch { repository.setSnippetOrder(stickers, order) } },
+                        onAdd = ::pickStickers,
+                    )
+                } else LazyColumn(
                     modifier = Modifier.fillMaxSize().testTag(SNIPPET_LIST_TAG),
                     state = listState,
                     contentPadding = PaddingValues(bottom = 88.dp),
@@ -721,7 +836,7 @@ fun SnippetListScreen(
                                 SnippetRow(
                                     snippet = snippet,
                                     categoryName = if (selectedTab == ALL_TAB) snippet.categoryId?.let { categoryNames[it] } else null,
-                                    onEdit = { onEdit(snippet) },
+                                    onEdit = { if (snippet.sticker) openOrganise(snippet) else onEdit(snippet) },
                                     onCopy = { copySnippet(snippet) },
                                     onDelete = { deleteSnippet(snippet) },
                                     onSwipeStartToEnd = { openOrganise(snippet) },
@@ -1178,7 +1293,10 @@ private fun SnippetMetaRow(snippet: SnippetRecord, categoryName: String?) {
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        if (categoryName != null) {
+        if (snippet.sticker) {
+            Spacer(modifier = Modifier.width(6.dp))
+            StickerPill()
+        } else if (categoryName != null) {
             Spacer(modifier = Modifier.width(6.dp))
             FolderPill(categoryName)
         }
@@ -1262,6 +1380,13 @@ private fun toast(context: Context, message: String) {
 }
 
 private const val ALL_TAB = -1L
+private const val STICKERS_TAB = -2L
+
+private fun displayNameOf(context: Context, uri: Uri): String? = runCatching {
+    context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+        if (cursor.moveToFirst()) cursor.getString(0) else null
+    }
+}.getOrNull()
 internal const val TOP_BAR_TAG = "top-bar"
 internal const val SNIPPET_LIST_TAG = "snippet-list"
 internal const val WORDMARK_TAG = "wordmark"
@@ -1270,6 +1395,7 @@ internal const val WORDMARK_TAG = "wordmark"
 @Composable
 private fun FolderTabs(
     folders: List<CategoryRecord>,
+    showStickers: Boolean,
     selectedId: Long,
     reordering: Boolean,
     onSelect: (Long) -> Unit,
@@ -1287,7 +1413,12 @@ private fun FolderTabs(
         onMove(fromId, toId)
     }
     LaunchedEffect(selectedId, folders) {
-        val index = if (selectedId == ALL_TAB) 0 else folders.indexOfFirst { it.id == selectedId } + 1
+        val leading = if (showStickers) 2 else 1
+        val index = when (selectedId) {
+            ALL_TAB -> 0
+            STICKERS_TAB -> 1
+            else -> folders.indexOfFirst { it.id == selectedId }.let { if (it < 0) -1 else it + leading }
+        }
         if (index >= 0) rowState.animateScrollToItem(index)
     }
     LazyRow(
@@ -1299,6 +1430,17 @@ private fun FolderTabs(
     ) {
         item(key = "all") {
             FolderTab(label = "All", icon = Icons.Rounded.GridView, selected = selectedId == ALL_TAB, onClick = { onSelect(ALL_TAB) })
+        }
+        // A fixed chip, not a folder: never dragged, no rename or delete.
+        if (showStickers) {
+            item(key = "stickers") {
+                FolderTab(
+                    label = "Stickers",
+                    icon = Icons.Rounded.EmojiEmotions,
+                    selected = selectedId == STICKERS_TAB,
+                    onClick = { onSelect(STICKERS_TAB) },
+                )
+            }
         }
         items(folders, key = { it.id }) { folder ->
             ReorderableItem(reorderState, key = folder.id) { dragging ->

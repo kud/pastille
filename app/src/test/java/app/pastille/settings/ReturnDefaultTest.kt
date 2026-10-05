@@ -23,9 +23,9 @@ class EffectiveModeTest {
 
     @org.junit.Test
     fun `a switched-off mode is never shown`() {
-        org.junit.Assert.assertEquals(KeyboardMode.Images, effectiveMode(KeyboardMode.Snippets, snippetsEnabled = false, imagesEnabled = true))
-        org.junit.Assert.assertEquals(KeyboardMode.Snippets, effectiveMode(KeyboardMode.Images, snippetsEnabled = true, imagesEnabled = false))
-        org.junit.Assert.assertEquals(KeyboardMode.Images, effectiveMode(KeyboardMode.Images, snippetsEnabled = true, imagesEnabled = true))
+        org.junit.Assert.assertEquals(KeyboardMode.Images, effectiveMode(KeyboardMode.Snippets, setOf(KeyboardMode.Images)))
+        org.junit.Assert.assertEquals(KeyboardMode.Snippets, effectiveMode(KeyboardMode.Images, setOf(KeyboardMode.Snippets)))
+        org.junit.Assert.assertEquals(KeyboardMode.Images, effectiveMode(KeyboardMode.Images, KeyboardMode.entries.toSet()))
     }
 }
 

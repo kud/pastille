@@ -144,6 +144,14 @@ class ImageMathTest {
         assertEquals(StoragePlan.Transcode(2048), storagePlan(null, 800, 600, MB, animated = false))
     }
 
+    @Test
+    fun thumbnailCacheIsAnEighthOfMemoryClassBetween8And32Mb() {
+        assertEquals(8 * MB.toInt(), thumbnailCacheBytes(32))
+        assertEquals(24 * MB.toInt(), thumbnailCacheBytes(192))
+        assertEquals(32 * MB.toInt(), thumbnailCacheBytes(512))
+        assertEquals(8 * MB.toInt(), thumbnailCacheBytes(0))
+    }
+
     private fun webpHeader(chunk: String, flags: Int): ByteArray {
         val bytes = ByteArray(30)
         "RIFF".forEachIndexed { i, c -> bytes[i] = c.code.toByte() }

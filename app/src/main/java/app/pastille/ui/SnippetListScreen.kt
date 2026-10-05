@@ -69,6 +69,7 @@ import androidx.compose.material.icons.rounded.CreateNewFolder
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.ShortText
+import androidx.compose.material.icons.automirrored.rounded.DriveFileMove
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.Check
@@ -195,6 +196,8 @@ fun SnippetListScreen(
     val categories = loadedCategories.orEmpty()
     var showCreateFolder by remember { mutableStateOf(false) }
     var showTryIt by remember { mutableStateOf(false) }
+    var organisingId by rememberSaveable { mutableStateOf<Long?>(null) }
+    val organising = organisingId?.let { id -> snippets.firstOrNull { it.id == id } }
 
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json"),
@@ -258,6 +261,23 @@ fun SnippetListScreen(
     fun moveSnippet(snippet: SnippetRecord, categoryId: Long?) {
         scope.launch {
             repository.setCategory(listOf(snippet.id), categoryId)
+        }
+    }
+
+    fun organiseMove(snippet: SnippetRecord, target: Long?) {
+        organisingId = null
+        val previous = snippet.categoryId
+        if (target == previous) return
+        scope.launch {
+            repository.setCategory(listOf(snippet.id), target)
+            val result = snackbarHostState.showSnackbar(
+                message = movedMessage(target?.let { id -> categories.firstOrNull { it.id == id }?.name }),
+                actionLabel = "Undo",
+                duration = SnackbarDuration.Short,
+            )
+            if (result == SnackbarResult.ActionPerformed) {
+                repository.setCategory(listOf(snippet.id), previous)
+            }
         }
     }
 
@@ -401,6 +421,15 @@ fun SnippetListScreen(
             dismissButton = { TextButton(onClick = { deletingFolder = null }) { Text("Cancel") } },
             title = { Text("Delete ?") },
             text = { Text("Snippets in  move to the top level.") },
+        )
+    }
+
+    if (organising != null) {
+        OrganiseSheet(
+            snippet = organising,
+            folders = orderedFolders,
+            onMove = { target -> organiseMove(organising, target) },
+            onDismiss = { organisingId = null },
         )
     }
 
@@ -653,7 +682,7 @@ fun SnippetListScreen(
                                     onEdit = { onEdit(snippet) },
                                     onCopy = { copySnippet(snippet) },
                                     onDelete = { deleteSnippet(snippet) },
-                                    onSwipeStartToEnd = { onEdit(snippet) },
+                                    onSwipeStartToEnd = { organisingId = snippet.id },
                                     folders = orderedFolders,
                                     onMove = { moveSnippet(snippet, it) },
                                 )
@@ -958,8 +987,8 @@ private fun FolderChoice(name: String, selected: Boolean, onClick: () -> Unit) {
 }
 
 // The swipe-right action lives here and in the row's onSwipeStartToEnd, nowhere else.
-private val StartToEndIcon: ImageVector get() = Icons.Rounded.Edit
-private const val START_TO_END_LABEL = "Edit"
+private val StartToEndIcon: ImageVector get() = Icons.AutoMirrored.Rounded.DriveFileMove
+private const val START_TO_END_LABEL = "Organise"
 
 @OptIn(ExperimentalMaterial3Api::class)
 private class SwipeGeometry {

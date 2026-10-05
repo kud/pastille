@@ -273,8 +273,10 @@ class SnippetRepository private constructor(
 
     companion object {
         fun forContext(context: Context): SnippetRepository {
-            val db = DatabaseHolder.get(context)
-            return SnippetRepository(db, db.snippets(), db.categories())
+            return forDatabase(DatabaseHolder.get(context))
         }
+
+        internal fun forDatabase(db: PastilleDatabase): SnippetRepository =
+            SnippetRepository(db, db.snippets(), db.categories())
     }
 }

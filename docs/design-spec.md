@@ -747,6 +747,8 @@ I don't have a screenshot of Gboard Light, so these are my best recollection of 
 
 ### 11.7 Keyboard style setting (in the app's Settings screen)
 
+> The layout of this section is superseded by §12 (grouped cards). The options, preview and persistence below still hold.
+
 - [ ] New section **"Keyboard style"** at the top of Settings, a single-choice list of `ListItem` + `RadioButton` rows (whole row clickable, `Modifier.selectable(role = Role.RadioButton)`):
   1. **Auto** (default): redefined in §11.9 as "Gboard's default for this Android version".
   2. **Match Gboard: Dark**: always `GboardDark`.
@@ -1023,3 +1025,44 @@ Every spec below is made from these values; no literals elsewhere.
 - [ ] Provide `LocalReduceMotion` in `MainActivity` as well as the IME, from the same `PastilleMotion.reduceMotion()`.
 - [ ] When it's true, every X, Z and Y transition above becomes `fadeIn(tween(SHORT_MS)) togetherWith fadeOut(tween(QUICK_MS))`, with no offset and no scale. `animateItem` keeps its fades and passes `placementSpec = null`. Swipe, press and selection colour changes stay: they're feedback, not movement. The check badge only fades.
 - [ ] With "Remove animations" on (animator scale 0), Compose's clock makes those fades instant anyway. That's correct; nothing extra to do, and no hand-multiplying of durations.
+
+## 12. Settings: grouped cards (overrides the layout of §11.7 and the §11.10 setting) — **v0.3**
+
+The Settings screen was one long column of `ListItem`s under `primary` section headers. It becomes a few grouped cards, each row on an icon tile, so the screen can be scanned by shape before it's read. The reference app's grouped settings are borrowed for their organisation only: Pastille's palette and tokens, one accent for every tile, never a colour per row.
+
+**Top bar**
+
+- [x] `LargeTopAppBar` that collapses on scroll (`exitUntilCollapsedScrollBehavior`, wired with `nestedScroll` on the `Scaffold`).
+- [x] The back arrow sits in a `FilledTonalIconButton`.
+
+**Groups**, in this order: **Keyboard**, **Clipboard**, **Photos**, **Advanced**, then a destructive card when there is one.
+
+- [x] Each group is a `surfaceContainer` card: 20dp corners, 16dp side margins, 12dp between groups.
+- [x] The group header sits above its card in `titleSmall` `onSurfaceVariant`, inset 16dp so it lines up with the card's content.
+- [x] Rows inside a card are separated by a 1dp `outlineVariant` hairline that starts at the text, 72dp in (16dp padding + 36dp tile + 20dp gap).
+- [ ] A group with no rows isn't drawn, header included. Clipboard is empty until its first setting lands.
+
+| Group | Rows |
+|---|---|
+| Keyboard | Style (preview + the inline radio list), Height (preview, Portrait and Landscape segmented rows, the try-it field), Show in the keyboard (Snippets / Images), Return after a snippet, Switch back to |
+| Clipboard | none yet |
+| Photos | Photo access, Return after an image |
+| Advanced | One-tap switching (status, explanation and the copyable `adb` command) |
+
+**Row anatomy** (shared composables in `ui/SettingsGroup.kt`: `SettingsGroup`, `SettingsRow`, `SettingsRowDetail`, `SettingsHairline`, `SettingsChevron`)
+
+- [x] **Icon tile:** 36dp, 10dp corners, `secondaryContainer`, with a 20dp `onSecondaryContainer` icon. The same accent on every row.
+- [x] **Text:** title `bodyLarge` at medium weight in `onSurface`; subtitle `bodyMedium` `onSurfaceVariant`. Disabled rows draw both at 38%.
+- [x] **Chevron** (`KeyboardArrowRight`, `onSurfaceVariant`) only on rows that open something: Switch back to (a menu) and Photo access while it can still ask (the system permission dialog). Switch rows keep their trailing `Switch`.
+- [x] **The style radio list stays inline:** each option is a row whose 36dp leading slot holds the `RadioButton`, so its text lines up with the tiles above. No hairlines between the options; they're one choice.
+- [x] **Detail content** that belongs to a row (previews, segmented buttons, the `adb` block) sits under it at the card's full inner width (16dp each side), so the four height options never squeeze.
+- [x] The whole row is the touch target (`selectable`, `toggleable` or `clickable` on the row), with Material's ripple.
+- [x] The `adb` command uses the app's real package name (`context.packageName`), not a hard-coded one.
+
+**Destructive** (none today)
+
+- [ ] When a destructive setting arrives, it gets a card of its own, last, with no header: an `errorContainer` tile with an `onErrorContainer` icon, and the title in `error`. `SettingsRow(destructive = true)` draws it. "Empty bin" stays in the Bin screen, not here.
+
+**Motion**
+
+- [x] §11.13 applies unchanged: ripple on press, Material defaults for switches, radios and segmented buttons, the style preview's 150ms crossfade and the height preview's `ENTER_MS` resize. The cards and tiles themselves never animate.

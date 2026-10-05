@@ -7,11 +7,16 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.rememberScrollState
@@ -22,12 +27,24 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.KeyboardReturn
 import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.Dashboard
+import androidx.compose.material.icons.rounded.Height
+import androidx.compose.material.icons.rounded.Image
+import androidx.compose.material.icons.rounded.Keyboard
+import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.PhotoLibrary
+import androidx.compose.material.icons.rounded.SwapHoriz
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
+import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MultiChoiceSegmentedButtonRow
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
@@ -35,14 +52,7 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.MultiChoiceSegmentedButtonRow
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.clickable
-import android.view.inputmethod.InputMethodManager
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -51,6 +61,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
@@ -60,9 +72,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.pastille.ime.ImageSourceReader
-import app.pastille.ime.otherTypingKeyboards
 import app.pastille.ime.KeyboardHeightPreview
 import app.pastille.ime.KeyboardStylePreview
+import app.pastille.ime.otherTypingKeyboards
 import app.pastille.settings.KeyboardStyle
 import app.pastille.settings.PanelHeight
 import app.pastille.settings.PastilleSettings
@@ -73,109 +85,66 @@ import app.pastille.tile.ImeSwitcher
 fun SettingsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val settings = remember { PastilleSettings.forContext(context) }
-    var returnAfterSnippet by remember { mutableStateOf(settings.returnAfterSnippet) }
-    var returnAfterImage by remember { mutableStateOf(settings.returnAfterImage) }
-    var snippetsOn by remember { mutableStateOf(settings.snippetsEnabled) }
-    var imagesOn by remember { mutableStateOf(settings.imagesEnabled) }
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        contentWindowInsets = WindowInsets.safeDrawing,
+        topBar = {
+            LargeTopAppBar(
+                title = { Text("Settings") },
+                navigationIcon = {
+                    FilledTonalIconButton(onClick = onBack, modifier = Modifier.padding(start = 4.dp)) {
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                scrollBehavior = scrollBehavior,
+            )
+        },
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(top = 8.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            KeyboardGroup(settings)
+            PhotosGroup(settings)
+            AdvancedGroup()
+        }
+    }
+}
+
+@Composable
+private fun KeyboardGroup(settings: PastilleSettings) {
     var selectedStyle by remember { mutableStateOf(settings.keyboardStyle) }
     var panelPortrait by remember { mutableStateOf(settings.panelHeightPortrait) }
     var panelLandscape by remember { mutableStateOf(settings.panelHeightLandscape) }
     var previewLandscape by remember { mutableStateOf(false) }
-    val materialYouSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-    val clipboard = LocalClipboardManager.current
-    val command = "adb shell pm grant app.pastille android.permission.WRITE_SECURE_SETTINGS"
-    var granted by remember { mutableStateOf(ImeSwitcher.hasWriteSecureSettings(context)) }
-    LifecycleResumeEffect(Unit) {
-        granted = ImeSwitcher.hasWriteSecureSettings(context)
-        onPauseOrDispose { }
+    var snippetsOn by remember { mutableStateOf(settings.snippetsEnabled) }
+    var imagesOn by remember { mutableStateOf(settings.imagesEnabled) }
+    var returnAfterSnippet by remember { mutableStateOf(settings.returnAfterSnippet) }
+    fun chooseStyle(style: KeyboardStyle) {
+        selectedStyle = style
+        settings.keyboardStyle = style
+        settings.keyboardStyleChosen = true
     }
-    Scaffold(
-        contentWindowInsets = WindowInsets.safeDrawing,
-        topBar = {
-            TopAppBar(
-                title = { Text("Settings") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
-                    }
-                },
-            )
-        },
-    ) { padding ->
-        Column(modifier = Modifier.padding(padding).verticalScroll(rememberScrollState())) {
-            Text(
-                text = "Keyboard style",
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp),
-            )
+    SettingsGroup(title = "Keyboard") {
+        SettingsRow(title = "Style", subtitle = selectedStyle.label, icon = Icons.Rounded.Palette)
+        SettingsRowDetail {
             Crossfade(targetState = selectedStyle, animationSpec = tween(150)) { style ->
-                KeyboardStylePreview(
-                    style = style,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                )
+                KeyboardStylePreview(style = style, modifier = Modifier.fillMaxWidth())
             }
-            Column(Modifier.selectableGroup()) {
-                StyleRow(
-                    headline = "Auto",
-                    supporting = "Gboard's default for this Android version",
-                    selected = selectedStyle == KeyboardStyle.Auto,
-                    enabled = true,
-                    onClick = {
-                        selectedStyle = KeyboardStyle.Auto
-                        settings.keyboardStyle = KeyboardStyle.Auto
-                        settings.keyboardStyleChosen = true
-                    },
-                )
-                StyleRow(
-                    headline = "Match Gboard: Dark",
-                    supporting = null,
-                    selected = selectedStyle == KeyboardStyle.GboardDark,
-                    enabled = true,
-                    onClick = {
-                        selectedStyle = KeyboardStyle.GboardDark
-                        settings.keyboardStyle = KeyboardStyle.GboardDark
-                        settings.keyboardStyleChosen = true
-                    },
-                )
-                StyleRow(
-                    headline = "Match Gboard: Light",
-                    supporting = null,
-                    selected = selectedStyle == KeyboardStyle.GboardLight,
-                    enabled = true,
-                    onClick = {
-                        selectedStyle = KeyboardStyle.GboardLight
-                        settings.keyboardStyle = KeyboardStyle.GboardLight
-                        settings.keyboardStyleChosen = true
-                    },
-                )
-                StyleRow(
-                    headline = "Match Gboard: Material You",
-                    supporting = if (materialYouSupported) {
-                        "Your wallpaper's colours"
-                    } else {
-                        "Needs Android 12 or later"
-                    },
-                    selected = selectedStyle == KeyboardStyle.MaterialYou,
-                    enabled = materialYouSupported,
-                    onClick = {
-                        selectedStyle = KeyboardStyle.MaterialYou
-                        settings.keyboardStyle = KeyboardStyle.MaterialYou
-                        settings.keyboardStyleChosen = true
-                    },
-                )
-            }
-            Text(
-                text = "Keyboard height",
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp),
-            )
+        }
+        StyleOptions(selected = selectedStyle, onSelect = ::chooseStyle)
+        SettingsHairline()
+        SettingsRow(title = "Height", subtitle = "Portrait and landscape", icon = Icons.Rounded.Height)
+        SettingsRowDetail {
             KeyboardHeightPreview(
                 style = selectedStyle,
                 height = if (previewLandscape) panelLandscape else panelPortrait,
                 landscape = previewLandscape,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
             )
             HeightRow(
                 label = "Portrait",
@@ -195,13 +164,11 @@ fun SettingsScreen(onBack: () -> Unit) {
                     previewLandscape = true
                 },
             )
-            TryItField(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp))
-            Text(
-                text = "Show in the keyboard",
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp),
-            )
+            TryItField(modifier = Modifier.padding(top = 16.dp))
+        }
+        SettingsHairline()
+        SettingsRow(title = "Show in the keyboard", subtitle = "At least one stays on", icon = Icons.Rounded.Dashboard)
+        SettingsRowDetail {
             ModesRow(
                 snippetsOn = snippetsOn,
                 imagesOn = imagesOn,
@@ -214,47 +181,69 @@ fun SettingsScreen(onBack: () -> Unit) {
                     settings.imagesEnabled = it
                 },
             )
-            Text(
-                text = "After inserting",
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp),
-            )
-            ToggleRow(
-                headline = "Return after a snippet",
-                supporting = "Switch back to the keyboard you were using.",
-                checked = returnAfterSnippet,
-                onChange = {
-                    returnAfterSnippet = it
-                    settings.returnAfterSnippet = it
-                },
-            )
-            ToggleRow(
-                headline = "Return after an image",
-                supporting = "Leave it off to paste several images in a row.",
-                checked = returnAfterImage,
-                onChange = {
-                    returnAfterImage = it
-                    settings.returnAfterImage = it
-                },
-            )
-            ReturnKeyboardRow(settings)
-            PhotoAccessRow()
-            Text(
-                text = "Quick Settings tile",
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp),
-            )
+        }
+        SettingsHairline()
+        ToggleRow(
+            title = "Return after a snippet",
+            subtitle = "Switch back to the keyboard you were using.",
+            icon = Icons.AutoMirrored.Rounded.KeyboardReturn,
+            checked = returnAfterSnippet,
+            onChange = {
+                returnAfterSnippet = it
+                settings.returnAfterSnippet = it
+            },
+        )
+        SettingsHairline()
+        ReturnKeyboardRow(settings)
+    }
+}
+
+@Composable
+private fun PhotosGroup(settings: PastilleSettings) {
+    var returnAfterImage by remember { mutableStateOf(settings.returnAfterImage) }
+    SettingsGroup(title = "Photos") {
+        PhotoAccessRow()
+        SettingsHairline()
+        ToggleRow(
+            title = "Return after an image",
+            subtitle = "Leave it off to paste several images in a row.",
+            icon = Icons.Rounded.Image,
+            checked = returnAfterImage,
+            onChange = {
+                returnAfterImage = it
+                settings.returnAfterImage = it
+            },
+        )
+    }
+}
+
+@Composable
+private fun AdvancedGroup() {
+    val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
+    val command = "adb shell pm grant ${context.packageName} android.permission.WRITE_SECURE_SETTINGS"
+    var granted by remember { mutableStateOf(ImeSwitcher.hasWriteSecureSettings(context)) }
+    LifecycleResumeEffect(Unit) {
+        granted = ImeSwitcher.hasWriteSecureSettings(context)
+        onPauseOrDispose { }
+    }
+    SettingsGroup(title = "Advanced") {
+        SettingsRow(
+            title = "One-tap switching",
+            subtitle = if (granted) "Granted" else "Not granted. The tile opens the keyboard picker.",
+            icon = Icons.Rounded.SwapHoriz,
+        )
+        SettingsRowDetail {
             Text(
                 text = "Add the Pastille tile to Quick Settings to change keyboard in one tap. Without extra permission it opens the keyboard picker. To switch straight to Pastille and back, grant one permission over adb, once:",
-                modifier = Modifier.padding(horizontal = 16.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            Spacer(Modifier.height(12.dp))
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
-                    .clip(RoundedCornerShape(8.dp))
+                    .clip(RoundedCornerShape(12.dp))
                     .background(MaterialTheme.colorScheme.surfaceContainerHighest),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -269,26 +258,64 @@ fun SettingsScreen(onBack: () -> Unit) {
                         .horizontalScroll(rememberScrollState())
                         .padding(start = 12.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
                 )
-                IconButton(
-                    onClick = { clipboard.setText(AnnotatedString(command)) },
-                ) {
+                IconButton(onClick = { clipboard.setText(AnnotatedString(command)) }) {
                     Icon(Icons.Rounded.ContentCopy, contentDescription = "Copy command")
                 }
             }
-            ListItem(
-                headlineContent = { Text("One-tap switching") },
-                supportingContent = {
-                    Text(
-                        if (granted) {
-                            "Granted"
-                        } else {
-                            "Not granted. The tile opens the keyboard picker."
-                        },
-                    )
-                },
+        }
+    }
+}
+
+private val KeyboardStyle.label: String
+    get() = when (this) {
+        KeyboardStyle.Auto -> "Auto"
+        KeyboardStyle.GboardDark -> "Match Gboard: Dark"
+        KeyboardStyle.GboardLight -> "Match Gboard: Light"
+        KeyboardStyle.MaterialYou -> "Match Gboard: Material You"
+    }
+
+@Composable
+private fun StyleOptions(selected: KeyboardStyle, onSelect: (KeyboardStyle) -> Unit) {
+    val materialYouSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    Column(Modifier.selectableGroup()) {
+        KeyboardStyle.entries.forEach { style ->
+            val enabled = style != KeyboardStyle.MaterialYou || materialYouSupported
+            val supporting = when (style) {
+                KeyboardStyle.Auto -> "Gboard's default for this Android version"
+                KeyboardStyle.MaterialYou -> if (materialYouSupported) "Your wallpaper's colours" else "Needs Android 12 or later"
+                else -> null
+            }
+            StyleRow(
+                headline = style.label,
+                supporting = supporting,
+                selected = selected == style,
+                enabled = enabled,
+                onClick = { onSelect(style) },
             )
         }
     }
+}
+
+@Composable
+private fun StyleRow(
+    headline: String,
+    supporting: String?,
+    selected: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    SettingsRow(
+        title = headline,
+        subtitle = supporting,
+        enabled = enabled,
+        leading = { RadioButton(selected = selected, onClick = null, enabled = enabled) },
+        modifier = Modifier.selectable(
+            selected = selected,
+            enabled = enabled,
+            role = Role.RadioButton,
+            onClick = onClick,
+        ),
+    )
 }
 
 @Composable
@@ -300,11 +327,10 @@ private fun HeightRow(
     Text(
         text = label,
         style = MaterialTheme.typography.labelLarge,
-        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp),
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 12.dp, bottom = 8.dp),
     )
-    SingleChoiceSegmentedButtonRow(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-    ) {
+    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
         PanelHeight.entries.forEachIndexed { index, height ->
             SegmentedButton(
                 selected = height == selected,
@@ -325,27 +351,6 @@ private fun HeightRow(
 }
 
 @Composable
-private fun StyleRow(
-    headline: String,
-    supporting: String?,
-    selected: Boolean,
-    enabled: Boolean,
-    onClick: () -> Unit,
-) {
-    ListItem(
-        headlineContent = { Text(headline) },
-        supportingContent = supporting?.let { { Text(it) } },
-        leadingContent = { RadioButton(selected = selected, onClick = null, enabled = enabled) },
-        modifier = Modifier.selectable(
-            selected = selected,
-            enabled = enabled,
-            role = Role.RadioButton,
-            onClick = onClick,
-        ),
-    )
-}
-
-@Composable
 private fun PhotoAccessRow() {
     val context = LocalContext.current
     var granted by remember { mutableStateOf(ImageSourceReader.hasPermission(context)) }
@@ -356,21 +361,20 @@ private fun PhotoAccessRow() {
         partialOnly = ImageSourceReader.hasOnlyPartialAccess(context)
         onPauseOrDispose { }
     }
-    ListItem(
-        headlineContent = { Text("Photo access") },
-        supportingContent = {
-            Text(
-                when {
-                    partialOnly -> "Selected photos only, so the keyboard can't see your latest screenshot."
-                    granted -> "Granted. Your recent images appear in the keyboard."
-                    else -> "Needed to show your recent screenshots in the keyboard."
-                },
-            )
+    val canAsk = !granted || partialOnly
+    SettingsRow(
+        title = "Photo access",
+        subtitle = when {
+            partialOnly -> "Selected photos only, so the keyboard can't see your latest screenshot. Tap to allow all."
+            granted -> "Granted. Your recent images appear in the keyboard."
+            else -> "Tap to show your recent screenshots in the keyboard."
         },
-        trailingContent = if (granted && !partialOnly) {
-            null
+        icon = Icons.Rounded.PhotoLibrary,
+        modifier = if (canAsk) Modifier.clickable { launcher.launch(photoPermission()) } else Modifier,
+        trailing = if (canAsk) {
+            { SettingsChevron() }
         } else {
-            { TextButton(onClick = { launcher.launch(photoPermission()) }) { Text("Allow") } }
+            null
         },
     )
 }
@@ -384,17 +388,18 @@ internal fun photoPermission(): String =
 
 @Composable
 private fun ToggleRow(
-    headline: String,
-    supporting: String,
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
     checked: Boolean,
     onChange: (Boolean) -> Unit,
-    enabled: Boolean = true,
 ) {
-    ListItem(
-        headlineContent = { Text(headline) },
-        supportingContent = { Text(supporting) },
-        trailingContent = { Switch(checked = checked, onCheckedChange = null, enabled = enabled) },
-        modifier = Modifier.toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onChange),
+    SettingsRow(
+        title = title,
+        subtitle = subtitle,
+        icon = icon,
+        modifier = Modifier.toggleable(value = checked, role = Role.Switch, onValueChange = onChange),
+        trailing = { Switch(checked = checked, onCheckedChange = null) },
     )
 }
 
@@ -406,7 +411,7 @@ private fun ModesRow(
     onSnippets: (Boolean) -> Unit,
     onImages: (Boolean) -> Unit,
 ) {
-    MultiChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+    MultiChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
         SegmentedButton(
             checked = snippetsOn,
             onCheckedChange = { if (it || imagesOn) onSnippets(it) },
@@ -444,10 +449,12 @@ private fun ReturnKeyboardRow(settings: PastilleSettings) {
         open = false
     }
     Box {
-        ListItem(
-            headlineContent = { Text("Switch back to") },
-            supportingContent = { Text(current) },
+        SettingsRow(
+            title = "Switch back to",
+            subtitle = current,
+            icon = Icons.Rounded.Keyboard,
             modifier = Modifier.clickable { open = true },
+            trailing = { SettingsChevron() },
         )
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             DropdownMenuItem(

@@ -92,6 +92,8 @@ import androidx.compose.material.icons.rounded.BrokenImage
 import androidx.compose.material.icons.rounded.ContentPaste
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.EmojiEmotions
+import androidx.compose.material.icons.automirrored.rounded.ShortText
 import androidx.compose.material.icons.rounded.EditNote
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.FolderOff
@@ -155,6 +157,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.pastille.images.AnimatedSticker
 import app.pastille.images.ImageThumbnail
 import app.pastille.model.CategoryRecord
 import app.pastille.model.SnippetRecord
@@ -162,6 +165,7 @@ import app.pastille.settings.KeyboardMode
 import app.pastille.settings.KeyboardStyle
 import app.pastille.settings.PanelHeight
 import app.pastille.settings.TOOLBAR_HEIGHT_DP
+import app.pastille.settings.canSwitchOff
 import app.pastille.settings.tileColumns
 import app.pastille.share.isMeaningfulImageName
 import kotlinx.coroutines.Dispatchers
@@ -194,7 +198,16 @@ data class KeyboardUiState(
     val enabledSourceIds: Set<Long>? = null,
     val snippetsEnabled: Boolean = true,
     val imagesEnabled: Boolean = true,
-)
+    val stickers: List<SnippetRecord> = emptyList(),
+    val stickersEnabled: Boolean = true,
+) {
+    val enabledModes: Set<KeyboardMode>
+        get() = buildSet {
+            if (snippetsEnabled) add(KeyboardMode.Snippets)
+            if (stickersEnabled) add(KeyboardMode.Stickers)
+            if (imagesEnabled) add(KeyboardMode.Images)
+        }
+}
 
 interface KeyboardActions {
     fun onModeChange(mode: KeyboardMode) {}
@@ -229,6 +242,8 @@ interface KeyboardActions {
     fun onReorderFolders(newOrder: List<Long>) {}
     fun onReorderSnippets(shown: List<SnippetRecord>, newOrder: List<Long>) {}
     fun onSetShownSources(bucketIds: Set<Long>) {}
+    fun onAddStickers() {}
+    fun onSetSticker(snippet: SnippetRecord, sticker: Boolean) {}
 }
 
 object NoKeyboardActions : KeyboardActions
@@ -243,7 +258,7 @@ fun KeyboardPanel(
 ) {
     val palette = LocalKeyboardPalette.current
     val actionsSnippet = (state.panelState as? PanelState.Actions)?.let { action ->
-        state.snippets.find { it.id == action.snippetId }
+        state.snippets.find { it.id == action.snippetId } ?: state.stickers.find { it.id == action.snippetId }
     }
     val title = when (val panel = state.panelState) {
         PanelState.Browse -> null
@@ -303,64 +318,76 @@ private fun previewTitle(image: ImageItem, source: ImageSource?): String {
 private fun Toolbar(state: KeyboardUiState, actions: KeyboardActions, title: String?) {
     val palette = LocalKeyboardPalette.current
     val reduceMotion = LocalReduceMotion.current
-    Row(
-        modifier = Modifier.fillMaxWidth().height(TOOLBAR_HEIGHT_DP.dp).background(palette.strip),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(modifier = Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.CenterStart) {
-            AnimatedContent(
-                targetState = title,
-                transitionSpec = {
-                    if (reduceMotion) {
-                        EnterTransition.None togetherWith ExitTransition.None
-                    } else {
-                        fadeIn(tween(150, delayMillis = 60)) togetherWith fadeOut(tween(90))
-                    }
-                },
-                contentAlignment = Alignment.CenterStart,
-                label = "toolbarLeading",
-            ) { current ->
-                if (current == null) {
-                    if (state.snippetsEnabled && state.imagesEnabled) {
-                        ModeSwitch(mode = state.mode, onChange = actions::onModeChange)
-                    }
-                } else {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = actions::onBack) {
-                            Icon(
-                                Icons.AutoMirrored.Rounded.ArrowBack,
-                                contentDescription = "Back",
-                                tint = palette.icon,
-                            )
-                        }
-                        Text(
-                            text = current,
-                            style = MaterialTheme.typography.titleSmall,
-                            color = palette.label,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
-            }
-        }
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val compactTabs = maxWidth < 400.dp
         Row(
-            modifier = Modifier.padding(end = 4.dp),
-            horizontalArrangement = Arrangement.End,
+            modifier = Modifier.fillMaxWidth().height(TOOLBAR_HEIGHT_DP.dp).background(palette.strip),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-                if (state.mode == KeyboardMode.Snippets) {
-                    ToolbarAction(icon = Icons.Rounded.Add, label = "New snippet", onClick = actions::onOpenAdd)
+            Box(modifier = Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.CenterStart) {
+                AnimatedContent(
+                    targetState = title,
+                    transitionSpec = {
+                        if (reduceMotion) {
+                            EnterTransition.None togetherWith ExitTransition.None
+                        } else {
+                            fadeIn(tween(150, delayMillis = 60)) togetherWith fadeOut(tween(90))
+                        }
+                    },
+                    contentAlignment = Alignment.CenterStart,
+                    label = "toolbarLeading",
+                ) { current ->
+                    if (current == null) {
+                        if (state.enabledModes.size > 1) {
+                            ModeSwitch(
+                                mode = state.mode,
+                                enabled = state.enabledModes,
+                                onChange = actions::onModeChange,
+                                compact = compactTabs,
+                            )
+                        }
+                    } else {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(onClick = actions::onBack) {
+                                Icon(
+                                    Icons.AutoMirrored.Rounded.ArrowBack,
+                                    contentDescription = "Back",
+                                    tint = palette.icon,
+                                )
+                            }
+                            Text(
+                                text = current,
+                                style = MaterialTheme.typography.titleSmall,
+                                color = palette.label,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
                 }
             }
-            Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-                if (state.mode == KeyboardMode.Snippets) {
-                    ToolbarAction(icon = Icons.Rounded.SwapVert, label = "Reorder snippets", onClick = actions::onOpenReorder)
+            Row(
+                modifier = Modifier.padding(end = 4.dp),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                    when (state.mode) {
+                        KeyboardMode.Snippets ->
+                            ToolbarAction(icon = Icons.Rounded.Add, label = "New snippet", onClick = actions::onOpenAdd)
+                        KeyboardMode.Stickers ->
+                            ToolbarAction(icon = Icons.Rounded.Add, label = "Add stickers", onClick = actions::onAddStickers)
+                        KeyboardMode.Images -> Unit
+                    }
                 }
+                Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                    if (state.mode == KeyboardMode.Snippets) {
+                        ToolbarAction(icon = Icons.Rounded.SwapVert, label = "Reorder snippets", onClick = actions::onOpenReorder)
+                    }
+                }
+                ToolbarAction(icon = Icons.Rounded.Keyboard, label = "Switch keyboard", onClick = actions::onSwitchKeyboard)
+                ToolbarAction(icon = Icons.Rounded.Settings, label = "Keyboard settings", onClick = actions::onOpenSettings)
             }
-            ToolbarAction(icon = Icons.Rounded.Keyboard, label = "Switch keyboard", onClick = actions::onSwitchKeyboard)
-            ToolbarAction(icon = Icons.Rounded.Settings, label = "Keyboard settings", onClick = actions::onOpenSettings)
         }
     }
 }
@@ -492,7 +519,8 @@ private fun BrowseContent(state: KeyboardUiState, actions: KeyboardActions) {
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.TopStart,
         transitionSpec = {
-            val dir = if (targetState == KeyboardMode.Images) 1 else -1
+            // Going right in the bar moves the content left.
+            val dir = if (targetState.ordinal > initialState.ordinal) 1 else -1
             val transform = if (reduceMotion) {
                 EnterTransition.None togetherWith ExitTransition.None
             } else {
@@ -510,6 +538,7 @@ private fun BrowseContent(state: KeyboardUiState, actions: KeyboardActions) {
     ) { mode ->
         when (mode) {
             KeyboardMode.Snippets -> FolderContent(state = state, actions = actions)
+            KeyboardMode.Stickers -> StickersContent(state = state, actions = actions)
             KeyboardMode.Images -> ImagesContent(state = state, actions = actions)
         }
     }
@@ -595,7 +624,21 @@ private fun SnippetsPage(state: KeyboardUiState, folderId: Long?, actions: Keybo
 }
 
 @Composable
-private fun EmptyState(message: String, button: String, onClick: () -> Unit) {
+private fun StickersContent(state: KeyboardUiState, actions: KeyboardActions) {
+    if (state.stickers.isEmpty()) {
+        EmptyState(
+            message = "No stickers yet",
+            button = "Add stickers",
+            onClick = actions::onAddStickers,
+            hint = "Or share images to Pastille and choose Sticker.",
+        )
+        return
+    }
+    StickerGrid(stickers = state.stickers, actions = actions)
+}
+
+@Composable
+private fun EmptyState(message: String, button: String, onClick: () -> Unit, hint: String? = null) {
     Column(
         modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -610,6 +653,15 @@ private fun EmptyState(message: String, button: String, onClick: () -> Unit) {
         Spacer(Modifier.height(12.dp))
         FilledTonalButton(onClick = onClick) {
             Text(button)
+        }
+        if (hint != null) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = hint,
+                style = MaterialTheme.typography.bodySmall,
+                color = LocalKeyboardPalette.current.icon,
+                textAlign = TextAlign.Center,
+            )
         }
     }
 }
@@ -905,6 +957,10 @@ private fun ActionsContent(
         Box(modifier = Modifier.fillMaxSize())
         return
     }
+    if (snippet.sticker) {
+        StickerActionsContent(sticker = snippet, actions = actions)
+        return
+    }
     val palette = LocalKeyboardPalette.current
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(vertical = 8.dp),
@@ -948,6 +1004,14 @@ private fun ActionsContent(
                 onClick = { actions.onEditSnippet(snippet) },
                 modifier = Modifier.weight(1f),
             )
+            if (snippet.isImage) {
+                PanelActionButton(
+                    icon = Icons.Rounded.EmojiEmotions,
+                    label = "Make sticker",
+                    onClick = { actions.onSetSticker(snippet, true) },
+                    modifier = Modifier.weight(1f),
+                )
+            }
             PanelActionButton(
                 icon = Icons.Rounded.Delete,
                 label = "Delete",
@@ -960,6 +1024,60 @@ private fun ActionsContent(
                 categories = categories,
                 selectedId = snippet.categoryId,
                 onSelect = { actions.onMoveToCategory(snippet.id, it) },
+            )
+        }
+    }
+}
+
+// A sticker's Actions: a 120dp preview that plays if animated (never under reduced motion) and
+// inserts on a tap, then Edit in app, Move to snippets and Delete. No folders, no pin.
+@Composable
+private fun StickerActionsContent(sticker: SnippetRecord, actions: KeyboardActions) {
+    val reduceMotion = LocalReduceMotion.current
+    val density = LocalDensity.current
+    val title = sticker.title.ifBlank { "Sticker" }
+    val imageFile = sticker.imageFile ?: return
+    Column(
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(120.dp)
+                .padding(horizontal = 12.dp)
+                .clickable(onClickLabel = "Insert sticker") { actions.onSnippetTap(sticker) },
+            contentAlignment = Alignment.Center,
+        ) {
+            AnimatedSticker(
+                fileName = imageFile,
+                contentDescription = "Insert sticker, $title",
+                animate = !reduceMotion,
+                targetPx = with(density) { 240.dp.roundToPx() },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            PanelActionButton(
+                icon = Icons.Rounded.Edit,
+                label = "Edit in app",
+                onClick = { actions.onEditSnippet(sticker) },
+                modifier = Modifier.weight(1f),
+            )
+            PanelActionButton(
+                icon = Icons.AutoMirrored.Rounded.ShortText,
+                label = "Move to snippets",
+                onClick = { actions.onSetSticker(sticker, false) },
+                modifier = Modifier.weight(1f),
+            )
+            PanelActionButton(
+                icon = Icons.Rounded.Delete,
+                label = "Delete",
+                onClick = { actions.onDeleteSnippet(sticker) },
+                modifier = Modifier.weight(1f),
             )
         }
     }
@@ -1165,16 +1283,15 @@ private fun SettingsContent(state: KeyboardUiState, actions: KeyboardActions) {
         }
         SettingsHeading("Show in the keyboard")
         ChipLine {
-            FilterToggleChip(
-                label = "Snippets",
-                selected = state.snippetsEnabled,
-                onClick = { if (state.imagesEnabled) actions.onSetModeEnabled(KeyboardMode.Snippets, !state.snippetsEnabled) },
-            )
-            FilterToggleChip(
-                label = "Images",
-                selected = state.imagesEnabled,
-                onClick = { if (state.snippetsEnabled) actions.onSetModeEnabled(KeyboardMode.Images, !state.imagesEnabled) },
-            )
+            val enabled = state.enabledModes
+            KeyboardMode.entries.forEach { mode ->
+                val on = mode in enabled
+                FilterToggleChip(
+                    label = mode.label,
+                    selected = on,
+                    onClick = { if (canSwitchOff(mode, enabled)) actions.onSetModeEnabled(mode, !on) },
+                )
+            }
         }
         SettingsHeading("After inserting")
         SettingsSwitchRow(

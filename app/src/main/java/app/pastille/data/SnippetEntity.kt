@@ -24,4 +24,6 @@ data class SnippetEntity(
     @ColumnInfo(defaultValue = "0") val position: Int = 0,
     // Set while the snippet is in the bin; null for live snippets.
     val deletedAt: Long? = null,
+    // A sticker is an image snippet shown in the Stickers tab instead of under Snippets.
+    @ColumnInfo(defaultValue = "0") val sticker: Boolean = false,
 )

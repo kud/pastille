@@ -38,6 +38,7 @@ class ShareActivity : ComponentActivity() {
                     state = state,
                     categories = categories,
                     onSelectCategory = shareViewModel::selectCategory,
+                    onSelectSaveAs = shareViewModel::selectSaveAs,
                     onUndo = shareViewModel::undo,
                     onEdit = {
                         state.firstId?.let { openInPastille(it) }

@@ -59,6 +59,29 @@ class PastilleSettings private constructor(private val prefs: SharedPreferences)
         get() = prefs.getBoolean(KEY_IMAGES_ENABLED, true)
         set(value) = prefs.edit().putBoolean(KEY_IMAGES_ENABLED, value).apply()
 
+    var stickersEnabled: Boolean
+        get() = prefs.getBoolean(KEY_STICKERS_ENABLED, true)
+        set(value) = prefs.edit().putBoolean(KEY_STICKERS_ENABLED, value).apply()
+
+    fun enabledModes(): Set<KeyboardMode> = buildSet {
+        if (snippetsEnabled) add(KeyboardMode.Snippets)
+        if (stickersEnabled) add(KeyboardMode.Stickers)
+        if (imagesEnabled) add(KeyboardMode.Images)
+    }
+
+    fun setModeEnabled(mode: KeyboardMode, enabled: Boolean) {
+        when (mode) {
+            KeyboardMode.Snippets -> snippetsEnabled = enabled
+            KeyboardMode.Stickers -> stickersEnabled = enabled
+            KeyboardMode.Images -> imagesEnabled = enabled
+        }
+    }
+
+    // The share sheet's last "Save as" choice for images.
+    var saveImagesAsStickers: Boolean
+        get() = prefs.getBoolean(KEY_SAVE_AS_STICKERS, false)
+        set(value) = prefs.edit().putBoolean(KEY_SAVE_AS_STICKERS, value).apply()
+
     var keyboardMode: KeyboardMode
         get() = KeyboardMode.fromKey(prefs.getString(KEY_KEYBOARD_MODE, null))
         set(value) = prefs.edit().putString(KEY_KEYBOARD_MODE, value.key).apply()
@@ -108,6 +131,8 @@ class PastilleSettings private constructor(private val prefs: SharedPreferences)
         private const val KEY_KEYBOARD_MODE = "keyboard_mode"
         private const val KEY_SNIPPETS_ENABLED = "snippets_enabled"
         private const val KEY_IMAGES_ENABLED = "images_enabled"
+        private const val KEY_STICKERS_ENABLED = "stickers_enabled"
+        private const val KEY_SAVE_AS_STICKERS = "save_images_as_stickers"
         private const val KEY_IMAGE_SOURCE_BUCKET_ID = "image_source_bucket_id"
         private const val KEY_ENABLED_IMAGE_SOURCES = "enabled_image_sources"
 

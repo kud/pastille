@@ -14,6 +14,9 @@ object PastilleMotion {
     const val ENTER_MS = 220
     const val EXIT_MS = 120
 
+    // A key or cell colouring under the finger.
+    const val PRESS_MS = 60
+
     // The outgoing content fades first, so the two never overlap muddily.
     const val FADE_IN_DELAY_MS = 60
 

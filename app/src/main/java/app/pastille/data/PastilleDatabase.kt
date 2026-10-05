@@ -5,7 +5,7 @@ import androidx.room.RoomDatabase
 
 @Database(
     entities = [SnippetEntity::class, CategoryEntity::class, TagEntity::class, SnippetTagEntity::class],
-    version = 5,
+    version = 6,
     exportSchema = true,
 )
 abstract class PastilleDatabase : RoomDatabase() {

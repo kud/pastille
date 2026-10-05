@@ -23,6 +23,7 @@ Sections 2 and below record the v1 → v2 design as it was decided. The database
 | 3 | `MIGRATION_2_3` | `snippets.position` for the manual order, seeded from pinned-then-recent. |
 | 4 | `MIGRATION_3_4` | The bin: nullable `snippets.deletedAt` with an index (§2.1). |
 | 5 | `MIGRATION_4_5` | Tags: `tags` and `snippet_tags` (§2.2). |
+| 6 | `MIGRATION_5_6` | Stickers: `snippets.sticker INTEGER NOT NULL DEFAULT 0` (§2.3). |
 
 ### 2.1 The bin (v4)
 
@@ -31,6 +32,16 @@ Sections 2 and below record the v1 → v2 design as it was decided. The database
 - `allImageFiles()` deliberately does **not** filter: a binned image keeps its file.
 - **At app start** (`PastilleApplication`, `cleanUpAtStart`): one transaction deletes the rows binned more than 30 days ago, **then** the orphan sweep runs. That order is what lets the sweep delete a purged image's file while keeping a binned one's; `BinTest` pins it. No WorkManager: a phone that never opens the app has nothing to purge for.
 - "Delete forever" and "Empty bin" are the only other hard deletes (plus the share sheet's Undo, which undoes a create).
+
+### 2.3 Stickers (v6)
+
+- A sticker is an image snippet with `sticker = 1`: no new table, no new kind of file. `SnippetEntity.sticker` carries `@ColumnInfo(defaultValue = "0")` to match the migration's `DEFAULT 0`.
+- **The filter lives in the DAO.** Every snippet reader adds `sticker = 0`: `observeAll` (the All list, folder contents, search and the picker sheet's Snippets list all read it) and `findTextDuplicate`. The Stickers tab has its own query, `observeStickers()`: `sticker = 1 AND imageFile IS NOT NULL AND deletedAt IS NULL ORDER BY position`. `StickerFilterTest` has one test per reader.
+- Left unfiltered on purpose: `getAll()` (the export, whose summary counts stickers with the image snippets it leaves out), `findByImageFile` (dedupe must see stickers), the bin, and `allImageFiles()` (the orphan sweep).
+- No CHECK constraint (`ALTER` can't add one without rebuilding the table) and no index. "A sticker must be an image" is enforced by `SnippetRepository.setSticker`, which refuses a row with no `imageFile`, clears `categoryId` and appends to the sticker order; turning it off puts the row back at the top level.
+- Stickers keep `categoryId = null` in v1. Sticker folders, if they come, reuse `categoryId` with no migration.
+- One import path, `SnippetRepository.importImages(uris, categoryId, sticker, importer, titleFor)`, for the share sheet and the app's photo picker: at most 20, content-addressed. Into Stickers, an image that is already an image snippet is flipped to a sticker (`converted`, kept as it was so Undo restores its folder); anything already a sticker, or any duplicate saved as an image, is left alone (`alreadyThere`).
+- Backup: no change. Image snippets aren't exported, so stickers aren't either; the format stays at version 3.
 
 ### 2.2 Tags (v5)
 
@@ -168,7 +179,7 @@ Old app reading a new file: dev.2 rejects version 2 with its own error. Acceptab
   - **Orphan sweep** at process start (`PastilleApplication.onCreate`, background): delete files in `images/` that no row references. Undo windows are 6 s and in-process, so a process restart is past every one of them.
   - Same sweep clears `cacheDir/shared/` files older than 24 h. That fixes today's leak.
 - **Insertion (reuse the existing path):** add `<files-path name="images" path="images/" />` to `res/xml/file_paths.xml`. Extract the second half of `shareScreenshot` into `insertImage(contentUri: Uri, mimeType: String, label: String)`: `commitContent` with `INPUT_CONTENT_GRANT_READ_URI_PERMISSION` when the field accepts the MIME, else clipboard URI fallback, then `returnToPreviousKeyboardIfWanted()`. Screenshots keep copying to `cache/shared/` then call it; image snippets call it **directly** with `FileProvider.getUriForFile(…, File(filesDir, "images/$imageFile"))`, no copy. Image snippet tap also calls `recordUse`.
-- Thumbnails in the keyboard and app: decode with `inSampleSize` to the card size, off the main thread, small in-memory LRU (`LruCache<String, Bitmap>`, ~8 MB). No Coil/Glide: one more dependency for a dozen thumbnails isn't worth it.
+- Thumbnails in the keyboard and app: decode with `inSampleSize` to the card size, off the main thread, one shared in-memory LRU (`LruCache<String, Bitmap>`) sized at an eighth of `ActivityManager.memoryClass`, between 8 and 32 MB. No Coil/Glide: one more dependency for a dozen thumbnails isn't worth it.
 
 ## 4. Share target
 

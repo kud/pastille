@@ -26,4 +26,13 @@ class PickerSearchTest {
     fun `anything else does not match`() {
         assertFalse(snippetMatches(snippet, "invoice"))
     }
+
+    @Test
+    fun `a sticker's title matches under Stickers (StickerFilterTest keeps it out of Snippets)`() {
+        val sticker = SnippetRecord(title = "Thumbs up", text = "", imageFile = "a.webp", sticker = true)
+
+        assertTrue(stickerMatches(sticker, "thumbs"))
+        assertFalse(stickerMatches(sticker, "invoice"))
+        assertTrue(stickerMatches(sticker, ""))
+    }
 }

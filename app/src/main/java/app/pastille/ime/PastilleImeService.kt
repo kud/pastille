@@ -51,7 +51,13 @@ import app.pastille.MainActivity
 import app.pastille.data.SnippetRepository
 import app.pastille.images.ImageStore
 import app.pastille.images.copyToSharedCache
+import app.pastille.images.WEBP_HEADER_BYTES
+import app.pastille.images.fileProviderUri
+import app.pastille.images.isAnimatedWebp
 import app.pastille.images.mimeTypeForFile
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import java.io.File
 import app.pastille.model.CategoryRecord
 import app.pastille.model.SnippetRecord
 import app.pastille.model.isMissingFolder
@@ -178,7 +184,7 @@ class PastilleImeService :
 
     // Back acts on what the panel shows, which differs from the saved mode when a mode is switched off.
     private fun shownMode(): KeyboardMode =
-        effectiveMode(mode.value, settings.snippetsEnabled, settings.imagesEnabled)
+        effectiveMode(mode.value, settings.enabledModes())
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
         if (keyCode == KeyEvent.KEYCODE_BACK && isInputViewShown) {
@@ -509,9 +515,33 @@ class PastilleImeService :
     }
 
     override fun onSetModeEnabled(mode: KeyboardMode, enabled: Boolean) {
-        when (mode) {
-            KeyboardMode.Snippets -> settings.snippetsEnabled = enabled
-            KeyboardMode.Images -> settings.imagesEnabled = enabled
+        settings.setModeEnabled(mode, enabled)
+    }
+
+    // Importing needs the photo picker, which a keyboard can't host: the app opens on Stickers and launches it.
+    override fun onAddStickers() {
+        val intent = Intent(this, MainActivity::class.java)
+            .putExtra(MainActivity.EXTRA_ADD_STICKERS, true)
+            .putExtra(MainActivity.EXTRA_FROM_KEYBOARD, true)
+            .addFlags(MainActivity.LAUNCH_FLAGS)
+        startActivity(intent)
+        panelState.value = PanelState.Browse
+    }
+
+    override fun onSetSticker(snippet: SnippetRecord, sticker: Boolean) {
+        serviceScope.launch {
+            val repository = SnippetRepository.forContext(this@PastilleImeService)
+            val before = repository.get(snippet.id) ?: return@launch
+            if (!repository.setSticker(snippet.id, sticker)) return@launch
+            withContext(Dispatchers.Main) {
+                if (destroyed) return@withContext
+                panelState.value = PanelState.Browse
+                showStrip(
+                    message = if (sticker) "Moved to stickers" else "Moved to snippets",
+                    actionLabel = "Undo",
+                    onAction = { serviceScope.launch { repository.restore(before) } },
+                )
+            }
         }
     }
 
@@ -541,6 +571,8 @@ class PastilleImeService :
         val repository = remember { SnippetRepository.forContext(context) }
         val snippetsFlow = remember { repository.observeSnippets() }
         val snippets by snippetsFlow.collectAsState(initial = emptyList())
+        val stickersFlow = remember { repository.observeStickers() }
+        val stickers by stickersFlow.collectAsState(initial = emptyList())
         val categoriesFlow = remember { repository.observeCategories() }
         val loadedCategories by categoriesFlow.collectAsState(initial = null as List<CategoryRecord>?)
         val categories = loadedCategories.orEmpty()
@@ -565,7 +597,8 @@ class PastilleImeService :
 
         val snippetsOn = remember(settingsTick) { settings.snippetsEnabled }
         val imagesOn = remember(settingsTick) { settings.imagesEnabled }
-        val shownMode = effectiveMode(mode.value, snippetsOn, imagesOn)
+        val stickersOn = remember(settingsTick) { settings.stickersEnabled }
+        val shownMode = effectiveMode(mode.value, remember(settingsTick) { settings.enabledModes() })
         val enabledSourceIds = remember(settingsTick) { settings.enabledImageSources }
         val needsSources = shownMode == KeyboardMode.Images ||
             panelState.value == PanelState.Settings ||
@@ -596,7 +629,9 @@ class PastilleImeService :
             mode = shownMode,
             snippetsEnabled = snippetsOn,
             imagesEnabled = imagesOn,
+            stickersEnabled = stickersOn,
             snippets = snippets,
+            stickers = stickers,
             categories = categories,
             folderId = folderId.value,
             imageSources = imageSources,
@@ -629,6 +664,7 @@ class PastilleImeService :
 
     override fun onSnippetTap(snippet: SnippetRecord) {
         if (snippet.isImage) {
+            if (panelState.value is PanelState.Actions) panelState.value = PanelState.Browse
             insertImageSnippet(snippet)
             return
         }
@@ -655,7 +691,72 @@ class PastilleImeService :
             return
         }
         serviceScope.launch { SnippetRepository.forContext(this@PastilleImeService).recordUse(snippet.id) }
-        insertImage(uri, mimeTypeForFile(name), snippet.title.ifBlank { "Pastille image" })
+        val mimeType = mimeTypeForFile(name)
+        val label = snippet.title.ifBlank { "Pastille image" }
+        // 1. The real type.
+        if (hostAccepts(mimeType) && commitImage(uri, mimeType, label)) {
+            returnToPreviousKeyboardIfWanted(image = true)
+            return
+        }
+        // 2. A static image the host won't take as it is but would as PNG: a PNG copy in cache/shared/,
+        // which the 24-hour sweep clears. An animated sticker is never transcoded.
+        if (mimeType != "image/png" && hostAccepts("image/png")) {
+            serviceScope.launch {
+                val png = if (isAnimatedImage(file, mimeType)) null else runCatching { writePngCopy(file) }.getOrNull()
+                withContext(Dispatchers.Main) {
+                    if (destroyed) return@withContext
+                    if (png != null && commitImage(png, "image/png", label)) {
+                        returnToPreviousKeyboardIfWanted(image = true)
+                    } else {
+                        copyImageToClipboard(uri, label)
+                    }
+                }
+            }
+            return
+        }
+        // 3. The clipboard.
+        copyImageToClipboard(uri, label)
+    }
+
+    private fun isAnimatedImage(file: File, mimeType: String): Boolean = when (mimeType) {
+        "image/gif" -> true
+        "image/webp" -> runCatching {
+            file.inputStream().use { stream ->
+                val header = ByteArray(WEBP_HEADER_BYTES)
+                val read = stream.read(header)
+                isAnimatedWebp(header.copyOf(maxOf(read, 0)))
+            }
+        }.getOrDefault(true)
+        else -> false
+    }
+
+    private fun writePngCopy(source: File): Uri? {
+        val bitmap = BitmapFactory.decodeFile(source.absolutePath) ?: return null
+        val dir = File(cacheDir, "shared").apply { mkdirs() }
+        val out = File(dir, "sticker-${System.currentTimeMillis()}.png")
+        try {
+            out.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        } finally {
+            bitmap.recycle()
+        }
+        return fileProviderUri(this, out)
+    }
+
+    private fun hostAccepts(mimeType: String): Boolean {
+        val editorInfo = currentInputEditorInfo ?: return false
+        return EditorInfoCompat.getContentMimeTypes(editorInfo).any { ClipDescription.compareMimeTypes(mimeType, it) }
+    }
+
+    private fun commitImage(contentUri: Uri, mimeType: String, label: String): Boolean {
+        val connection = currentInputConnection ?: return false
+        val editorInfo = currentInputEditorInfo ?: return false
+        val info = InputContentInfoCompat(contentUri, ClipDescription(label, arrayOf(mimeType)), null)
+        val flags = InputConnectionCompat.INPUT_CONTENT_GRANT_READ_URI_PERMISSION
+        return try {
+            InputConnectionCompat.commitContent(connection, editorInfo, info, flags, null)
+        } catch (_: Exception) {
+            false
+        }
     }
 
     override fun onWriteInApp(categoryId: Long?) {
@@ -695,31 +796,14 @@ class PastilleImeService :
     }
 
     private fun insertImage(contentUri: Uri, mimeType: String, label: String) {
-        val connection = currentInputConnection
-        val editorInfo = currentInputEditorInfo
-        val mimeTypes = if (editorInfo != null) {
-            EditorInfoCompat.getContentMimeTypes(editorInfo).toSet()
-        } else {
-            emptySet()
+        if (hostAccepts(mimeType) && commitImage(contentUri, mimeType, label)) {
+            returnToPreviousKeyboardIfWanted(image = true)
+            return
         }
-        val acceptsImage = mimeTypes.any { ClipDescription.compareMimeTypes(mimeType, it) }
-        if (connection != null && editorInfo != null && acceptsImage) {
-            val info = InputContentInfoCompat(
-                contentUri,
-                ClipDescription(label, arrayOf(mimeType)),
-                null,
-            )
-            val flags = InputConnectionCompat.INPUT_CONTENT_GRANT_READ_URI_PERMISSION
-            val committed = try {
-                InputConnectionCompat.commitContent(connection, editorInfo, info, flags, null)
-            } catch (_: Exception) {
-                false
-            }
-            if (committed) {
-                returnToPreviousKeyboardIfWanted(image = true)
-                return
-            }
-        }
+        copyImageToClipboard(contentUri, label)
+    }
+
+    private fun copyImageToClipboard(contentUri: Uri, label: String) {
         // Only Pastille's own FileProvider URI travels with the clip's read grant;
         // a MediaStore URI would be unreadable to the app that pastes it.
         val clipboard = getSystemService(ClipboardManager::class.java) ?: return

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
@@ -78,6 +79,7 @@ import app.pastille.ime.KeyboardActions
 import app.pastille.ime.LocalKeyboardPalette
 import app.pastille.ime.ModeSwitch
 import app.pastille.ime.SnippetGrid
+import app.pastille.ime.StickerGrid
 import app.pastille.ime.ThumbState
 import app.pastille.ime.displayTitle
 import app.pastille.ime.rememberThumb
@@ -116,6 +118,12 @@ class PickerNotice(
     val key: Long = System.nanoTime()
 }
 
+// A sticker has no text: search matches its title (the description TalkBack reads).
+fun stickerMatches(sticker: SnippetRecord, query: String): Boolean {
+    val needle = query.trim()
+    return needle.isEmpty() || sticker.title.contains(needle, ignoreCase = true)
+}
+
 // Search matches the title or the text, ignoring case; a blank query matches everything.
 fun snippetMatches(snippet: SnippetRecord, query: String): Boolean {
     val needle = query.trim()
@@ -141,12 +149,12 @@ fun PickerSheet(
     val settings = remember { PastilleSettings.forContext(context) }
     val repository = remember { SnippetRepository.forContext(context) }
     val snippets by remember { repository.observeSnippets() }.collectAsStateWithLifecycle(initialValue = emptyList())
+    val stickers by remember { repository.observeStickers() }.collectAsStateWithLifecycle(initialValue = emptyList())
     val categories by remember { repository.observeCategories() }
         .collectAsStateWithLifecycle(initialValue = emptyList<CategoryRecord>())
-    val snippetsOn = remember { settings.snippetsEnabled }
-    val imagesOn = remember { settings.imagesEnabled }
+    val enabledModes = remember { settings.enabledModes() }
     val enabledSourceIds = remember { settings.enabledImageSources }
-    val mode = effectiveMode(state.mode, snippetsOn, imagesOn)
+    val mode = effectiveMode(state.mode, enabledModes)
 
     var query by rememberSaveable { mutableStateOf("") }
     var hasImagePermission by remember { mutableStateOf(ImageSourceReader.hasPermission(context)) }
@@ -195,11 +203,20 @@ fun PickerSheet(
                         SearchField(
                             query = query,
                             onQueryChange = { query = it },
-                            placeholder = if (mode == KeyboardMode.Images) "Search images" else "Search snippets",
+                            placeholder = when (mode) {
+                                KeyboardMode.Snippets -> "Search snippets"
+                                KeyboardMode.Stickers -> "Search stickers"
+                                KeyboardMode.Images -> "Search images"
+                            },
                         )
-                        if (snippetsOn && imagesOn) {
-                            Box(modifier = Modifier.padding(vertical = 4.dp)) {
-                                ModeSwitch(mode = mode, onChange = actions::onModeChange)
+                        if (enabledModes.size > 1) {
+                            BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                                ModeSwitch(
+                                    mode = mode,
+                                    enabled = enabledModes,
+                                    onChange = actions::onModeChange,
+                                    compact = maxWidth < 400.dp,
+                                )
                             }
                         }
                         when (mode) {
@@ -207,6 +224,12 @@ fun PickerSheet(
                                 snippets = snippets,
                                 categories = categories,
                                 folderId = state.folderId,
+                                query = query,
+                                actions = actions,
+                            )
+                            KeyboardMode.Stickers -> StickersBrowse(
+                                stickers = stickers.filter { stickerMatches(it, query) },
+                                searching = query.isNotBlank(),
                                 query = query,
                                 actions = actions,
                             )
@@ -220,7 +243,7 @@ fun PickerSheet(
                         }
                     }
                     is PickerTarget.Snippet -> {
-                        val snippet = snippets.find { it.id == target.id }
+                        val snippet = snippets.find { it.id == target.id } ?: stickers.find { it.id == target.id }
                         if (snippet == null) {
                             LaunchedEffect(Unit) { onCloseTarget() }
                         } else {
@@ -312,6 +335,22 @@ private fun ColumnScope.SnippetsBrowse(
             searching -> Message("No snippets match \"${query.trim()}\"")
             folder != null -> Message("Nothing in ${folder.name} yet")
             else -> Message("No snippets yet", button = "Open Pastille", onClick = actions::onOpenApp)
+        }
+    }
+}
+
+@Composable
+private fun ColumnScope.StickersBrowse(
+    stickers: List<SnippetRecord>,
+    searching: Boolean,
+    query: String,
+    actions: KeyboardActions,
+) {
+    Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+        when {
+            stickers.isNotEmpty() -> StickerGrid(stickers = stickers, actions = actions, tapVerb = "Copy")
+            searching -> Message("No stickers match \"${query.trim()}\"")
+            else -> Message("No stickers yet", button = "Open Pastille", onClick = actions::onOpenApp)
         }
     }
 }
@@ -443,7 +482,7 @@ private fun SnippetActions(
                 ActionButton(Icons.Rounded.Share, "Share", onShare, Modifier.weight(1f))
             }
         }
-        if (categories.isNotEmpty()) {
+        if (categories.isNotEmpty() && !snippet.sticker) {
             Text(
                 text = "Folder",
                 style = MaterialTheme.typography.labelMedium,

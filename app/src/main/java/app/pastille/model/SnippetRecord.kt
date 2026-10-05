@@ -14,6 +14,7 @@ data class SnippetRecord(
     val imageHeight: Int? = null,
     val position: Int = 0,
     val deletedAt: Long? = null,
+    val sticker: Boolean = false,
     // Attached in memory from snippet_tags; not a column.
     val tags: List<String> = emptyList(),
 ) {

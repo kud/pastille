@@ -1,6 +1,24 @@
 package app.pastille.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
+import app.pastille.images.AnimatedSticker
+import app.pastille.ime.PastilleMotion
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -40,6 +58,9 @@ fun OrganiseSheet(
     onMove: (Long?) -> Unit,
     onTagsChange: (List<String>) -> Unit,
     onDismiss: () -> Unit,
+    onSetSticker: (Boolean) -> Unit = {},
+    onRename: (String) -> Unit = {},
+    onDelete: () -> Unit = {},
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(modifier = Modifier.fillMaxWidth().imePadding().padding(start = 24.dp, end = 24.dp, bottom = 24.dp)) {
@@ -51,6 +72,10 @@ fun OrganiseSheet(
                 overflow = TextOverflow.Ellipsis,
             )
             Spacer(Modifier.height(16.dp))
+            if (snippet.sticker) {
+                StickerOrganise(snippet = snippet, onSetSticker = onSetSticker, onRename = onRename, onDelete = onDelete)
+                return@Column
+            }
             Text(
                 text = "Folder",
                 style = MaterialTheme.typography.labelLarge,
@@ -79,6 +104,75 @@ fun OrganiseSheet(
             )
             Spacer(Modifier.height(4.dp))
             TagEditor(tags = snippet.tags, allTags = allTags, onTagsChange = onTagsChange)
+            // Only images can be stickers.
+            if (snippet.isImage) {
+                Spacer(Modifier.height(8.dp))
+                StickerSwitch(checked = false, onChange = onSetSticker)
+            }
         }
+    }
+}
+
+// A sticker has no folder or tags: a preview, its description, the switch back, and Delete.
+@Composable
+private fun StickerOrganise(
+    snippet: SnippetRecord,
+    onSetSticker: (Boolean) -> Unit,
+    onRename: (String) -> Unit,
+    onDelete: () -> Unit,
+) {
+    val imageFile = snippet.imageFile ?: return
+    val density = LocalDensity.current
+    val reduceMotion = remember { PastilleMotion.reduceMotion() }
+    var description by remember(snippet.id) { mutableStateOf(snippet.title) }
+    val latest by rememberUpdatedState(description)
+    DisposableEffect(snippet.id) {
+        onDispose { if (latest.trim() != snippet.title && latest.isNotBlank()) onRename(latest) }
+    }
+    AnimatedSticker(
+        fileName = imageFile,
+        contentDescription = snippet.title.ifBlank { "Sticker" },
+        animate = !reduceMotion,
+        targetPx = with(density) { 320.dp.roundToPx() },
+        modifier = Modifier.fillMaxWidth().height(160.dp),
+    )
+    Spacer(Modifier.height(16.dp))
+    OutlinedTextField(
+        value = description,
+        onValueChange = { description = it },
+        label = { Text("Description") },
+        supportingText = { Text("Read aloud by TalkBack, and used by search") },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth(),
+    )
+    Spacer(Modifier.height(8.dp))
+    StickerSwitch(checked = true, onChange = onSetSticker)
+    Spacer(Modifier.height(8.dp))
+    TextButton(
+        onClick = onDelete,
+        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+    ) {
+        Text("Delete")
+    }
+}
+
+@Composable
+private fun StickerSwitch(checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 56.dp)
+            .toggleable(value = checked, role = Role.Switch, onValueChange = onChange),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text("Sticker", style = MaterialTheme.typography.bodyLarge)
+            Text(
+                "Show in the Stickers tab",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Switch(checked = checked, onCheckedChange = null)
     }
 }

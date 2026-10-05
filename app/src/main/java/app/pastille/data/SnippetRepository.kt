@@ -1,8 +1,11 @@
 package app.pastille.data
 
 import android.content.Context
+import android.net.Uri
 import androidx.room.withTransaction
 import app.pastille.backup.SnippetBackup
+import app.pastille.images.ImageImportException
+import app.pastille.images.ImageImporter
 import app.pastille.model.CategoryRecord
 import app.pastille.model.SnippetRecord
 import app.pastille.model.moveCategory as reorderCategories
@@ -22,6 +25,28 @@ data class ExportResult(
     val skippedImages: Int,
 )
 
+// One image brought in by [SnippetRepository.importImages], new or already there.
+data class ImportedImage(
+    val id: Long,
+    val fileName: String,
+    val title: String,
+    val width: Int,
+    val height: Int,
+)
+
+// `converted` holds the image snippets an import into Stickers turned into stickers, as they were
+// before, so Undo can put them back in their folder.
+data class ImportResult(
+    val requested: Int,
+    val created: List<ImportedImage>,
+    val converted: List<SnippetRecord>,
+    val alreadyThere: List<SnippetRecord>,
+    val failed: List<String>,
+    val images: List<ImportedImage>,
+) {
+    val savedCount: Int get() = created.size + converted.size
+}
+
 class SnippetRepository private constructor(
     private val db: PastilleDatabase,
     private val dao: SnippetDao,
@@ -35,6 +60,9 @@ class SnippetRepository private constructor(
             val tagsBySnippet = links.groupBy({ it.snippetId }, { it.name })
             sortSnippets(entities.map { it.toRecord().copy(tags = tagsBySnippet[it.id].orEmpty()) })
         }
+
+    fun observeStickers(): Flow<List<SnippetRecord>> =
+        dao.observeStickers().map { entities -> entities.map { it.toRecord() } }
 
     suspend fun get(id: Long): SnippetRecord? =
         dao.getById(id)?.toRecord()?.let { record -> record.copy(tags = tagDao.tagsFor(listOf(id)).map { it.name }) }
@@ -72,6 +100,7 @@ class SnippetRepository private constructor(
             imageWidth = record.imageWidth,
             imageHeight = record.imageHeight,
             position = if (record.id == 0L) newTopPosition() else record.position,
+            sticker = record.sticker,
         )
         return dao.upsert(entity)
     }
@@ -145,6 +174,88 @@ class SnippetRepository private constructor(
             ),
             now,
         )
+
+    // A sticker must be an image, so a text row is refused (false). Turning it on clears the folder and
+    // puts it at the end of the sticker order; turning it off brings it back at the top level, first.
+    suspend fun setSticker(id: Long, on: Boolean): Boolean = db.withTransaction {
+        val row = dao.getById(id) ?: return@withTransaction false
+        if (row.imageFile == null) return@withTransaction false
+        if (row.sticker == on) return@withTransaction true
+        val position = if (on) nextStickerPosition() else newTopPosition()
+        dao.setSticker(id, on, categoryId = null, position = position)
+        true
+    }
+
+    private suspend fun nextStickerPosition(): Int = (dao.maxStickerPosition() ?: -1) + 1
+
+    suspend fun setTitle(id: Long, title: String) {
+        val trimmed = title.trim()
+        if (trimmed.isNotEmpty()) dao.setTitle(id, trimmed)
+    }
+
+    /**
+     * The one way images come in, from the share sheet and the app's photo picker. At most
+     * [MAX_IMPORT] are taken: the picker below Android 13 doesn't enforce its own limit. Files are
+     * content-addressed, so an image already saved is never stored twice. Into Stickers, an image
+     * that is already an image snippet becomes a sticker (`converted`); one already a sticker, or
+     * any duplicate saved as an image, is left as it is (`alreadyThere`).
+     */
+    suspend fun importImages(
+        uris: List<Uri>,
+        categoryId: Long?,
+        sticker: Boolean,
+        importer: ImageImporter,
+        titleFor: (index: Int) -> String,
+        now: Long = System.currentTimeMillis(),
+    ): ImportResult {
+        val created = mutableListOf<ImportedImage>()
+        val converted = mutableListOf<SnippetRecord>()
+        val alreadyThere = mutableListOf<SnippetRecord>()
+        val failed = mutableListOf<String>()
+        val images = mutableListOf<ImportedImage>()
+        uris.take(MAX_IMPORT).forEachIndexed { index, uri ->
+            val stored = try {
+                importer.import(uri)
+            } catch (error: ImageImportException) {
+                failed.add(error.reason)
+                return@forEachIndexed
+            } catch (_: Exception) {
+                failed.add("Unreadable image")
+                return@forEachIndexed
+            }
+            val existing = findByImageFile(stored.fileName)
+            val image = if (existing != null) {
+                if (sticker && !existing.sticker && setSticker(existing.id, on = true)) {
+                    converted.add(existing)
+                } else {
+                    alreadyThere.add(existing)
+                }
+                ImportedImage(existing.id, stored.fileName, existing.title.ifEmpty { titleFor(index) }, stored.width, stored.height)
+            } else {
+                val title = titleFor(index)
+                val id = insertImage(
+                    title = title,
+                    imageFile = stored.fileName,
+                    width = stored.width,
+                    height = stored.height,
+                    categoryId = if (sticker) null else categoryId,
+                    now = now,
+                )
+                if (sticker) dao.setSticker(id, true, categoryId = null, position = nextStickerPosition())
+                ImportedImage(id, stored.fileName, title, stored.width, stored.height).also { created.add(it) }
+            }
+            images.add(image)
+        }
+        return ImportResult(uris.size, created, converted, alreadyThere, failed, images)
+    }
+
+    // Undoing an import: new rows and their files go for good; converted rows are put back as they were.
+    suspend fun undoImport(result: ImportResult, deleteFile: (String) -> Unit) {
+        deleteMany(result.created.map { it.id })
+        val stillNamed = referencedImageFiles()
+        result.created.map { it.fileName }.distinct().filter { it !in stillNamed }.forEach(deleteFile)
+        result.converted.forEach { restore(it) }
+    }
 
     suspend fun setCategory(ids: List<Long>, categoryId: Long?) {
         if (ids.isEmpty()) return
@@ -312,6 +423,7 @@ class SnippetRepository private constructor(
         imageHeight = imageHeight,
         position = position,
         deletedAt = deletedAt,
+        sticker = sticker,
     )
 
     private fun SnippetRecord.toEntity() = SnippetEntity(
@@ -328,6 +440,7 @@ class SnippetRepository private constructor(
         imageHeight = imageHeight,
         position = position,
         deletedAt = deletedAt,
+        sticker = sticker,
     )
 
     private fun CategoryEntity.toRecord() = CategoryRecord(
@@ -338,6 +451,7 @@ class SnippetRepository private constructor(
 
     companion object {
         const val BIN_RETENTION_MS = 30L * 24 * 60 * 60 * 1000
+        const val MAX_IMPORT = 20
 
         fun forContext(context: Context): SnippetRepository {
             return forDatabase(DatabaseHolder.get(context))

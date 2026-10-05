@@ -27,11 +27,13 @@ sealed interface LaunchRequest {
     data class NewSnippet(val categoryId: Long? = null) : LaunchRequest
     data class Edit(val id: Long) : LaunchRequest
     data object Settings : LaunchRequest
+    data object AddStickers : LaunchRequest
 }
 
 fun Intent?.toLaunchRequest(): LaunchRequest? {
     if (this == null) return null
     if (getBooleanExtra(MainActivity.EXTRA_OPEN_SETTINGS, false)) return LaunchRequest.Settings
+    if (getBooleanExtra(MainActivity.EXTRA_ADD_STICKERS, false)) return LaunchRequest.AddStickers
     if (getBooleanExtra(MainActivity.EXTRA_NEW_SNIPPET, false)) {
         val categoryId = if (hasExtra(MainActivity.EXTRA_CATEGORY_ID)) {
             getLongExtra(MainActivity.EXTRA_CATEGORY_ID, -1).takeIf { it >= 0 }
@@ -94,6 +96,7 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_CATEGORY_ID = "app.pastille.EXTRA_CATEGORY_ID"
         const val EXTRA_OPEN_SETTINGS = "app.pastille.EXTRA_OPEN_SETTINGS"
         const val EXTRA_FROM_KEYBOARD = "app.pastille.EXTRA_FROM_KEYBOARD"
+        const val EXTRA_ADD_STICKERS = "app.pastille.EXTRA_ADD_STICKERS"
         val LAUNCH_FLAGS = Intent.FLAG_ACTIVITY_NEW_TASK or
             Intent.FLAG_ACTIVITY_CLEAR_TOP or
             Intent.FLAG_ACTIVITY_SINGLE_TOP
@@ -113,6 +116,7 @@ private fun PastilleApp(
     var showingSettings by rememberSaveable { mutableStateOf(false) }
     var showingBin by rememberSaveable { mutableStateOf(false) }
     var pendingUndo by remember { mutableStateOf<SnippetRecord?>(null) }
+    var addStickersRequested by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val repository = remember { SnippetRepository.forContext(context) }
     val screenStates = rememberSaveableStateHolder()
@@ -128,6 +132,13 @@ private fun PastilleApp(
                 editingId = launchRequest.id
                 creating = false
                 newCategoryId = null
+            }
+            LaunchRequest.AddStickers -> {
+                editingId = null
+                creating = false
+                newCategoryId = null
+                showingBin = false
+                addStickersRequested = true
             }
             LaunchRequest.Settings -> {
                 editingId = null
@@ -191,6 +202,8 @@ private fun PastilleApp(
                 onOpenBin = { showingBin = true },
                 deletedSnippet = pendingUndo,
                 onDeletedShown = { pendingUndo = null },
+                addStickersRequested = addStickersRequested,
+                onAddStickersHandled = { addStickersRequested = false },
             )
         }
     }

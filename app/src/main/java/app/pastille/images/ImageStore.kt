@@ -1,5 +1,6 @@
 package app.pastille.images
 
+import android.app.ActivityManager
 import android.content.ContentResolver
 import android.content.Context
 import android.graphics.Bitmap
@@ -27,7 +28,12 @@ data class StoredImage(
     val alreadyExisted: Boolean,
 )
 
-class ImageStore(private val appContext: Context) {
+// Stores one shared image and says where it went; the repository's import goes through this.
+fun interface ImageImporter {
+    suspend fun import(uri: Uri): StoredImage
+}
+
+class ImageStore(private val appContext: Context) : ImageImporter {
 
     fun imagesDir(): File = File(appContext.filesDir, "images")
 
@@ -37,7 +43,7 @@ class ImageStore(private val appContext: Context) {
         runCatching { fileFor(name).delete() }
     }
 
-    suspend fun import(uri: Uri): StoredImage = withContext(Dispatchers.IO) {
+    override suspend fun import(uri: Uri): StoredImage = withContext(Dispatchers.IO) {
         val resolver = appContext.contentResolver
         val dir = imagesDir().apply { mkdirs() }
         querySize(resolver, uri)?.let { size ->
@@ -123,7 +129,7 @@ class ImageStore(private val appContext: Context) {
 
     fun loadThumbnail(name: String, targetPx: Int): Bitmap? {
         val key = "$name@$targetPx"
-        thumbnails.get(key)?.let { return it }
+        thumbnails(appContext).get(key)?.let { return it }
         val file = fileFor(name)
         if (!file.exists()) return null
         val bounds = boundsOf(file) ?: return null
@@ -141,7 +147,7 @@ class ImageStore(private val appContext: Context) {
         } catch (_: Exception) {
             null
         } ?: return null
-        thumbnails.put(key, bitmap)
+        thumbnails(appContext).put(key, bitmap)
         return bitmap
     }
 
@@ -257,9 +263,19 @@ class ImageStore(private val appContext: Context) {
         const val MAX_EDGE = STORAGE_MAX_EDGE
         const val MAX_SOURCE_BYTES = 40L * 1024 * 1024
 
-        private val thumbnails = object : LruCache<String, Bitmap>(8 * 1024 * 1024) {
-            override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
-        }
+        @Volatile
+        private var thumbnailCache: LruCache<String, Bitmap>? = null
+
+        // One cache for every thumbnail, sized from the app's memory class.
+        private fun thumbnails(context: Context): LruCache<String, Bitmap> =
+            thumbnailCache ?: synchronized(this) {
+                thumbnailCache ?: run {
+                    val memoryClass = context.getSystemService(ActivityManager::class.java)?.memoryClass ?: 0
+                    object : LruCache<String, Bitmap>(thumbnailCacheBytes(memoryClass)) {
+                        override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
+                    }.also { thumbnailCache = it }
+                }
+            }
 
         fun forContext(context: Context): ImageStore =
             ImageStore(context.applicationContext)

@@ -13,6 +13,9 @@ data class SnippetRecord(
     val imageWidth: Int? = null,
     val imageHeight: Int? = null,
     val position: Int = 0,
+    val deletedAt: Long? = null,
+    // Attached in memory from snippet_tags; not a column.
+    val tags: List<String> = emptyList(),
 ) {
     val isImage: Boolean get() = imageFile != null
 }

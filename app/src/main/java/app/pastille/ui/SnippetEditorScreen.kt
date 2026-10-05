@@ -82,6 +82,7 @@ fun SnippetEditorScreen(
     var title by rememberSaveable(snippetId) { mutableStateOf("") }
     var text by rememberSaveable(snippetId) { mutableStateOf("") }
     var categoryId by rememberSaveable(snippetId) { mutableStateOf(initialCategoryId) }
+    var tags by rememberSaveable(snippetId) { mutableStateOf(listOf<String>()) }
     // Survives recreation so a reload never overwrites what was typed before a rotation.
     var loaded by rememberSaveable(snippetId) { mutableStateOf(false) }
     var savedId by rememberSaveable(snippetId) { mutableStateOf<Long?>(null) }
@@ -91,6 +92,8 @@ fun SnippetEditorScreen(
     val contentFocus = remember { FocusRequester() }
     val saveMutex = remember { Mutex() }
     val categories by remember { repository.observeCategories() }
+        .collectAsStateWithLifecycle(initialValue = emptyList())
+    val allTags by remember { repository.observeTagNames() }
         .collectAsStateWithLifecycle(initialValue = emptyList())
 
     LaunchedEffect(snippetId) {
@@ -102,6 +105,7 @@ fun SnippetEditorScreen(
                     title = record.title
                     text = record.text
                     categoryId = record.categoryId
+                    tags = record.tags
                 }
             }
             loaded = true
@@ -131,13 +135,15 @@ fun SnippetEditorScreen(
                 val targetId = savedId
                 if (targetId != null) {
                     val current = repository.get(targetId) ?: return
-                    if (current.title == title && current.text == text && current.categoryId == categoryId) return
+                    if (current.title == title && current.text == text && current.categoryId == categoryId && current.tags == tags) return
                     repository.upsert(current.copy(title = title, text = text, categoryId = categoryId))
+                    repository.setTags(targetId, tags)
                     existing = repository.get(targetId)
                 } else {
                     val id = repository.upsert(
                         SnippetRecord(text = text, title = title, categoryId = categoryId),
                     )
+                    repository.setTags(id, tags)
                     savedId = id
                     existing = repository.get(id)
                 }
@@ -145,11 +151,12 @@ fun SnippetEditorScreen(
                 if (!ready) return
                 if (!isImage && text.isBlank()) return
                 val current = repository.get(snippetId) ?: return
-                if (current.title == title && current.text == text && current.categoryId == categoryId) {
+                if (current.title == title && current.text == text && current.categoryId == categoryId && current.tags == tags) {
                     existing = current
                     return
                 }
                 repository.upsert(current.copy(title = title, text = text, categoryId = categoryId))
+                repository.setTags(snippetId, tags)
                 existing = repository.get(snippetId)
             }
         }
@@ -353,6 +360,12 @@ fun SnippetEditorScreen(
                     )
                 }
             }
+            TagEditor(
+                tags = tags,
+                allTags = allTags,
+                onTagsChange = { tags = it },
+                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+            )
         }
     }
     if (showCreateCategory) {

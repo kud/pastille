@@ -5,7 +5,10 @@ import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "snippets", indices = [Index(value = ["categoryId"])])
+@Entity(
+    tableName = "snippets",
+    indices = [Index(value = ["categoryId"]), Index(value = ["deletedAt"])],
+)
 data class SnippetEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val title: String = "",
@@ -19,4 +22,6 @@ data class SnippetEntity(
     val imageWidth: Int? = null,
     val imageHeight: Int? = null,
     @ColumnInfo(defaultValue = "0") val position: Int = 0,
+    // Set while the snippet is in the bin; null for live snippets.
+    val deletedAt: Long? = null,
 )

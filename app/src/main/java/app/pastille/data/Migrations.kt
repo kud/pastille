@@ -26,3 +26,21 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
         )
     }
 }
+
+// The 30-day bin: a binned snippet keeps its row, with the time it was deleted.
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `snippets` ADD COLUMN `deletedAt` INTEGER")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_snippets_deletedAt` ON `snippets` (`deletedAt`)")
+    }
+}
+
+// Tags: several per snippet, kept apart from folders. No SQLite foreign keys (house rule).
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS `tags` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL COLLATE NOCASE, `createdAt` INTEGER NOT NULL)")
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_tags_name` ON `tags` (`name`)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS `snippet_tags` (`snippetId` INTEGER NOT NULL, `tagId` INTEGER NOT NULL, PRIMARY KEY(`snippetId`, `tagId`))")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_snippet_tags_tagId` ON `snippet_tags` (`tagId`)")
+    }
+}

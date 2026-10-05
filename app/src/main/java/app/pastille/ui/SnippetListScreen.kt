@@ -13,8 +13,11 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import app.pastille.ime.ImageSourceReader
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
@@ -67,7 +70,9 @@ import androidx.compose.material.icons.rounded.CreateNewFolder
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.ShortText
+import androidx.compose.material.icons.automirrored.rounded.DriveFileMove
 import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ContentCopy
@@ -109,10 +114,13 @@ import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -123,6 +131,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.testTag
+import android.view.HapticFeedbackConstants
+import app.pastille.ime.PastilleMotion
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
@@ -149,7 +163,9 @@ import app.pastille.images.ImageStore
 import app.pastille.images.ImageThumbnail
 import app.pastille.model.CategoryRecord
 import app.pastille.model.SnippetRecord
+import app.pastille.model.filterByTags
 import app.pastille.model.isMissingFolder
+import app.pastille.model.matchesQuery
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -159,6 +175,7 @@ fun SnippetListScreen(
     onCreate: (Long?) -> Unit,
     onEdit: (SnippetRecord) -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenBin: () -> Unit = {},
     deletedSnippet: SnippetRecord? = null,
     onDeletedShown: () -> Unit = {},
 ) {
@@ -173,7 +190,10 @@ fun SnippetListScreen(
     var showMenu by remember { mutableStateOf(false) }
     var showCrashDialog by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val scrollBehavior = rememberListDrivenScrollBehavior()
+    val binned by remember { repository.observeBin() }
+        .collectAsStateWithLifecycle(initialValue = emptyList())
+    val binCount = binned.size
     val hasCrashReport = remember(showMenu) {
         CrashLog.forContext(context).entries().isNotEmpty()
     }
@@ -184,6 +204,12 @@ fun SnippetListScreen(
     val categories = loadedCategories.orEmpty()
     var showCreateFolder by remember { mutableStateOf(false) }
     var showTryIt by remember { mutableStateOf(false) }
+    var organisingId by rememberSaveable { mutableStateOf<Long?>(null) }
+    // The folder the snippet had when the sheet opened, for the snackbar's Undo.
+    var organisingFrom by rememberSaveable { mutableStateOf<Long?>(null) }
+    val allTagNames by remember { repository.observeTagNames() }
+        .collectAsStateWithLifecycle(initialValue = emptyList())
+    val organising = organisingId?.let { id -> snippets.firstOrNull { it.id == id } }
 
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json"),
@@ -251,9 +277,32 @@ fun SnippetListScreen(
         }
     }
 
+    fun openOrganise(snippet: SnippetRecord) {
+        organisingFrom = snippet.categoryId
+        organisingId = snippet.id
+    }
+
+    // With tags in the sheet it stays open on a tap; the move is reported once it closes.
+    fun closeOrganise(snippet: SnippetRecord?) {
+        organisingId = null
+        val previous = organisingFrom
+        val target = snippet?.categoryId
+        if (snippet == null || target == previous) return
+        scope.launch {
+            val result = snackbarHostState.showSnackbar(
+                message = movedMessage(target?.let { id -> categories.firstOrNull { it.id == id }?.name }),
+                actionLabel = "Undo",
+                duration = SnackbarDuration.Short,
+            )
+            if (result == SnackbarResult.ActionPerformed) {
+                repository.setCategory(listOf(snippet.id), previous)
+            }
+        }
+    }
+
     suspend fun showDeletedSnackbar(snippet: SnippetRecord) {
         val result = snackbarHostState.showSnackbar(
-            message = "Deleted",
+            message = "Moved to bin",
             actionLabel = "Undo",
             duration = SnackbarDuration.Short,
         )
@@ -277,15 +326,14 @@ fun SnippetListScreen(
         }
     }
 
-    val visible = remember(snippets, query) {
-        if (query.isBlank()) {
-            snippets
-        } else {
-            snippets.filter {
-                it.title.contains(query, ignoreCase = true) ||
-                    it.text.contains(query, ignoreCase = true)
-            }
-        }
+    val tagsInUse = remember(snippets) { snippets.flatMap { it.tags }.distinct().sorted() }
+    var selectedTags by rememberSaveable { mutableStateOf(listOf<String>()) }
+    LaunchedEffect(tagsInUse) {
+        if (snippets.isEmpty()) return@LaunchedEffect
+        if (selectedTags.any { it !in tagsInUse }) selectedTags = selectedTags.filter { it in tagsInUse }
+    }
+    val visible = remember(snippets, query, selectedTags) {
+        filterByTags(snippets.filter { matchesQuery(it, query) }, selectedTags.toSet())
     }
     val haptics = LocalHapticFeedback.current
     var selectedTab by rememberSaveable { mutableLongStateOf(ALL_TAB) }
@@ -394,6 +442,17 @@ fun SnippetListScreen(
         )
     }
 
+    if (organising != null) {
+        OrganiseSheet(
+            snippet = organising,
+            folders = orderedFolders,
+            allTags = allTagNames,
+            onMove = { target -> scope.launch { repository.setCategory(listOf(organising.id), target) } },
+            onTagsChange = { tags -> scope.launch { repository.setTags(organising.id, tags) } },
+            onDismiss = { closeOrganise(organising) },
+        )
+    }
+
     if (showTryIt) {
         TryItDialog(onDismiss = { showTryIt = false })
     }
@@ -429,6 +488,7 @@ fun SnippetListScreen(
                         )
                     }
                 } else LargeTopAppBar(
+                    modifier = Modifier.testTag(TOP_BAR_TAG),
                     title = { Wordmark(collapsedFraction = scrollBehavior.state.collapsedFraction) },
                     actions = {
                         IconButton(onClick = { searching = true }) {
@@ -511,6 +571,18 @@ fun SnippetListScreen(
                                     onOpenSettings()
                                 },
                             )
+                            if (binCount > 0) {
+                                DropdownMenuItem(
+                                    text = { Text("Bin ($binCount)") },
+                                    leadingIcon = {
+                                        Icon(Icons.Rounded.Delete, contentDescription = null)
+                                    },
+                                    onClick = {
+                                        showMenu = false
+                                        onOpenBin()
+                                    },
+                                )
+                            }
                             if (hasCrashReport) {
                                 DropdownMenuItem(
                                     text = { Text("Last crash report") },
@@ -566,13 +638,23 @@ fun SnippetListScreen(
                         },
                         onRename = { renamingFolder = it },
                         onDelete = { deletingFolder = it },
+                        onAdd = { showCreateFolder = true },
+                    )
+                }
+                if (tagsInUse.isNotEmpty() && !reordering) {
+                    TagFilterRow(
+                        tags = tagsInUse,
+                        selected = selectedTags.toSet(),
+                        onToggle = { tag ->
+                            selectedTags = if (tag in selectedTags) selectedTags - tag else selectedTags + tag
+                        },
                     )
                 }
                 if (reordering) {
                     ReorderBanner(onDone = { reordering = false })
                 }
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize().testTag(SNIPPET_LIST_TAG),
                     state = listState,
                     contentPadding = PaddingValues(bottom = 88.dp),
                 ) {
@@ -642,6 +724,7 @@ fun SnippetListScreen(
                                     onEdit = { onEdit(snippet) },
                                     onCopy = { copySnippet(snippet) },
                                     onDelete = { deleteSnippet(snippet) },
+                                    onSwipeStartToEnd = { openOrganise(snippet) },
                                     folders = orderedFolders,
                                     onMove = { moveSnippet(snippet, it) },
                                 )
@@ -656,7 +739,7 @@ fun SnippetListScreen(
 
 @Composable
 private fun Wordmark(collapsedFraction: Float) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    Row(modifier = Modifier.testTag(WORDMARK_TAG), verticalAlignment = Alignment.CenterVertically) {
         Icon(
             painter = painterResource(R.drawable.ic_pastille_mark),
             contentDescription = null,
@@ -752,6 +835,7 @@ internal fun SnippetRow(
     onEdit: () -> Unit,
     onCopy: () -> Unit,
     onDelete: () -> Unit,
+    onSwipeStartToEnd: () -> Unit,
     folders: List<CategoryRecord> = emptyList(),
     onMove: ((Long?) -> Unit)? = null,
     containerColor: Color = MaterialTheme.colorScheme.surface,
@@ -761,30 +845,39 @@ internal fun SnippetRow(
     var expanded by rememberSaveable(snippet.id) { mutableStateOf(false) }
     var overflows by remember(snippet.id) { mutableStateOf(false) }
     var deleting by remember(snippet.id) { mutableStateOf(false) }
-    val currentOnEdit by rememberUpdatedState(onEdit)
+    val currentOnSwipeStartToEnd by rememberUpdatedState(onSwipeStartToEnd)
     val currentOnDelete by rememberUpdatedState(onDelete)
     val imageFile = snippet.imageFile
+    val swipe = remember { SwipeGeometry() }
     val swipeState = rememberSwipeToDismissBoxState(
         confirmValueChange = { value ->
             when (value) {
                 SwipeToDismissBoxValue.StartToEnd -> {
-                    currentOnEdit()
+                    if (swipe.pastThreshold(value)) {
+                        swipe.committed = true
+                        currentOnSwipeStartToEnd()
+                    }
                     false
                 }
                 SwipeToDismissBoxValue.EndToStart -> {
-                    if (!deleting) {
+                    val confirmed = deleting || swipe.pastThreshold(value)
+                    if (confirmed && !deleting) {
                         deleting = true
+                        swipe.committed = true
                         currentOnDelete()
                     }
-                    true
+                    confirmed
                 }
                 SwipeToDismissBoxValue.Settled -> true
             }
         },
+        positionalThreshold = { distance -> distance * swipeFraction(swipe.direction()) },
     )
+    swipe.state = swipeState
     SwipeToDismissBox(
         state = swipeState,
-        backgroundContent = { SwipeBackground(swipeState) },
+        modifier = Modifier.onSizeChanged { swipe.width = it.width.toFloat() },
+        backgroundContent = { SwipeBackground(swipeState, swipe) },
     ) {
         Box(modifier = Modifier.fillMaxWidth().background(containerColor)) {
             if (snippet.isImage && imageFile != null) {
@@ -935,35 +1028,91 @@ private fun FolderChoice(name: String, selected: Boolean, onClick: () -> Unit) {
     )
 }
 
+// The swipe-right action lives here and in the row's onSwipeStartToEnd, nowhere else.
+private val StartToEndIcon: ImageVector get() = Icons.AutoMirrored.Rounded.DriveFileMove
+private const val START_TO_END_LABEL = "Organise"
+
+@OptIn(ExperimentalMaterial3Api::class)
+private class SwipeGeometry {
+    var state: SwipeToDismissBoxState? = null
+    var width by mutableFloatStateOf(0f)
+
+    // Set when an action fires, so the snap-back doesn't play the "below threshold" haptic.
+    var committed = false
+
+    fun direction(): SwipeToDismissBoxValue = state?.dismissDirection ?: SwipeToDismissBoxValue.Settled
+
+    fun offset(): Float = state?.let { runCatching { it.requireOffset() }.getOrNull() } ?: 0f
+
+    fun pastThreshold(direction: SwipeToDismissBoxValue): Boolean =
+        swipePastThreshold(direction, offset(), width)
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SwipeBackground(state: SwipeToDismissBoxState) {
+private fun SwipeBackground(state: SwipeToDismissBoxState, swipe: SwipeGeometry) {
     val colors = MaterialTheme.colorScheme
     val direction = state.dismissDirection
-    val armed = state.targetValue != SwipeToDismissBoxValue.Settled
+    val armed by remember(state, swipe) { derivedStateOf { swipe.pastThreshold(state.dismissDirection) } }
     val deleting = direction == SwipeToDismissBoxValue.EndToStart
+    val view = LocalView.current
+    var wasArmed by remember { mutableStateOf(false) }
+    LaunchedEffect(armed) {
+        if (armed && !wasArmed) {
+            view.performHapticFeedback(
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    HapticFeedbackConstants.GESTURE_THRESHOLD_ACTIVATE
+                } else {
+                    HapticFeedbackConstants.CONTEXT_CLICK
+                },
+            )
+        } else if (!armed && wasArmed && !swipe.committed &&
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
+        ) {
+            view.performHapticFeedback(HapticFeedbackConstants.GESTURE_THRESHOLD_DEACTIVATE)
+        }
+        wasArmed = armed
+    }
+    LaunchedEffect(direction) {
+        if (direction == SwipeToDismissBoxValue.Settled) swipe.committed = false
+    }
+    val feedbackSpec = tween<Color>(PastilleMotion.SHORT_MS, easing = PastilleMotion.Standard)
     val container by animateColorAsState(
         targetValue = when {
             !armed -> colors.surfaceContainerHigh
             deleting -> colors.errorContainer
             else -> colors.secondaryContainer
         },
+        animationSpec = feedbackSpec,
         label = "swipeContainer",
     )
-    val content = when {
-        !armed -> colors.onSurfaceVariant
-        deleting -> colors.onErrorContainer
-        else -> colors.onSecondaryContainer
-    }
+    val content by animateColorAsState(
+        targetValue = when {
+            !armed -> colors.onSurfaceVariant
+            deleting -> colors.onErrorContainer
+            else -> colors.onSecondaryContainer
+        },
+        animationSpec = feedbackSpec,
+        label = "swipeContent",
+    )
+    val iconScale by animateFloatAsState(
+        targetValue = if (armed) 1f else 0.85f,
+        animationSpec = tween(PastilleMotion.SHORT_MS, easing = PastilleMotion.Standard),
+        label = "swipeIconScale",
+    )
     Box(
         modifier = Modifier.fillMaxSize().background(container).padding(horizontal = 24.dp),
         contentAlignment = if (deleting) Alignment.CenterEnd else Alignment.CenterStart,
     ) {
         if (direction != SwipeToDismissBoxValue.Settled) {
             Icon(
-                imageVector = if (deleting) Icons.Rounded.Delete else Icons.Rounded.Edit,
-                contentDescription = if (deleting) "Delete" else "Edit",
+                imageVector = if (deleting) Icons.Rounded.Delete else StartToEndIcon,
+                contentDescription = if (deleting) "Delete" else START_TO_END_LABEL,
                 tint = content,
+                modifier = Modifier.graphicsLayer {
+                    scaleX = iconScale
+                    scaleY = iconScale
+                },
             )
         }
     }
@@ -1005,7 +1154,7 @@ private fun FolderRow(
 @Composable
 private fun SnippetMetaRow(snippet: SnippetRecord, categoryName: String?) {
     val kind = remember(snippet.isImage, snippet.text) { snippetKind(snippet.isImage, snippet.text) }
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    MetaLine(tags = snippet.tags) {
         Icon(
             imageVector = when (kind) {
                 SnippetKind.Text -> Icons.AutoMirrored.Rounded.ShortText
@@ -1030,12 +1179,8 @@ private fun SnippetMetaRow(snippet: SnippetRecord, categoryName: String?) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         if (categoryName != null) {
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = categoryName,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Spacer(modifier = Modifier.width(6.dp))
+            FolderPill(categoryName)
         }
     }
 }
@@ -1117,6 +1262,9 @@ private fun toast(context: Context, message: String) {
 }
 
 private const val ALL_TAB = -1L
+internal const val TOP_BAR_TAG = "top-bar"
+internal const val SNIPPET_LIST_TAG = "snippet-list"
+internal const val WORDMARK_TAG = "wordmark"
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -1129,6 +1277,7 @@ private fun FolderTabs(
     onDropped: () -> Unit,
     onRename: (CategoryRecord) -> Unit,
     onDelete: (CategoryRecord) -> Unit,
+    onAdd: () -> Unit,
 ) {
     val haptics = LocalHapticFeedback.current
     val rowState = rememberLazyListState()
@@ -1189,6 +1338,11 @@ private fun FolderTabs(
                         )
                     }
                 }
+            }
+        }
+        if (!reordering) {
+            item(key = "add-folder") {
+                AddFolderChip(onClick = onAdd)
             }
         }
     }
@@ -1286,30 +1440,80 @@ private fun SearchField(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    // Iris (Jotter review): a full-width pill with ✕, in place of the bar.
+    Surface(
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).height(56.dp),
     ) {
-        IconButton(onClick = onClose) {
-            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Close search")
-        }
-        TextField(
-            value = query,
-            onValueChange = onQueryChange,
-            placeholder = { Text("Search snippets") },
-            singleLine = true,
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = Color.Transparent,
-                unfocusedContainerColor = Color.Transparent,
-                focusedIndicatorColor = Color.Transparent,
-                unfocusedIndicatorColor = Color.Transparent,
-            ),
-            modifier = modifier.weight(1f),
-        )
-        if (query.isNotEmpty()) {
-            IconButton(onClick = { onQueryChange("") }) {
-                Icon(Icons.Rounded.Close, contentDescription = "Clear search")
+        Row(
+            modifier = Modifier.fillMaxSize().padding(start = 16.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Rounded.Search,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            TextField(
+                value = query,
+                onValueChange = onQueryChange,
+                placeholder = { Text("Search snippets and #tags") },
+                singleLine = true,
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = Color.Transparent,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                ),
+                modifier = modifier.weight(1f),
+            )
+            IconButton(onClick = onClose) {
+                Icon(Icons.Rounded.Close, contentDescription = "Close search")
             }
+        }
+    }
+}
+
+/**
+ * Issue #8. The large header follows the list and nothing else:
+ * - M3 makes the bar itself `draggable` whenever its behaviour isn't pinned, so a drag on the empty
+ *   header moved it, and a tap that wobbled past touch slop started a drag. `isPinned` is read for
+ *   that one purpose only, so reporting true removes the bar's own drag and keeps the list's
+ *   nested-scroll collapse untouched.
+ * - `snapAnimationSpec = null`: no spring finishing a half collapse after a gesture ends, so the
+ *   wordmark never resizes on its own.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun rememberListDrivenScrollBehavior(): TopAppBarScrollBehavior {
+    val listDriven = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(snapAnimationSpec = null)
+    return remember(listDriven) { ListDrivenScrollBehavior(listDriven) }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+private class ListDrivenScrollBehavior(listDriven: TopAppBarScrollBehavior) : TopAppBarScrollBehavior by listDriven {
+    override val isPinned: Boolean = true
+}
+
+/** Iris (Jotter review): the folder row ends with an outlined "+ Add" chip that creates a folder. */
+@Composable
+private fun AddFolderChip(onClick: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    Box(
+        modifier = Modifier
+            .minimumInteractiveComponentSize()
+            .height(32.dp)
+            .clip(CircleShape)
+            .border(1.dp, colors.outlineVariant, CircleShape)
+            .clickable(role = Role.Button, onClickLabel = "New folder", onClick = onClick)
+            .padding(horizontal = 12.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.Add, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(4.dp))
+            Text("Add", style = MaterialTheme.typography.labelLarge, color = colors.onSurfaceVariant, maxLines = 1)
         }
     }
 }

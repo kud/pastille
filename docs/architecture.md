@@ -13,6 +13,34 @@ Read against `kud/pastille` at `194fd72` (dev.2 + settings screen). The design s
 - Image insertion: `shareScreenshot` copies the MediaStore item to `cacheDir/shared/`, serves it through the existing FileProvider (`cache-path shared/`), tries `commitContent`, falls back to a clipboard URI. Nothing ever deletes `cache/shared/` (a slow leak; fixed below).
 - Deep links already exist (dev.2): `MainActivity.EXTRA_NEW_SNIPPET` and `EXTRA_EDIT_SNIPPET_ID`, parsed by `toLaunchRequest()`, delivered via `onNewIntent` with `NEW_TASK | CLEAR_TOP | SINGLE_TOP`.
 
+## 0.1 Schema history (where the database is now)
+
+Sections 2 and below record the v1 → v2 design as it was decided. The database has moved on since; each step has a hand-written migration, copied from the exported schema JSON in `app/schemas/`, and a case in `MigrationTest`. Never a destructive fallback.
+
+| Version | Migration | What changed |
+|---|---|---|
+| 2 | `MIGRATION_1_2` | `categories`, and `categoryId` / image columns on `snippets` (§2). |
+| 3 | `MIGRATION_2_3` | `snippets.position` for the manual order, seeded from pinned-then-recent. |
+| 4 | `MIGRATION_3_4` | The bin: nullable `snippets.deletedAt` with an index (§2.1). |
+| 5 | `MIGRATION_4_5` | Tags: `tags` and `snippet_tags` (§2.2). |
+
+### 2.1 The bin (v4)
+
+- Deleting sets `deletedAt`; restoring (or Undo) clears it. No separate table, so a binned snippet keeps its folder, position and, later, its tags. Deleting its folder meanwhile sets `categoryId` to `NULL` as for any snippet.
+- Every live query filters `deletedAt IS NULL`: `observeAll`, `getAll`, `findTextDuplicate`, `findByImageFile`, `titlesInCategory`. Binned snippets never reach the keyboard, search, the share sheet's duplicate check or the backup.
+- `allImageFiles()` deliberately does **not** filter: a binned image keeps its file.
+- **At app start** (`PastilleApplication`, `cleanUpAtStart`): one transaction deletes the rows binned more than 30 days ago, **then** the orphan sweep runs. That order is what lets the sweep delete a purged image's file while keeping a binned one's; `BinTest` pins it. No WorkManager: a phone that never opens the app has nothing to purge for.
+- "Delete forever" and "Empty bin" are the only other hard deletes (plus the share sheet's Undo, which undoes a create).
+
+### 2.2 Tags (v5)
+
+- `tags(id, name COLLATE NOCASE, createdAt)` with a unique index on `name`; `snippet_tags(snippetId, tagId)` with a composite primary key and an index on `tagId`. No SQLite foreign keys: every hard delete of a snippet (delete forever, empty bin, purge, share Undo) removes its `snippet_tags` rows in the same transaction, then drops tags nobody carries.
+- Names are stored normalised: lowercased, no spaces, no leading `#` (`normaliseTag`). The UI shows them in sentence case (`displayTag`), never all caps.
+- `observeSnippets()` combines the snippets flow with one `snippet_tags JOIN tags` flow and attaches tags in memory: never a query per row. Binned snippets keep their links.
+- Filtering by several tags keeps the snippets carrying all of them; search also matches tag names (`model/Tags.kt`).
+- **Backup v3:** each snippet carries `"tags": ["work", "otp"]` by name. `decode` accepts versions 1–3; older files have no tags. Import creates missing tags, matching names case-insensitively.
+- The keyboard shows no tags in v1.
+
 ## 1. Naming
 
 Code says **category** (`Category`, `categoryId`, `categories` table), whatever the UI label ends up being. Reason: "folder" is already taken by feature 5, where it means a MediaStore bucket, and two different things called folder in one codebase is a bug waiting to be written. In code, MediaStore folders are **image sources** (`ImageSource`, `bucketId`). The user-facing word is the owner's call; the UI strings can say "Folder" without touching the code.

@@ -70,6 +70,13 @@ android {
 
     testOptions {
         unitTests.isIncludeAndroidResources = true
+        // CI shows only the log: print why a test failed, not just where.
+        unitTests.all {
+            it.testLogging {
+                events("failed")
+                exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+            }
+        }
     }
 
     sourceSets {
@@ -106,4 +113,7 @@ dependencies {
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.coroutines.test)
+    testImplementation(platform(libs.compose.bom))
+    testImplementation(libs.compose.ui.test.junit4)
+    debugImplementation(libs.compose.ui.test.manifest)
 }

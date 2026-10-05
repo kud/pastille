@@ -227,8 +227,20 @@ fun SnippetListScreen(
             scope.launch { snackbarHostState.showSnackbar("That image is gone") }
             return
         }
-        app.pastille.clipboard.copySnippet(context, content)
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+        val copied = app.pastille.clipboard.copySnippet(context, content) ?: return
+        val clearAfter = copied.clearAfterSeconds
+        if (clearAfter != null) {
+            scope.launch {
+                val result = snackbarHostState.showSnackbar(
+                    message = "Copied · clears in ${app.pastille.settings.shortDuration(clearAfter)}",
+                    actionLabel = "Clear now",
+                    duration = SnackbarDuration.Short,
+                )
+                if (result == SnackbarResult.ActionPerformed) {
+                    app.pastille.clipboard.clearCopiedClip(context, copied)
+                }
+            }
+        } else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
             scope.launch { snackbarHostState.showSnackbar("Copied") }
         }
     }

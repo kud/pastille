@@ -1040,12 +1040,12 @@ The Settings screen was one long column of `ListItem`s under `primary` section h
 - [x] Each group is a `surfaceContainer` card: 20dp corners, 16dp side margins, 12dp between groups.
 - [x] The group header sits above its card in `titleSmall` `onSurfaceVariant`, inset 16dp so it lines up with the card's content.
 - [x] Rows inside a card are separated by a 1dp `outlineVariant` hairline that starts at the text, 72dp in (16dp padding + 36dp tile + 20dp gap).
-- [ ] A group with no rows isn't drawn, header included. Clipboard is empty until its first setting lands.
+- [ ] A group with no rows isn't drawn, header included.
 
 | Group | Rows |
 |---|---|
 | Keyboard | Style (preview + the inline radio list), Height (preview, Portrait and Landscape segmented rows, the try-it field), Show in the keyboard (Snippets / Images), Return after a snippet, Switch back to |
-| Clipboard | none yet |
+| Clipboard | Clear clipboard after copying (a dialog of radio rows: Off, 5 s, 10 s, 30 s, 1 min) |
 | Photos | Photo access, Return after an image |
 | Advanced | One-tap switching (status, explanation and the copyable `adb` command) |
 

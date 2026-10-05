@@ -3,6 +3,8 @@ package app.pastille
 import android.app.Application
 import android.content.pm.PackageManager
 import android.os.Build
+import app.pastille.clipboard.ClipboardClearer
+import app.pastille.clipboard.SystemClipboardAccess
 import app.pastille.crash.CrashLog
 import app.pastille.data.DatabaseHolder
 import app.pastille.data.SnippetRepository
@@ -16,6 +18,13 @@ class PastilleApplication : Application() {
 
     // Outlives any one screen: startup chores, and writes a closing sheet must not cancel.
     val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    val clipboardClearer by lazy {
+        ClipboardClearer(
+            scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
+            access = SystemClipboardAccess(this),
+        )
+    }
 
     override fun onCreate() {
         super.onCreate()

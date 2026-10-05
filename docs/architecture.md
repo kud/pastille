@@ -244,6 +244,15 @@ Manifest: declare `<uses-permission android:name="android.permission.WRITE_SECUR
 >
 > Pastille must be enabled under Settings → System → Keyboards first. The grant survives updates and is removed when you uninstall. On Xiaomi/HyperOS, also enable "USB debugging (Security settings)" in Developer options, or `pm grant` fails. To revoke: `adb shell pm revoke app.pastille android.permission.WRITE_SECURE_SETTINGS`.
 
+## 8b. Clipboard auto-clear
+
+- **Setting:** `PastilleSettings.clipboardClearDelay`: Off / 5 s / 10 s / 30 s / 1 min, default Off. Settings › Clipboard › "Clear clipboard after copying".
+- **Label:** `copySnippet()` labels every clip `pastille:<uuid>`. When the timer ends, `ClipboardClearer` reads `getPrimaryClipDescription().label`, never the content, so Android shows no "pasted from clipboard" notice, and clears only when the label is still ours. Null (empty, or unreadable on Android 10+ while Pastille is in the background and isn't the current keyboard) means leave it alone: it never wipes blind.
+- **Timer:** a coroutine with `delay` on an `Application`-scoped `Dispatchers.Main` scope, so it outlives the picker sheet. A new copy replaces the pending timer. A clear missed because the process died is acceptable; no WorkManager.
+- **Sensitive:** on API 33+ the clip carries `EXTRA_IS_SENSITIVE` whenever the timer is on.
+- **App:** the snackbar reads "Copied · clears in 10s" with **Clear now** (same label check, at once). The picker sheet shows no snackbar.
+- **Keyboard:** unaffected. It commits text straight into the field with `commitText`. Its one clipboard write, the image fallback in `PastilleImeService.insertImage` when a field can't take an image, does not go through `copySnippet()` and isn't timed.
+
 ## 9. Build split
 
 Yes to two sequential, CI-green sets, with two adjustments.

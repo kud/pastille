@@ -29,6 +29,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.KeyboardReturn
 import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.ContentPaste
 import androidx.compose.material.icons.rounded.Dashboard
 import androidx.compose.material.icons.rounded.Height
 import androidx.compose.material.icons.rounded.Image
@@ -36,6 +37,7 @@ import androidx.compose.material.icons.rounded.Keyboard
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.SwapHoriz
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -52,6 +54,7 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -75,6 +78,7 @@ import app.pastille.ime.ImageSourceReader
 import app.pastille.ime.KeyboardHeightPreview
 import app.pastille.ime.KeyboardStylePreview
 import app.pastille.ime.otherTypingKeyboards
+import app.pastille.settings.ClipboardClearDelay
 import app.pastille.settings.KeyboardStyle
 import app.pastille.settings.PanelHeight
 import app.pastille.settings.PastilleSettings
@@ -109,6 +113,7 @@ fun SettingsScreen(onBack: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             KeyboardGroup(settings)
+            ClipboardGroup(settings)
             PhotosGroup(settings)
             AdvancedGroup()
         }
@@ -195,6 +200,47 @@ private fun KeyboardGroup(settings: PastilleSettings) {
         )
         SettingsHairline()
         ReturnKeyboardRow(settings)
+    }
+}
+
+@Composable
+private fun ClipboardGroup(settings: PastilleSettings) {
+    var delay by remember { mutableStateOf(settings.clipboardClearDelay) }
+    var open by remember { mutableStateOf(false) }
+    SettingsGroup(title = "Clipboard") {
+        SettingsRow(
+            title = "Clear clipboard after copying",
+            subtitle = "${delay.label}. Only clears when Pastille can confirm the clipboard still holds its own copy.",
+            icon = Icons.Rounded.ContentPaste,
+            modifier = Modifier.clickable { open = true },
+            trailing = { SettingsChevron() },
+        )
+    }
+    if (open) {
+        AlertDialog(
+            onDismissRequest = { open = false },
+            title = { Text("Clear clipboard after copying") },
+            text = {
+                Column(Modifier.selectableGroup()) {
+                    ClipboardClearDelay.entries.forEach { choice ->
+                        StyleRow(
+                            headline = choice.label,
+                            supporting = null,
+                            selected = choice == delay,
+                            enabled = true,
+                            onClick = {
+                                delay = choice
+                                settings.clipboardClearDelay = choice
+                                open = false
+                            },
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { open = false }) { Text("Cancel") }
+            },
+        )
     }
 }
 

@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
@@ -70,7 +71,7 @@ class DefaultHeaderHarnessTest {
                     ) {
                         item(key = "onboarding") { Column {} }
                         items((0 until 40).toList(), key = { it }) { index ->
-                            Column(modifier = Modifier.animateItem().fillMaxWidth().height(72.dp)) {
+                            Column(modifier = Modifier.animateItem().fillMaxWidth().height(72.dp).semantics(mergeDescendants = true) {}) {
                                 Text("Row %02d".format(39 - index))
                             }
                         }

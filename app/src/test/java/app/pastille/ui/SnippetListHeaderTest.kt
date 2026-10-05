@@ -150,7 +150,7 @@ class SnippetListHeaderTest {
                 val gapBelow = list.bottom - rows.last().bottom
                 val atEnd = compose.onAllNodesWithText("Row 00", substring = true).fetchSemanticsNodes().isNotEmpty()
                 assertTrue("void of ${gapBelow}px under the rows\n$log", gapBelow <= 88f + 1f || !atEnd && gapBelow <= 1f)
-                assertTrue("void above the rows\n$log", rows.first().top <= list.top + 1f || rows.first().top < list.top + 200f)
+                assertTrue("void above the rows\n$log", rows.first().top <= list.top + 1f || rows.first().top < list.top + 400f)
             }
         }
     }

@@ -6,29 +6,23 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.KeyboardReturn
-import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.ContentPaste
 import androidx.compose.material.icons.rounded.Dashboard
 import androidx.compose.material.icons.rounded.Height
@@ -36,14 +30,12 @@ import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Keyboard
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.PhotoLibrary
-import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MultiChoiceSegmentedButtonRow
@@ -61,16 +53,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -82,7 +69,6 @@ import app.pastille.settings.ClipboardClearDelay
 import app.pastille.settings.KeyboardStyle
 import app.pastille.settings.PanelHeight
 import app.pastille.settings.PastilleSettings
-import app.pastille.tile.ImeSwitcher
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -115,7 +101,6 @@ fun SettingsScreen(onBack: () -> Unit) {
             KeyboardGroup(settings)
             ClipboardGroup(settings)
             PhotosGroup(settings)
-            AdvancedGroup()
         }
     }
 }
@@ -260,55 +245,6 @@ private fun PhotosGroup(settings: PastilleSettings) {
                 settings.returnAfterImage = it
             },
         )
-    }
-}
-
-@Composable
-private fun AdvancedGroup() {
-    val context = LocalContext.current
-    val clipboard = LocalClipboardManager.current
-    val command = "adb shell pm grant ${context.packageName} android.permission.WRITE_SECURE_SETTINGS"
-    var granted by remember { mutableStateOf(ImeSwitcher.hasWriteSecureSettings(context)) }
-    LifecycleResumeEffect(Unit) {
-        granted = ImeSwitcher.hasWriteSecureSettings(context)
-        onPauseOrDispose { }
-    }
-    SettingsGroup(title = "Advanced") {
-        SettingsRow(
-            title = "One-tap switching",
-            subtitle = if (granted) "Granted" else "Not granted. The tile opens the keyboard picker.",
-            icon = Icons.Rounded.SwapHoriz,
-        )
-        SettingsRowDetail {
-            Text(
-                text = "Add the Pastille tile to Quick Settings to change keyboard in one tap. Without extra permission it opens the keyboard picker. To switch straight to Pastille and back, grant one permission over adb, once:",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(12.dp))
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surfaceContainerHighest),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = command,
-                    fontFamily = FontFamily.Monospace,
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 1,
-                    softWrap = false,
-                    modifier = Modifier
-                        .weight(1f)
-                        .horizontalScroll(rememberScrollState())
-                        .padding(start = 12.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
-                )
-                IconButton(onClick = { clipboard.setText(AnnotatedString(command)) }) {
-                    Icon(Icons.Rounded.ContentCopy, contentDescription = "Copy command")
-                }
-            }
-        }
     }
 }
 

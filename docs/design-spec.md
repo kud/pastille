@@ -1035,7 +1035,7 @@ The Settings screen was one long column of `ListItem`s under `primary` section h
 - [x] `LargeTopAppBar` that collapses on scroll (`exitUntilCollapsedScrollBehavior`, wired with `nestedScroll` on the `Scaffold`).
 - [x] The back arrow sits in a `FilledTonalIconButton`.
 
-**Groups**, in this order: **Keyboard**, **Clipboard**, **Photos**, **Advanced**, then a destructive card when there is one.
+**Groups**, in this order: **Keyboard**, **Clipboard**, **Photos**, then a destructive card when there is one.
 
 - [x] Each group is a `surfaceContainer` card: 20dp corners, 16dp side margins, 12dp between groups.
 - [x] The group header sits above its card in `titleSmall` `onSurfaceVariant`, inset 16dp so it lines up with the card's content.
@@ -1047,7 +1047,6 @@ The Settings screen was one long column of `ListItem`s under `primary` section h
 | Keyboard | Style (preview + the inline radio list), Height (preview, Portrait and Landscape segmented rows, the try-it field), Show in the keyboard (Snippets / Images), Return after a snippet, Switch back to |
 | Clipboard | Clear clipboard after copying (a dialog of radio rows: Off, 5 s, 10 s, 30 s, 1 min) |
 | Photos | Photo access, Return after an image |
-| Advanced | One-tap switching (status, explanation and the copyable `adb` command) |
 
 **Row anatomy** (shared composables in `ui/SettingsGroup.kt`: `SettingsGroup`, `SettingsRow`, `SettingsRowDetail`, `SettingsHairline`, `SettingsChevron`)
 
@@ -1055,9 +1054,8 @@ The Settings screen was one long column of `ListItem`s under `primary` section h
 - [x] **Text:** title `bodyLarge` at medium weight in `onSurface`; subtitle `bodyMedium` `onSurfaceVariant`. Disabled rows draw both at 38%.
 - [x] **Chevron** (`KeyboardArrowRight`, `onSurfaceVariant`) only on rows that open something: Switch back to (a menu) and Photo access while it can still ask (the system permission dialog). Switch rows keep their trailing `Switch`.
 - [x] **The style radio list stays inline:** each option is a row whose 36dp leading slot holds the `RadioButton`, so its text lines up with the tiles above. No hairlines between the options; they're one choice.
-- [x] **Detail content** that belongs to a row (previews, segmented buttons, the `adb` block) sits under it at the card's full inner width (16dp each side), so the four height options never squeeze.
+- [x] **Detail content** that belongs to a row (previews, segmented buttons) sits under it at the card's full inner width (16dp each side), so the four height options never squeeze.
 - [x] The whole row is the touch target (`selectable`, `toggleable` or `clickable` on the row), with Material's ripple.
-- [x] The `adb` command uses the app's real package name (`context.packageName`), not a hard-coded one.
 
 **Destructive** (none today)
 

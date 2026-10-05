@@ -214,35 +214,12 @@ The tile no longer switches keyboards. It is a stateless button, always `STATE_I
 - **Container:** `PickerActivity` is translucent like `ShareActivity` (`Theme.Pastille.Translucent`, `excludeFromRecents`, `taskAffinity=""`) and holds a `ModalBottomSheet` that opens at half height and drags to full. It uses the keyboard palette (`keyboardPalette` with the saved keyboard style), so the sheet looks like the panel.
 - **Shared cards:** the panel's mode switch, folder chips, snippet tiles, image tiles and both grids live in `ime/SnippetCards.kt` (`SnippetGrid`, `ImageGrid`, `ModeSwitch`, `FolderChipRow`). `KeyboardPanel` and the sheet both call them; the sheet passes its own `KeyboardActions`, so tap and long-press mean copy and actions there. The keyboard's behaviour is unchanged by the extraction.
 - **Copy:** every copy, from the sheet and from the app, goes through `clipboard.copySnippet()`. Text is a plain clip; an image snippet is a `FileProvider` URI clip; a recent image is first copied to `cache/shared/` with `images.copyToSharedCache` (the same fallback the keyboard uses, now shared). A tapped snippet also calls `recordUse` on the application's `backgroundScope`, so closing the sheet can't cancel it. Below Android 13 the sheet shows a "Copied" toast; 13+ shows the system confirmation.
-- **[⌨] in the header** starts `ImePickerActivity`, the system keyboard picker, and closes the sheet. `ImeSwitcher.toggle` and the adb `WRITE_SECURE_SETTINGS` fast path below are no longer reached from the tile.
+- **[⌨] in the header** starts `ImePickerActivity`, the system keyboard picker, and closes the sheet.
+- **Android 14+ (targetSdk 34+, we're on 35):** `startActivityAndCollapse(Intent)` throws `UnsupportedOperationException`, hence the `PendingIntent` overload on API 34+ and the deprecated `Intent` overload below (with `@Suppress("DEPRECATION")`). This is the one hard Android 14 restriction that bites here.
 
-### Before: keyboard switching (kept for reference)
+### The keyboard picker
 
-- `PastilleTileService : TileService`, `BIND_QUICK_SETTINGS_TILE`, monochrome icon (reuse `ic_launcher_monochrome`), label "Pastille". `onStartListening` sets `STATE_ACTIVE` when Pastille is the current IME, else `STATE_INACTIVE`.
-- **Fast path** (`checkSelfPermission(WRITE_SECURE_SETTINGS) == GRANTED`):
-  - Read `Settings.Secure.DEFAULT_INPUT_METHOD`. If it isn't Pastille, store it in `PastilleSettings.previousImeId`, then `Settings.Secure.putString(cr, DEFAULT_INPUT_METHOD, "app.pastille/.ime.PastilleImeService")`.
-  - If it is Pastille, write back `previousImeId`. If that's missing or no longer in `ENABLED_INPUT_METHODS`, use the first enabled IME that isn't Pastille.
-  - **Only switch to Pastille if it appears in `ENABLED_INPUT_METHODS`.** Otherwise the system resets the default and the tile looks broken: show the slow path instead.
-  - Wrap in `try/catch (SecurityException)` and fall through to the slow path: a revoked grant must degrade, not crash.
-- **Slow path** (no grant): `InputMethodManager.showInputMethodPicker()` is ignored when the caller has no focused window, and a tile has none. So the tile launches a tiny transparent `ImePickerActivity` (no UI, `excludeFromRecents`, `noHistory`) that calls `showInputMethodPicker()` in `onWindowFocusChanged(true)` and finishes on the next focus change.
-- **Android 14+ (targetSdk 34+, we're on 35):** `startActivityAndCollapse(Intent)` throws `UnsupportedOperationException`. Use `startActivityAndCollapse(PendingIntent)` on API 34+, the `Intent` overload below (with `@Suppress("DEPRECATION")`). This is the one hard Android 14 restriction that bites here.
-- Reading `DEFAULT_INPUT_METHOD` / `ENABLED_INPUT_METHODS` is fine on 12+ (both are public `Settings.Secure` keys, so the targetSdk 31 non-readable-key restriction doesn't apply).
-
-### Is it safe?
-
-Yes, with the guards above. `WRITE_SECURE_SETTINGS` is a `signature|privileged|development` permission: an ordinary install can't get it, adb can grant it, and `DEFAULT_INPUT_METHOD` is a documented public key that `InputMethodManagerService` observes, so the switch takes effect immediately. Third-party keyboard switchers have done exactly this for years. The real hazard is leaving the user on a keyboard with no letter keys and no way back: the fallback-to-first-enabled-IME rule and Pastille's own switch button cover it. Nothing here changed in Android 15 to my knowledge; **verify on the owner's phone** (OEM skins are the variable; I haven't run this on device).
-
-Manifest: declare `<uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" tools:ignore="ProtectedPermissions" />`. It must be declared for `pm grant` to work; lint flags it otherwise. F-Droid has no objection to a declared-but-adb-granted permission.
-
-### README section (to add)
-
-> **One-tap switching (optional).** The Pastille Quick Settings tile opens the keyboard picker. To make it switch straight to Pastille and back, grant one permission over adb, once:
->
-> ```sh
-> adb shell pm grant app.pastille android.permission.WRITE_SECURE_SETTINGS
-> ```
->
-> Pastille must be enabled under Settings → System → Keyboards first. The grant survives updates and is removed when you uninstall. On Xiaomi/HyperOS, also enable "USB debugging (Security settings)" in Developer options, or `pm grant` fails. To revoke: `adb shell pm revoke app.pastille android.permission.WRITE_SECURE_SETTINGS`.
+`InputMethodManager.showInputMethodPicker()` is ignored when the caller has no focused window. So [⌨] launches a tiny transparent `ImePickerActivity` (no UI, `excludeFromRecents`, `noHistory`) that calls `showInputMethodPicker()` in `onWindowFocusChanged(true)` and finishes on the next focus change. Pastille never writes the default keyboard itself and needs no special permission: the user always picks in the system dialog.
 
 ## 8b. Clipboard auto-clear
 

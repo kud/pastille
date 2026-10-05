@@ -89,7 +89,7 @@ class MigrationTest {
             ApplicationProvider.getApplicationContext(),
             PastilleDatabase::class.java,
             DB_NAME,
-        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build()
+        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build()
         helper.closeWhenFinished(database)
 
         val snippets = runBlocking { database.snippets().getAll() }
@@ -121,6 +121,25 @@ class MigrationTest {
         db.query("SELECT COUNT(DISTINCT position) FROM snippets").use { cursor ->
             assertTrue(cursor.moveToNext())
             assertEquals(3, cursor.getInt(0))
+        }
+    }
+
+    @Test
+    fun migration3To4StartsWithAnEmptyBin() {
+        createVersion1WithTwoSnippets()
+        helper.runMigrationsAndValidate(DB_NAME, 2, true, MIGRATION_1_2).close()
+        helper.runMigrationsAndValidate(DB_NAME, 3, true, MIGRATION_2_3).close()
+
+        val db = helper.runMigrationsAndValidate(DB_NAME, 4, true, MIGRATION_3_4)
+
+        db.query("SELECT COUNT(*) FROM snippets WHERE deletedAt IS NULL").use { cursor ->
+            assertTrue(cursor.moveToNext())
+            assertEquals(2, cursor.getInt(0))
+        }
+        db.execSQL("UPDATE snippets SET deletedAt = 5 WHERE id = 1")
+        db.query("SELECT id FROM snippets WHERE deletedAt IS NOT NULL").use { cursor ->
+            assertTrue(cursor.moveToNext())
+            assertEquals(1L, cursor.getLong(0))
         }
     }
 

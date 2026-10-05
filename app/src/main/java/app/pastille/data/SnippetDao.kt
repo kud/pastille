@@ -8,10 +8,10 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface SnippetDao {
-    @Query("SELECT * FROM snippets ORDER BY position ASC, lastUsedAt DESC")
+    @Query("SELECT * FROM snippets WHERE deletedAt IS NULL ORDER BY position ASC, lastUsedAt DESC")
     fun observeAll(): Flow<List<SnippetEntity>>
 
-    @Query("SELECT * FROM snippets ORDER BY position ASC, lastUsedAt DESC")
+    @Query("SELECT * FROM snippets WHERE deletedAt IS NULL ORDER BY position ASC, lastUsedAt DESC")
     suspend fun getAll(): List<SnippetEntity>
 
     @Query("SELECT * FROM snippets WHERE id = :id")
@@ -29,19 +29,20 @@ interface SnippetDao {
     @Query("UPDATE snippets SET categoryId = NULL WHERE categoryId = :categoryId")
     suspend fun clearCategory(categoryId: Long)
 
-    @Query("SELECT * FROM snippets WHERE imageFile IS NULL AND text = :text LIMIT 1")
+    @Query("SELECT * FROM snippets WHERE imageFile IS NULL AND text = :text AND deletedAt IS NULL LIMIT 1")
     suspend fun findTextDuplicate(text: String): SnippetEntity?
 
-    @Query("SELECT * FROM snippets WHERE imageFile = :name LIMIT 1")
+    @Query("SELECT * FROM snippets WHERE imageFile = :name AND deletedAt IS NULL LIMIT 1")
     suspend fun findByImageFile(name: String): SnippetEntity?
 
+    // Binned rows count: their files stay on disk until the row is purged.
     @Query("SELECT imageFile FROM snippets WHERE imageFile IS NOT NULL")
     suspend fun allImageFiles(): List<String>
 
     @Query("UPDATE snippets SET categoryId = :categoryId WHERE id IN (:ids)")
     suspend fun setCategory(ids: List<Long>, categoryId: Long?)
 
-    @Query("SELECT title FROM snippets WHERE categoryId IS :categoryId AND id != :excludeId")
+    @Query("SELECT title FROM snippets WHERE categoryId IS :categoryId AND id != :excludeId AND deletedAt IS NULL")
     suspend fun titlesInCategory(categoryId: Long?, excludeId: Long): List<String>
 
     @Query("SELECT * FROM snippets WHERE TRIM(title) = ''")
@@ -61,4 +62,22 @@ interface SnippetDao {
 
     @Query("SELECT MIN(position) FROM snippets")
     suspend fun minPosition(): Int?
+
+    @Query("UPDATE snippets SET deletedAt = :now WHERE id = :id")
+    suspend fun moveToBin(id: Long, now: Long)
+
+    @Query("UPDATE snippets SET deletedAt = NULL WHERE id = :id")
+    suspend fun restoreFromBin(id: Long)
+
+    @Query("SELECT * FROM snippets WHERE deletedAt IS NOT NULL ORDER BY deletedAt DESC")
+    fun observeBin(): Flow<List<SnippetEntity>>
+
+    @Query("DELETE FROM snippets WHERE deletedAt IS NOT NULL AND id = :id")
+    suspend fun deleteBinned(id: Long)
+
+    @Query("SELECT id FROM snippets WHERE deletedAt IS NOT NULL")
+    suspend fun binnedIds(): List<Long>
+
+    @Query("SELECT id FROM snippets WHERE deletedAt IS NOT NULL AND deletedAt < :cutoff")
+    suspend fun expiredBinnedIds(cutoff: Long): List<Long>
 }

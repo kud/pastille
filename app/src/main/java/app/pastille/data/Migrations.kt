@@ -26,3 +26,11 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
         )
     }
 }
+
+// The 30-day bin: a binned snippet keeps its row, with the time it was deleted.
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `snippets` ADD COLUMN `deletedAt` INTEGER")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_snippets_deletedAt` ON `snippets` (`deletedAt`)")
+    }
+}

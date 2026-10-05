@@ -1107,3 +1107,15 @@ The tile opens a sheet of snippets and images to copy, over whatever app is open
 - [ ] **Swipe right:** background `secondaryContainer`, `onSecondaryContainer` `Icons.AutoMirrored.Rounded.DriveFileMove`. The same feedback as delete: colour, icon scale and haptic switch at the threshold and revert below it. The swipe commits and snaps back (`confirmValueChange` returns false) while the sheet rises.
 - [ ] **Sheet:** `ModalBottomSheet` at wrap-content height. Title: the snippet's name in `titleSmall`. Under it, a "Folder" label and a single-select `FilterChip` row: "None (top level)" first, then the folders, the current one selected.
 - [ ] Tapping a folder moves the snippet at once. Snackbar: "Moved to Personal" with "Undo", which puts it back. No Save button.
+
+### 12.3 Bin (issue #5)
+
+- [ ] Deleting a snippet moves it to the bin for 30 days. The snackbar everywhere in the app reads "Moved to bin" with "Undo".
+- [ ] **Entry point:** "Bin (N)" in the list's overflow menu, hidden when the bin is empty.
+- [ ] **Bin screen:** a `TopAppBar` titled "Bin" with a back arrow and "Empty bin" in its overflow; under it, "Snippets are deleted forever after 30 days." in `bodyMedium`, `onSurfaceVariant`.
+- [ ] **Row:** title (`titleMedium`), one line of preview, then `⧗ 27 days left · from ▭ Personal` in `labelSmall` (`Icons.Rounded.HourglassEmpty`, 14dp; folder icon 12dp), and a trailing Restore `IconButton` (`Icons.Rounded.Restore`). "Days left" rounds up and turns `error` at 3 days or fewer; the hourglass stays, so colour is never the only signal. "from ▭ Personal" is dropped when the folder no longer exists.
+- [ ] Tapping a row opens a read-only preview with Restore and Close.
+- [ ] **Restore** (↺ or swipe right, 25%): no confirmation; snackbar "Restored" with "Undo", which puts it back in the bin with its original countdown. It returns to its folder, or the top level if that folder is gone.
+- [ ] **Delete forever** (long-press or swipe left, 40%): dialog "Delete forever?" / "This can't be undone.", confirm in `error`.
+- [ ] **Empty bin:** dialog "Delete N snippets forever?", confirm in `error`.
+- [ ] Deleting a folder is unchanged (§10.4): its snippets move to the top level, and the folder isn't binned.

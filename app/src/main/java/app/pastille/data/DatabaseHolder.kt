@@ -13,6 +13,6 @@ object DatabaseHolder {
                 context.applicationContext,
                 PastilleDatabase::class.java,
                 "pastille.db",
-            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build().also { instance = it }
+            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build().also { instance = it }
         }
 }

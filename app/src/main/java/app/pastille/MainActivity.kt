@@ -19,6 +19,7 @@ import app.pastille.data.SnippetRepository
 import app.pastille.model.SnippetRecord
 import app.pastille.ui.SettingsScreen
 import app.pastille.ui.SnippetEditorScreen
+import app.pastille.ui.BinScreen
 import app.pastille.ui.SnippetListScreen
 import app.pastille.ui.theme.PastilleTheme
 
@@ -110,6 +111,7 @@ private fun PastilleApp(
     var creating: Boolean by rememberSaveable { mutableStateOf(false) }
     var newCategoryId: Long? by rememberSaveable { mutableStateOf<Long?>(null) }
     var showingSettings by rememberSaveable { mutableStateOf(false) }
+    var showingBin by rememberSaveable { mutableStateOf(false) }
     var pendingUndo by remember { mutableStateOf<SnippetRecord?>(null) }
     val context = LocalContext.current
     val repository = remember { SnippetRepository.forContext(context) }
@@ -153,8 +155,14 @@ private fun PastilleApp(
         if (fromKeyboard) onReturnToKeyboard()
     }
 
-    BackHandler(enabled = editingId != null || creating || showingSettings) {
-        if (editingId != null || creating) closeEditor() else if (showingSettings) closeSettings()
+    BackHandler(enabled = editingId != null || creating || showingSettings || showingBin) {
+        if (editingId != null || creating) {
+            closeEditor()
+        } else if (showingSettings) {
+            closeSettings()
+        } else {
+            showingBin = false
+        }
     }
 
     if (editingId != null || creating) {
@@ -167,6 +175,8 @@ private fun PastilleApp(
         )
     } else if (showingSettings) {
         SettingsScreen(onBack = ::closeSettings)
+    } else if (showingBin) {
+        BinScreen(repository = repository, onBack = { showingBin = false })
     } else {
         // Keeps the list's open folder tab and search while the editor or settings are on screen.
         screenStates.SaveableStateProvider("list") {
@@ -178,6 +188,7 @@ private fun PastilleApp(
                 },
                 onEdit = { snippet: SnippetRecord -> editingId = snippet.id },
                 onOpenSettings = { showingSettings = true },
+                onOpenBin = { showingBin = true },
                 deletedSnippet = pendingUndo,
                 onDeletedShown = { pendingUndo = null },
             )

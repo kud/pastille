@@ -3,7 +3,7 @@ package app.pastille.data
 import androidx.room.Database
 import androidx.room.RoomDatabase
 
-@Database(entities = [SnippetEntity::class, CategoryEntity::class], version = 3, exportSchema = true)
+@Database(entities = [SnippetEntity::class, CategoryEntity::class], version = 4, exportSchema = true)
 abstract class PastilleDatabase : RoomDatabase() {
     abstract fun snippets(): SnippetDao
 

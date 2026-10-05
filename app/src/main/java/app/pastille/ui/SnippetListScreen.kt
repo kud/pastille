@@ -171,6 +171,7 @@ fun SnippetListScreen(
     onCreate: (Long?) -> Unit,
     onEdit: (SnippetRecord) -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenBin: () -> Unit = {},
     deletedSnippet: SnippetRecord? = null,
     onDeletedShown: () -> Unit = {},
 ) {
@@ -186,6 +187,9 @@ fun SnippetListScreen(
     var showCrashDialog by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
     val scrollBehavior = rememberListDrivenScrollBehavior()
+    val binned by remember { repository.observeBin() }
+        .collectAsStateWithLifecycle(initialValue = emptyList())
+    val binCount = binned.size
     val hasCrashReport = remember(showMenu) {
         CrashLog.forContext(context).entries().isNotEmpty()
     }
@@ -283,7 +287,7 @@ fun SnippetListScreen(
 
     suspend fun showDeletedSnackbar(snippet: SnippetRecord) {
         val result = snackbarHostState.showSnackbar(
-            message = "Deleted",
+            message = "Moved to bin",
             actionLabel = "Undo",
             duration = SnackbarDuration.Short,
         )
@@ -551,6 +555,18 @@ fun SnippetListScreen(
                                     onOpenSettings()
                                 },
                             )
+                            if (binCount > 0) {
+                                DropdownMenuItem(
+                                    text = { Text("Bin ($binCount)") },
+                                    leadingIcon = {
+                                        Icon(Icons.Rounded.Delete, contentDescription = null)
+                                    },
+                                    onClick = {
+                                        showMenu = false
+                                        onOpenBin()
+                                    },
+                                )
+                            }
                             if (hasCrashReport) {
                                 DropdownMenuItem(
                                     text = { Text("Last crash report") },

@@ -4,7 +4,7 @@ import android.app.Application
 import android.content.pm.PackageManager
 import android.os.Build
 import app.pastille.crash.CrashLog
-import app.pastille.data.DatabaseHolder
+import app.pastille.data.cleanUpAtStart
 import app.pastille.data.SnippetRepository
 import app.pastille.images.ImageStore
 import kotlinx.coroutines.CoroutineScope
@@ -36,10 +36,13 @@ class PastilleApplication : Application() {
         }
         startupScope.launch {
             runCatching {
-                val referenced =
-                    DatabaseHolder.get(this@PastilleApplication).snippets().allImageFiles().toSet()
-                ImageStore.forContext(this@PastilleApplication)
-                    .sweepOrphans(referenced, System.currentTimeMillis())
+                val repository = SnippetRepository.forContext(this@PastilleApplication)
+                val now = System.currentTimeMillis()
+                cleanUpAtStart(
+                    purgeExpiredBin = { repository.purgeExpiredBin(now) },
+                    referencedImageFiles = { repository.referencedImageFiles() },
+                    sweepOrphans = { ImageStore.forContext(this@PastilleApplication).sweepOrphans(it, now) },
+                )
             }
         }
     }

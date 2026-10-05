@@ -82,8 +82,9 @@ class SnippetRepository private constructor(
         }
     }
 
+    // Undo after a delete: the row is put back as it was, out of the bin.
     suspend fun restore(record: SnippetRecord): Long =
-        dao.upsert(record.toEntity())
+        dao.upsert(record.copy(deletedAt = null).toEntity())
 
     suspend fun findTextDuplicate(text: String): SnippetRecord? =
         dao.findTextDuplicate(text)?.toRecord()
@@ -123,8 +124,37 @@ class SnippetRepository private constructor(
         dao.setCategory(ids, categoryId)
     }
 
-    suspend fun delete(id: Long) {
-        dao.deleteById(id)
+    // Deleting moves a snippet to the bin; only the bin itself deletes for good.
+    suspend fun delete(id: Long, now: Long = System.currentTimeMillis()) {
+        dao.moveToBin(id, now)
+    }
+
+    suspend fun restoreFromBin(id: Long) {
+        dao.restoreFromBin(id)
+    }
+
+    fun observeBin(): Flow<List<SnippetRecord>> =
+        dao.observeBin().map { entities -> entities.map { it.toRecord() } }
+
+    suspend fun deleteForever(id: Long) {
+        db.withTransaction { hardDelete(listOf(id).filter { it in dao.binnedIds() }) }
+    }
+
+    suspend fun emptyBin() {
+        db.withTransaction { hardDelete(dao.binnedIds()) }
+    }
+
+    /** Deletes for good what has been in the bin for longer than [BIN_RETENTION_MS]. */
+    suspend fun purgeExpiredBin(now: Long = System.currentTimeMillis()) {
+        db.withTransaction { hardDelete(dao.expiredBinnedIds(now - BIN_RETENTION_MS)) }
+    }
+
+    // Live and binned rows alike: a file goes only once no row at all names it.
+    suspend fun referencedImageFiles(): Set<String> = dao.allImageFiles().toSet()
+
+    private suspend fun hardDelete(ids: List<Long>) {
+        if (ids.isEmpty()) return
+        dao.deleteByIds(ids)
     }
 
     suspend fun deleteMany(ids: List<Long>) {
@@ -248,6 +278,7 @@ class SnippetRepository private constructor(
         imageWidth = imageWidth,
         imageHeight = imageHeight,
         position = position,
+        deletedAt = deletedAt,
     )
 
     private fun SnippetRecord.toEntity() = SnippetEntity(
@@ -263,6 +294,7 @@ class SnippetRepository private constructor(
         imageWidth = imageWidth,
         imageHeight = imageHeight,
         position = position,
+        deletedAt = deletedAt,
     )
 
     private fun CategoryEntity.toRecord() = CategoryRecord(
@@ -272,6 +304,8 @@ class SnippetRepository private constructor(
     )
 
     companion object {
+        const val BIN_RETENTION_MS = 30L * 24 * 60 * 60 * 1000
+
         fun forContext(context: Context): SnippetRepository {
             return forDatabase(DatabaseHolder.get(context))
         }

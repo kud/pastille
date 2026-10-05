@@ -290,8 +290,8 @@ The current `TopAppBar` has "Pastille" at default title weight and two bare arro
 
 ### 8.1 Component and behaviour
 
-- [ ] `LargeTopAppBar` with `TopAppBarDefaults.exitUntilCollapsedScrollBehavior()`, wired via `Modifier.nestedScroll(scrollBehavior.nestedScrollConnection)` on the `Scaffold`.
-- [ ] Expanded state (at rest, top of list): the wordmark sits bottom-left, 16dp start. Collapsed (scrolled): it settles into the 64dp bar beside the actions. The large title also collapses on short lists, because the snap behaviour comes free with `exitUntilCollapsed`.
+- [ ] `LargeTopAppBar` with `TopAppBarDefaults.exitUntilCollapsedScrollBehavior(snapAnimationSpec = null)`, wired via `Modifier.nestedScroll(scrollBehavior.nestedScrollConnection)` on the `Scaffold`. **The header moves only when the list scrolls** (issue #8): the bar gets the behaviour through a wrapper that reports `isPinned = true`, which in M3 1.3 only switches off the bar's own `draggable`, so a drag or a wobbly tap on the header does nothing. No snap: a gesture that stops half-way leaves the header half-way, and the wordmark never resizes on its own.
+- [ ] Expanded state (at rest, top of list): the wordmark sits bottom-left, 16dp start. Collapsed (scrolled): it settles into the 64dp bar beside the actions. The large title also collapses on short lists: dragging a list too short to scroll still feeds the header through nested scroll.
 - [ ] Build B: the category `PrimaryScrollableTabRow` sits **below** the app bar in the `topBar` slot (`Column { LargeTopAppBar; TabRow }`) and stays pinned; only the large title collapses.
 - [ ] `windowInsets = TopAppBarDefaults.windowInsets` (status bar), which is the default. The app is edge-to-edge at targetSdk 35, so don't add manual status-bar padding.
 

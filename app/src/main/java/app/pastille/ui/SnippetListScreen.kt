@@ -111,6 +111,7 @@ import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -183,7 +184,7 @@ fun SnippetListScreen(
     var showMenu by remember { mutableStateOf(false) }
     var showCrashDialog by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val scrollBehavior = rememberListDrivenScrollBehavior()
     val hasCrashReport = remember(showMenu) {
         CrashLog.forContext(context).entries().isNotEmpty()
     }
@@ -1393,4 +1394,25 @@ private fun SearchField(
             }
         }
     }
+}
+
+/**
+ * Issue #8. The large header follows the list and nothing else:
+ * - M3 makes the bar itself `draggable` whenever its behaviour isn't pinned, so a drag on the empty
+ *   header moved it, and a tap that wobbled past touch slop started a drag. `isPinned` is read for
+ *   that one purpose only, so reporting true removes the bar's own drag and keeps the list's
+ *   nested-scroll collapse untouched.
+ * - `snapAnimationSpec = null`: no spring finishing a half collapse after a gesture ends, so the
+ *   wordmark never resizes on its own.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun rememberListDrivenScrollBehavior(): TopAppBarScrollBehavior {
+    val listDriven = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(snapAnimationSpec = null)
+    return remember(listDriven) { ListDrivenScrollBehavior(listDriven) }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+private class ListDrivenScrollBehavior(listDriven: TopAppBarScrollBehavior) : TopAppBarScrollBehavior by listDriven {
+    override val isPinned: Boolean = true
 }

@@ -222,24 +222,25 @@ fun SnippetListScreen(
     }
 
     fun copySnippet(snippet: SnippetRecord) {
-        val imageFile = snippet.imageFile
-        if (snippet.isImage && imageFile != null) {
-            val uri = FileProvider.getUriForFile(
-                context,
-                "${context.packageName}.fileprovider",
-                ImageStore.forContext(context).fileFor(imageFile),
-            )
-            context.getSystemService(ClipboardManager::class.java)
-                ?.setPrimaryClip(
-                    ClipData.newUri(context.contentResolver, snippet.title.ifBlank { "Image" }, uri),
-                )
-        } else {
-            context.getSystemService(ClipboardManager::class.java)
-                ?.setPrimaryClip(
-                    ClipData.newPlainText(snippet.title.ifBlank { "Snippet" }, snippet.text),
-                )
+        val content = app.pastille.clipboard.clipContentFor(context, snippet)
+        if (content == null) {
+            scope.launch { snackbarHostState.showSnackbar("That image is gone") }
+            return
         }
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+        val copied = app.pastille.clipboard.copySnippet(context, content) ?: return
+        val clearAfter = copied.clearAfterSeconds
+        if (clearAfter != null) {
+            scope.launch {
+                val result = snackbarHostState.showSnackbar(
+                    message = "Copied · clears in ${app.pastille.settings.shortDuration(clearAfter)}",
+                    actionLabel = "Clear now",
+                    duration = SnackbarDuration.Short,
+                )
+                if (result == SnackbarResult.ActionPerformed) {
+                    app.pastille.clipboard.clearCopiedClip(context, copied)
+                }
+            }
+        } else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
             scope.launch { snackbarHostState.showSnackbar("Copied") }
         }
     }

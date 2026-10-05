@@ -66,13 +66,23 @@
         <service
             android:name=".tile.PastilleTileService"
             android:exported="true"
-            android:icon="@drawable/ic_launcher_monochrome"
+            android:icon="@drawable/ic_pastille_mark"
             android:label="@string/tile_label"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
             <intent-filter>
                 <action android:name="android.service.quicksettings.action.QS_TILE" />
             </intent-filter>
         </service>
+
+        <activity
+            android:name=".picker.PickerActivity"
+            android:exported="false"
+            android:label="@string/picker_label"
+            android:theme="@style/Theme.Pastille.Translucent"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:launchMode="singleTask"
+            android:windowSoftInputMode="adjustResize" />
 
         <activity
             android:name=".tile.ImePickerActivity"

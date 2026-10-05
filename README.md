@@ -26,6 +26,7 @@ Pastille is an open-source Android keyboard for pasting, not typing. Tap a saved
 - Folders for snippets, with an "All" view, and drag to reorder snippets and folders right in the keyboard.
 - Recent images from the folders you choose (Screenshots, Camera, Downloads and so on), inserted as images where the app accepts them and copied to the clipboard where it does not.
 - Share text or an image from any app to Pastille to keep it as a snippet.
+- A Quick Settings tile that opens your snippets as a sheet to copy from, in any app.
 - Choose, separately for snippets and images, whether to return to your usual keyboard after inserting, and which keyboard that is.
 - Turn snippets or images off entirely if you only need one.
 - Gboard-style dark, light and Material You themes, with a choice of panel heights.
@@ -47,17 +48,7 @@ Pastille needs Android 9 (API 28) or later.
 
 ### Quick Settings tile
 
-The Pastille Quick Settings tile opens the keyboard picker. To make it switch straight to Pastille and back, grant one permission over adb, once:
-
-```sh
-adb shell pm grant app.beansontoast.pastille android.permission.WRITE_SECURE_SETTINGS
-```
-
-Pastille must be enabled under Settings → System → Keyboards first. The grant survives updates and is removed when you uninstall. On Xiaomi/HyperOS, also enable "USB debugging (Security settings)" in Developer options, or `pm grant` fails. To revoke it:
-
-```sh
-adb shell pm revoke app.beansontoast.pastille android.permission.WRITE_SECURE_SETTINGS
-```
+The Pastille Quick Settings tile opens a sheet of your snippets and recent images over whatever app is open. Tap one to copy it to the clipboard; long-press for its actions. If the phone is locked, it asks you to unlock first. The keyboard button in the sheet's header opens the system keyboard picker.
 
 ## Privacy
 

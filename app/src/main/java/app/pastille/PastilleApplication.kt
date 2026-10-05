@@ -3,6 +3,8 @@ package app.pastille
 import android.app.Application
 import android.content.pm.PackageManager
 import android.os.Build
+import app.pastille.clipboard.ClipboardClearer
+import app.pastille.clipboard.SystemClipboardAccess
 import app.pastille.crash.CrashLog
 import app.pastille.data.DatabaseHolder
 import app.pastille.data.SnippetRepository
@@ -14,7 +16,15 @@ import kotlinx.coroutines.launch
 
 class PastilleApplication : Application() {
 
-    private val startupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    // Outlives any one screen: startup chores, and writes a closing sheet must not cancel.
+    val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    val clipboardClearer by lazy {
+        ClipboardClearer(
+            scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
+            access = SystemClipboardAccess(this),
+        )
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -31,10 +41,10 @@ class PastilleApplication : Application() {
             }
             previous?.uncaughtException(thread, throwable)
         }
-        startupScope.launch {
+        backgroundScope.launch {
             runCatching { SnippetRepository.forContext(this@PastilleApplication).backfillTitles() }
         }
-        startupScope.launch {
+        backgroundScope.launch {
             runCatching {
                 val referenced =
                     DatabaseHolder.get(this@PastilleApplication).snippets().allImageFiles().toSet()

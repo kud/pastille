@@ -7,7 +7,9 @@ import android.os.Build
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import app.pastille.R
+import app.pastille.picker.PickerActivity
 
+// A stateless button, like the screen recorder and QR scanner tiles: it opens the snippet picker sheet.
 class PastilleTileService : TileService() {
 
     override fun onStartListening() {
@@ -17,21 +19,26 @@ class PastilleTileService : TileService() {
 
     override fun onClick() {
         super.onClick()
-        if (ImeSwitcher.toggle(this)) {
-            refreshTile()
+        // Snippets never show over the keyguard.
+        if (isLocked) {
+            unlockAndRun { openPicker() }
         } else {
-            val intent = Intent(this, ImePickerActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                val pendingIntent = PendingIntent.getActivity(
-                    this,
-                    0,
-                    intent,
-                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-                )
-                startActivityAndCollapse(pendingIntent)
-            } else {
-                startActivityAndCollapseLegacy(intent)
-            }
+            openPicker()
+        }
+    }
+
+    private fun openPicker() {
+        val intent = Intent(this, PickerActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            val pendingIntent = PendingIntent.getActivity(
+                this,
+                0,
+                intent,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            )
+            startActivityAndCollapse(pendingIntent)
+        } else {
+            startActivityAndCollapseLegacy(intent)
         }
     }
 
@@ -43,11 +50,10 @@ class PastilleTileService : TileService() {
 
     private fun refreshTile() {
         val tile = qsTile ?: return
-        val active = ImeSwitcher.isPastilleCurrent(this)
-        tile.state = if (active) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
+        tile.state = Tile.STATE_INACTIVE
         tile.label = getString(R.string.tile_label)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            tile.subtitle = if (active) "On" else "Off"
+            tile.subtitle = getString(R.string.tile_subtitle)
         }
         tile.updateTile()
     }

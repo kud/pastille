@@ -151,12 +151,15 @@ Old app reading a new file: dev.2 rejects version 2 with its own error. Acceptab
 ## 3. Image storage
 
 - **Location:** `filesDir/images/`. Private, not in cache (the OS may purge cache), not on shared storage.
-- **Naming: content-addressed.** `<sha256 of the source bytes, first 32 hex>.<ext>`. Hash while copying from the input stream. Gives dedupe for free: if the file exists and a snippet references it, the share shows "Already in Pastille" (design spec §9.5 applies to images too). Write to `images/.tmp-<random>` then `renameTo` so a crash never leaves a half file under a real name.
+- **Naming: content-addressed.** `<sha256 of the source bytes, first 32 hex>.<ext>`, the extension from what was actually written, so the name is set after encoding. Hash while copying from the input stream. Gives dedupe for free, matched on the hash whatever the extension: if the file exists and a snippet references it, the share shows "Already in Pastille" (design spec §9.5 applies to images too). Write to `images/.tmp-<random>` then `renameTo` so a crash never leaves a half file under a real name.
 - **Processing** (`ImageStore.import(uri): StoredImage`), on `Dispatchers.IO`:
   - Read bounds first (`BitmapFactory.Options.inJustDecodeBounds`). Refuse sources over **40 MB** or that don't decode ("Couldn't save this · Image too large / unreadable").
-  - `image/gif`: copy bytes as-is up to 15 MB (keeps animation). Over that: refuse.
-  - `image/png`: downscale to **2048 px long edge** if larger (design spec §9.4), re-encode PNG. Smaller: copy bytes as-is.
-  - Everything else (`jpeg`, `webp`, `heic`, …): downscale to 2048 px, encode **JPEG q90**. HEIC and WebP are poorly accepted by `commitContent` hosts; JPEG is universal. Apply EXIF orientation before encoding (`androidx.exifinterface`, one small dependency) so phone photos don't land sideways.
+  - `storagePlan(mime, width, height, bytes, animated)` (pure, `ImageMath.kt`) returns `Copy`, `Transcode(maxEdge)` or `Refuse(reason)`:
+    - `image/gif`, and animated WebP (`isAnimatedWebp`: `RIFF....WEBPVP8X` with bit 1 of the flags byte): copy bytes as-is up to 15 MB (`MAX_ANIMATED_BYTES`), whatever the dimensions, since resizing would drop the animation. Over that: refuse. An animated image is never transcoded.
+    - Static WebP or PNG with a long edge up to 2048 px: copy bytes as-is (keeps transparency).
+    - Everything else, or larger: transcode to 2048 px long edge.
+  - **Transcode** picks the format from the decoded bitmap, not the source type: `hasAlpha()` gives PNG, otherwise **JPEG q90**. Apply EXIF orientation before encoding (`androidx.exifinterface`, one small dependency) so phone photos don't land sideways.
+  - WebP-born JPEGs from before this rule stay as they are: the original is gone, and the hash still matches them, so re-sharing that WebP reports it as already there until the old snippet is deleted forever.
   - Record `imageWidth`/`imageHeight` of the stored file.
 - **Cap:** 20 images per share (design spec §9.4). No global quota; show total size in Settings later if it matters.
 - **Cleanup:**

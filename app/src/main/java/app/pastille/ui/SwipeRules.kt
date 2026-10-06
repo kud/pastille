@@ -3,7 +3,7 @@ package app.pastille.ui
 import androidx.compose.material3.SwipeToDismissBoxValue
 import kotlin.math.abs
 
-// Iris's ruling: deleting takes a deliberate swipe, the secondary action a shorter one.
+// Deleting takes a deliberate swipe, the secondary action a shorter one.
 const val DELETE_SWIPE_FRACTION = 0.4f
 const val SECONDARY_SWIPE_FRACTION = 0.25f
 

@@ -1582,7 +1582,7 @@ private fun SearchField(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // Iris (Jotter review): a full-width pill with ✕, in place of the bar.
+    // Jotter review: a full-width pill with ✕, in place of the bar.
     Surface(
         shape = CircleShape,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -1638,7 +1638,7 @@ private class ListDrivenScrollBehavior(listDriven: TopAppBarScrollBehavior) : To
     override val isPinned: Boolean = true
 }
 
-/** Iris (Jotter review): the folder row ends with an outlined "+ Add" chip that creates a folder. */
+/** Jotter review: the folder row ends with an outlined "+ Add" chip that creates a folder. */
 @Composable
 private fun AddFolderChip(onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme

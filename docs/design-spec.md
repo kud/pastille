@@ -1127,14 +1127,14 @@ A snippet lives in one folder and can carry any number of tags.
 - [ ] **Row meta line:** `≡ 1 h ago  (▭ Personal)  #Email  #Work  +2`.
   - **Folder pill** (filled): `secondaryContainer` / `onSecondaryContainer`, 18dp tall, 6dp corners, 6dp horizontal padding, a 12dp folder icon, `labelSmall`. A static `Surface`, not a chip. Shown in "All", hidden inside that folder, absent without a folder. No per-folder colours.
   - **Tags** (outlined): `outlineVariant` border, `onSurfaceVariant` text, `#` prefix, no icon, 18dp. At most two, then `+N`; when space runs out, tags fold into `+N` first, and the time and the folder pill always stay whole (`MetaLine`).
-  - **Sentence case** everywhere a tag is shown (`#Email`), never all caps (Iris, Jotter review). Stored lowercase.
+  - **Sentence case** everywhere a tag is shown (`#Email`), never all caps (Jotter review). Stored lowercase.
 - [ ] **Editor:** a Tags field under the folder picker: one `InputChip` with ✕ per tag, a text field that suggests existing tags as you type (`SuggestionChip`s). Enter, a comma or a space adds a tag.
 - [ ] **Organise sheet (§14.2):** a "Tags" section under the folders, the same field. From now on the sheet stays open on a tap and closes on a swipe down or a tap outside; the "Moved to … · Undo" snackbar shows when it closes, if the folder changed.
 - [ ] **Filtering:** a second row under the folder chips, shown once any tag is in use: outlined, multi-select `FilterChip`s. Several narrow to snippets with all of them. It works inside a folder too.
 - [ ] **Search** also matches tag names, with or without `#`.
 - [ ] Keyboard: no tags in v1.
 
-### 14.5 Jotter review (Iris)
+### 14.5 Jotter review
 
 - [ ] The folder chip row ends with an outlined **"+ Add"** chip (`outlineVariant` border, `Icons.Rounded.Add`), which opens the New folder dialog.
 - [ ] **Search** is a full-width pill (`surfaceContainerHigh`, `CircleShape`, 56dp, 16dp side margins) with a leading search icon and a trailing ✕ that closes it, in place of the old bar with a back arrow.

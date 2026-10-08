@@ -308,8 +308,9 @@ internal fun FolderChipRow(
 
 internal val TileShape = RoundedCornerShape(10.dp)
 internal val TileHeight = 88.dp
+internal val ImageTileHeight = 140.dp
 
-// Gboard clipboard tile: one fixed size for text, folders and images; flat, a colour change on press.
+// Gboard clipboard tile: one fixed size for text and folders, taller for images; flat, a colour change on press.
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun Tile(
@@ -472,7 +473,7 @@ internal fun ImageTile(image: ImageItem, onTap: () -> Unit, onLongPress: () -> U
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(TileHeight)
+            .height(ImageTileHeight)
             .clip(TileShape)
             .combinedClickable(
                 onClickLabel = "$tapVerb image",

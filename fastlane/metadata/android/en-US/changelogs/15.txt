@@ -1,0 +1,1 @@
+Snippets and stickers now sit behind a Snippets | Stickers switch, so the folder row holds only folders. The selected folder shows a check mark.

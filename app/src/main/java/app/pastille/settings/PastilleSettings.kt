@@ -24,6 +24,11 @@ class PastilleSettings private constructor(private val prefs: SharedPreferences)
         get() = readCategoryId(KEY_APP_CATEGORY_ID)
         set(value) = writeCategoryId(KEY_APP_CATEGORY_ID, value)
 
+    // The app's main list: true when it last showed Stickers rather than Snippets, so that mode reopens.
+    var appStickersMode: Boolean
+        get() = prefs.getBoolean(KEY_APP_STICKERS_MODE, false)
+        set(value) = prefs.edit().putBoolean(KEY_APP_STICKERS_MODE, value).apply()
+
     var keyboardCategoryId: Long?
         get() = readCategoryId(KEY_KEYBOARD_CATEGORY_ID)
         set(value) = writeCategoryId(KEY_KEYBOARD_CATEGORY_ID, value)
@@ -123,6 +128,7 @@ class PastilleSettings private constructor(private val prefs: SharedPreferences)
         private const val KEY_RETURN_AFTER_SNIPPET = "return_after_snippet"
         private const val KEY_RETURN_AFTER_IMAGE = "return_after_image"
         private const val KEY_APP_CATEGORY_ID = "app_category_id"
+        private const val KEY_APP_STICKERS_MODE = "app_stickers_mode"
         private const val KEY_KEYBOARD_CATEGORY_ID = "keyboard_category_id"
         private const val KEY_KEYBOARD_STYLE = "keyboard_style"
         private const val KEY_KEYBOARD_STYLE_CHOSEN = "keyboard_style_chosen"

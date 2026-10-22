@@ -104,6 +104,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -173,7 +176,6 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.compose.material.icons.rounded.AddPhotoAlternate
-import androidx.compose.material.icons.rounded.EmojiEmotions
 import app.pastille.settings.PastilleSettings
 import app.pastille.share.imageTitle
 import java.time.LocalDate
@@ -216,9 +218,9 @@ fun SnippetListScreen(
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { refreshTick++ }
     val onboarding = rememberOnboarding(refreshTick)
     val settings = remember { PastilleSettings.forContext(context) }
-    val stickersModeOn = remember(refreshTick) { settings.stickersEnabled }
-    // The chip shows once a sticker exists, and while the Stickers keyboard mode is on, so the empty state has a way in.
-    val showStickersChip = stickers.isNotEmpty() || stickersModeOn
+    // Snippets | Stickers: two kinds of thing, never mixed in one chip row. The last one reopens.
+    var stickersMode by rememberSaveable { mutableStateOf(settings.appStickersMode) }
+    LaunchedEffect(stickersMode) { settings.appStickersMode = stickersMode }
 
     val loadedCategories by remember { repository.observeCategories() }
         .collectAsStateWithLifecycle(initialValue = null as List<CategoryRecord>?)
@@ -416,26 +418,25 @@ fun SnippetListScreen(
     }
     LaunchedEffect(addStickersRequested) {
         if (!addStickersRequested) return@LaunchedEffect
-        selectedTab = STICKERS_TAB
+        stickersMode = true
         searching = false
         query = ""
         reordering = false
         onAddStickersHandled()
         pickStickers()
     }
-    LaunchedEffect(showStickersChip) {
-        if (!showStickersChip && selectedTab == STICKERS_TAB) selectedTab = ALL_TAB
-    }
-    val onStickers = selectedTab == STICKERS_TAB
+    val onStickers = stickersMode
     val selectedFolderId = selectedTab.takeIf { it >= 0 }
     // Search finds stickers by description too, as rows carrying a "Sticker" pill.
     val matchingStickers = remember(stickers, query) {
         if (query.isBlank()) emptyList() else stickers.filter { matchesQuery(it, query) }
     }
-    val shown = remember(visible, selectedTab, matchingStickers) {
-        when (selectedTab) {
-            ALL_TAB -> visible + matchingStickers
-            STICKERS_TAB -> matchingStickers
+    // Search is global: from Stickers it finds snippets too, as from All it finds stickers.
+    val shown = remember(snippets, visible, selectedTab, matchingStickers, stickersMode, query) {
+        when {
+            // The tag row is hidden under Stickers, so its filter must not narrow the results there.
+            stickersMode -> snippets.filter { matchesQuery(it, query) } + matchingStickers
+            selectedTab == ALL_TAB -> visible + matchingStickers
             else -> visible.filter { it.categoryId == selectedTab }
         }
     }
@@ -501,8 +502,13 @@ fun SnippetListScreen(
         query = ""
     }
 
-    BackHandler(enabled = !searching && (reordering || selectedTab != ALL_TAB)) {
-        if (reordering) reordering = false else selectedTab = ALL_TAB
+    // Back steps out one level at a time: Reorder, then Stickers to Snippets, then a folder to All.
+    BackHandler(enabled = !searching && (reordering || stickersMode || selectedTab != ALL_TAB)) {
+        when {
+            reordering -> reordering = false
+            stickersMode -> stickersMode = false
+            else -> selectedTab = ALL_TAB
+        }
     }
 
     renamingFolder?.let { folder ->
@@ -634,7 +640,8 @@ fun SnippetListScreen(
                                 leadingIcon = {
                                     Icon(Icons.Rounded.SwapVert, contentDescription = null)
                                 },
-                                enabled = snippets.size > 1 || orderedFolders.size > 1 || stickers.size > 1,
+                                // Reorder applies to the mode on screen.
+                                enabled = if (stickersMode) stickers.size > 1 else snippets.size > 1 || orderedFolders.size > 1,
                                 onClick = {
                                     showMenu = false
                                     searching = false
@@ -725,10 +732,15 @@ fun SnippetListScreen(
                     .fillMaxSize()
                     .padding(padding),
             ) {
-                if (orderedFolders.isNotEmpty() || showStickersChip) {
+                ModeSwitch(
+                    stickers = stickersMode,
+                    enabled = !reordering,
+                    onSelect = { stickersMode = it },
+                )
+                // Folders hold snippets only, so the row (and its "+ Add") lives in Snippets mode.
+                if (!stickersMode) {
                     FolderTabs(
                         folders = if (reordering) folderDragOrder else orderedFolders,
-                        showStickers = showStickersChip,
                         selectedId = selectedTab,
                         reordering = reordering,
                         onSelect = { selectedTab = it },
@@ -840,7 +852,7 @@ fun SnippetListScreen(
                                 }
                                 SnippetRow(
                                     snippet = snippet,
-                                    categoryName = if (selectedTab == ALL_TAB) snippet.categoryId?.let { categoryNames[it] } else null,
+                                    categoryName = if (stickersMode || selectedTab == ALL_TAB) snippet.categoryId?.let { categoryNames[it] } else null,
                                     onEdit = { if (snippet.sticker) openOrganise(snippet) else onEdit(snippet) },
                                     onCopy = { copySnippet(snippet) },
                                     onDelete = { deleteSnippet(snippet) },
@@ -1406,7 +1418,6 @@ private fun toast(context: Context, message: String) {
 }
 
 private const val ALL_TAB = -1L
-private const val STICKERS_TAB = -2L
 
 private fun displayNameOf(context: Context, uri: Uri): String? = runCatching {
     context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
@@ -1415,14 +1426,35 @@ private fun displayNameOf(context: Context, uri: Uri): String? = runCatching {
 }.getOrNull()
 internal const val TOP_BAR_TAG = "top-bar"
 internal const val SNIPPET_LIST_TAG = "snippet-list"
+internal const val MODE_SWITCH_TAG = "mode-switch"
 internal const val WORDMARK_TAG = "wordmark"
 internal const val SNIPPET_ROW_TAG = "snippet-row"
+
+/** Snippets | Stickers. Material's own check marks the selected side, so it never rests on colour. */
+@Composable
+private fun ModeSwitch(stickers: Boolean, enabled: Boolean, onSelect: (Boolean) -> Unit) {
+    SingleChoiceSegmentedButtonRow(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 4.dp)
+            .testTag(MODE_SWITCH_TAG),
+    ) {
+        listOf(false to "Snippets", true to "Stickers").forEachIndexed { index, (value, label) ->
+            SegmentedButton(
+                selected = stickers == value,
+                onClick = { onSelect(value) },
+                enabled = enabled,
+                shape = SegmentedButtonDefaults.itemShape(index, 2),
+                label = { Text(label, maxLines = 1) },
+            )
+        }
+    }
+}
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun FolderTabs(
     folders: List<CategoryRecord>,
-    showStickers: Boolean,
     selectedId: Long,
     reordering: Boolean,
     onSelect: (Long) -> Unit,
@@ -1440,11 +1472,9 @@ private fun FolderTabs(
         onMove(fromId, toId)
     }
     LaunchedEffect(selectedId, folders) {
-        val leading = if (showStickers) 2 else 1
         val index = when (selectedId) {
             ALL_TAB -> 0
-            STICKERS_TAB -> 1
-            else -> folders.indexOfFirst { it.id == selectedId }.let { if (it < 0) -1 else it + leading }
+            else -> folders.indexOfFirst { it.id == selectedId }.let { if (it < 0) -1 else it + 1 }
         }
         if (index >= 0) rowState.animateScrollToItem(index)
     }
@@ -1457,17 +1487,6 @@ private fun FolderTabs(
     ) {
         item(key = "all") {
             FolderTab(label = "All", icon = Icons.Rounded.GridView, selected = selectedId == ALL_TAB, onClick = { onSelect(ALL_TAB) })
-        }
-        // A fixed chip, not a folder: never dragged, no rename or delete.
-        if (showStickers) {
-            item(key = "stickers") {
-                FolderTab(
-                    label = "Stickers",
-                    icon = Icons.Rounded.EmojiEmotions,
-                    selected = selectedId == STICKERS_TAB,
-                    onClick = { onSelect(STICKERS_TAB) },
-                )
-            }
         }
         items(folders, key = { it.id }) { folder ->
             ReorderableItem(reorderState, key = folder.id) { dragging ->
@@ -1545,7 +1564,8 @@ private fun FolderTab(
     ) {
         val tint = if (selected) colors.onSecondaryContainer else colors.onSurfaceVariant
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
+            // Selection never rests on colour alone: the selected chip trades its icon for a check.
+            Icon(if (selected) Icons.Rounded.Check else icon, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
             Text(
                 text = label,

@@ -6,10 +6,15 @@ import android.view.inputmethod.InputMethodInfo
 import android.view.inputmethod.InputMethodManager
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
@@ -19,6 +24,7 @@ import androidx.test.core.app.ApplicationProvider
 import app.pastille.data.PastilleDatabase
 import app.pastille.data.SnippetRepository
 import app.pastille.model.SnippetRecord
+import app.pastille.settings.PastilleSettings
 import app.pastille.ui.theme.PastilleTheme
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -252,5 +258,31 @@ class SnippetListHeaderTest {
                 assertNoVoid("round $round, $name", rows, log)
             }
         }
+    }
+
+    /** Stickers are a mode, not a folder: the folder row and "All" belong to Snippets, and Back returns there. */
+    @Test
+    fun `the Snippets and Stickers switch keeps folders to Snippets, and Back returns there`() {
+        showList(rows = 3)
+        val settings = PastilleSettings.forContext(ApplicationProvider.getApplicationContext())
+        fun folderRowShown() = compose.onAllNodesWithText("All").fetchSemanticsNodes().isNotEmpty()
+        // Probe: the folder row is really there to begin with, or its absence below proves nothing.
+        assertTrue("folder row in Snippets", folderRowShown())
+        compose.onNodeWithContentDescription("New snippet").assertExists()
+
+        // A synthetic touch never reaches Material's SegmentedButton under Robolectric (the row sees it, the
+        // segment's click doesn't fire), while a finger on the device works; so the switch is pressed through
+        // its accessibility action, which is the same onClick.
+        compose.onNodeWithText("Stickers").performSemanticsAction(SemanticsActions.OnClick)
+        compose.waitForIdle()
+        assertTrue("no folder row in Stickers", !folderRowShown())
+        compose.onNodeWithContentDescription("Add stickers").assertExists()
+        assertTrue("Stickers mode remembered", settings.appStickersMode)
+
+        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.waitForIdle()
+        assertTrue("Back returns to Snippets", folderRowShown())
+        compose.onNodeWithContentDescription("New snippet").assertExists()
+        assertTrue("Snippets mode remembered", !settings.appStickersMode)
     }
 }

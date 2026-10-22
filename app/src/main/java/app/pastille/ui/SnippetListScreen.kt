@@ -214,6 +214,7 @@ fun SnippetListScreen(
         CrashLog.forContext(context).entries().isNotEmpty()
     }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { refreshTick++ }
+    val onboarding = rememberOnboarding(refreshTick)
     val settings = remember { PastilleSettings.forContext(context) }
     val stickersModeOn = remember(refreshTick) { settings.stickersEnabled }
     // The chip shows once a sticker exists, and while the Stickers keyboard mode is on, so the empty state has a way in.
@@ -773,9 +774,13 @@ fun SnippetListScreen(
                     state = listState,
                     contentPadding = PaddingValues(bottom = 88.dp),
                 ) {
-                    item(key = "onboarding") {
-                        Box(modifier = Modifier.padding(horizontal = 16.dp)) {
-                            OnboardingCard(key = refreshTick)
+                    // Only when there is something to set up: a zero-height first item leaves the list
+                    // claiming it can still scroll back at its top (see `rememberOnboarding`).
+                    if (onboarding.needed) {
+                        item(key = "onboarding") {
+                            Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                                OnboardingCard(onboarding)
+                            }
                         }
                     }
                     if (shown.isEmpty()) {
@@ -829,7 +834,7 @@ fun SnippetListScreen(
                         }
                     } else {
                         itemsIndexed(shown, key = { _, snippet -> snippet.id }) { index, snippet ->
-                            Column(modifier = Modifier.animateItem()) {
+                            Column(modifier = Modifier.animateItem().testTag(SNIPPET_ROW_TAG)) {
                                 if (index > 0) {
                                     HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
                                 }
@@ -873,18 +878,39 @@ private fun Wordmark(collapsedFraction: Float) {
     }
 }
 
+/** What the setup card still asks for, read again on every resume and after the photo prompt. */
+private class Onboarding(val imeEnabled: Boolean, val photosGranted: Boolean, val onPhotosAnswered: () -> Unit) {
+    val needed: Boolean get() = !imeEnabled || !photosGranted
+}
+
+/**
+ * Decided here, not inside the card, so the list can leave the card's item out entirely once set
+ * up. An item that composes to nothing is a zero-height first item, and LazyColumn (foundation
+ * 1.7) then settles at its top on index 1, offset 0: it reports it can still scroll backward,
+ * accepts the next downward drag, moves nothing, and returns the whole delta as consumed. The
+ * header never gets that delta, and `animateItem()` reads it as a scroll and pushes every row down
+ * by it, so a fling towards the top emptied the list until the rows sprang back.
+ */
 @Composable
-private fun OnboardingCard(key: Int) {
+private fun rememberOnboarding(refreshTick: Int): Onboarding {
     val context = LocalContext.current
     var photosAsked by remember { mutableStateOf(0) }
-    val imeEnabled = remember(key) { isPastilleEnabled(context) }
-    val photosGranted = remember(key, photosAsked) {
+    val imeEnabled = remember(refreshTick) { isPastilleEnabled(context) }
+    val photosGranted = remember(refreshTick, photosAsked) {
         ImageSourceReader.hasPermission(context) && !ImageSourceReader.hasOnlyPartialAccess(context)
     }
+    return Onboarding(imeEnabled, photosGranted, onPhotosAnswered = { photosAsked++ })
+}
+
+@Composable
+private fun OnboardingCard(onboarding: Onboarding) {
+    val context = LocalContext.current
+    val imeEnabled = onboarding.imeEnabled
+    val photosGranted = onboarding.photosGranted
+    val onPhotosAnswered by rememberUpdatedState(onboarding.onPhotosAnswered)
     val photoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
-        photosAsked++
+        onPhotosAnswered()
     }
-    if (imeEnabled && photosGranted) return
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -1390,6 +1416,7 @@ private fun displayNameOf(context: Context, uri: Uri): String? = runCatching {
 internal const val TOP_BAR_TAG = "top-bar"
 internal const val SNIPPET_LIST_TAG = "snippet-list"
 internal const val WORDMARK_TAG = "wordmark"
+internal const val SNIPPET_ROW_TAG = "snippet-row"
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable

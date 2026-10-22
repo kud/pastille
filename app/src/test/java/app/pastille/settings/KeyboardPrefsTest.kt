@@ -30,6 +30,25 @@ class KeyboardPrefsTest {
     }
 
     @Test
+    fun `image tiles are 4 by 3 and always leave a full row and a peek`() {
+        // 412dp Pixel, two columns of 196dp: Standard and up get the full 4:3.
+        assertEquals(147, imageTileHeightDp(columnWidthDp = 196, gridHeightDp = 220))
+        // Compact: about 172dp under the chips, so the tile shrinks to keep a peek.
+        assertEquals(136, imageTileHeightDp(columnWidthDp = 196, gridHeightDp = 172))
+        // Landscape at Compact barely has room; never smaller than a text tile.
+        assertEquals(88, imageTileHeightDp(columnWidthDp = 213, gridHeightDp = 60))
+    }
+
+    @Test
+    fun `only screen-shaped images keep their top`() {
+        assertEquals(true, cropKeepsTop(1080, 2400))
+        assertEquals(false, cropKeepsTop(3000, 4000))
+        assertEquals(false, cropKeepsTop(1080, 1920))
+        assertEquals(false, cropKeepsTop(4000, 3000))
+        assertEquals(false, cropKeepsTop(0, 0))
+    }
+
+    @Test
     fun `grid columns follow the width`() {
         assertEquals(2, tileColumns(411))
         assertEquals(2, tileColumns(300))

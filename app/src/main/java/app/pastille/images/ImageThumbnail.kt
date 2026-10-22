@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import app.pastille.settings.cropKeepsTop
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -46,7 +47,8 @@ fun ImageThumbnail(
     modifier: Modifier = Modifier,
     targetPx: Int = 256,
     contentScale: ContentScale = ContentScale.Crop,
-    alignment: Alignment = Alignment.Center,
+    // null: by shape, keeping the top of a screen-shaped image (cropKeepsTop), the middle otherwise.
+    alignment: Alignment? = Alignment.Center,
 ) {
     val store = ImageStore.forContext(LocalContext.current)
     var state by remember(fileName, targetPx) { mutableStateOf<StoredThumbState>(StoredThumbState.Loading) }
@@ -62,7 +64,8 @@ fun ImageThumbnail(
                     bitmap = current.bitmap.asImageBitmap(),
                     contentDescription = contentDescription,
                     contentScale = contentScale,
-                    alignment = alignment,
+                    alignment = alignment
+                        ?: if (cropKeepsTop(current.bitmap.width, current.bitmap.height)) Alignment.TopCenter else Alignment.Center,
                     modifier = Modifier.fillMaxSize(),
                 )
                 is StoredThumbState.Failed -> ThumbnailPlaceholder(shimmer = false) {

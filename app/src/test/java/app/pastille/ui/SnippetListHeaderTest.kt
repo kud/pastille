@@ -6,6 +6,7 @@ import android.view.inputmethod.InputMethodInfo
 import android.view.inputmethod.InputMethodManager
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -13,6 +14,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
@@ -268,7 +270,10 @@ class SnippetListHeaderTest {
         assertTrue("folder row in Snippets", folderRowShown())
         compose.onNodeWithContentDescription("New snippet").assertExists()
 
-        compose.onNodeWithText("Stickers").performClick()
+        // A synthetic touch never reaches Material's SegmentedButton under Robolectric (the row sees it, the
+        // segment's click doesn't fire), while a finger on the device works; so the switch is pressed through
+        // its accessibility action, which is the same onClick.
+        compose.onNodeWithText("Stickers").performSemanticsAction(SemanticsActions.OnClick)
         compose.waitForIdle()
         assertTrue("no folder row in Stickers", !folderRowShown())
         compose.onNodeWithContentDescription("Add stickers").assertExists()

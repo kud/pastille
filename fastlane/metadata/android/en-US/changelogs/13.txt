@@ -1,0 +1,1 @@
+Stickers get their own tab, with animated WebP. Photos are cropped around the middle and image tiles are 4:3. Swipe actions, organise mode, a bin and tags. A tile picker sheet and clipboard auto-clear. A borderless full-screen editor that saves as you type. WebP, transparency and animation survive import.

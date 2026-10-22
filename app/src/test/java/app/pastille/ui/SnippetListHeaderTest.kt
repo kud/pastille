@@ -10,6 +10,9 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
@@ -19,6 +22,7 @@ import androidx.test.core.app.ApplicationProvider
 import app.pastille.data.PastilleDatabase
 import app.pastille.data.SnippetRepository
 import app.pastille.model.SnippetRecord
+import app.pastille.settings.PastilleSettings
 import app.pastille.ui.theme.PastilleTheme
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -252,5 +256,28 @@ class SnippetListHeaderTest {
                 assertNoVoid("round $round, $name", rows, log)
             }
         }
+    }
+
+    /** Stickers are a mode, not a folder: the folder row and "All" belong to Snippets, and Back returns there. */
+    @Test
+    fun `the Snippets and Stickers switch keeps folders to Snippets, and Back returns there`() {
+        showList(rows = 3)
+        val settings = PastilleSettings.forContext(ApplicationProvider.getApplicationContext())
+        fun folderRowShown() = compose.onAllNodesWithText("All").fetchSemanticsNodes().isNotEmpty()
+        // Probe: the folder row is really there to begin with, or its absence below proves nothing.
+        assertTrue("folder row in Snippets", folderRowShown())
+        compose.onNodeWithContentDescription("New snippet").assertExists()
+
+        compose.onNodeWithText("Stickers").performClick()
+        compose.waitForIdle()
+        assertTrue("no folder row in Stickers", !folderRowShown())
+        compose.onNodeWithContentDescription("Add stickers").assertExists()
+        assertTrue("Stickers mode remembered", settings.appStickersMode)
+
+        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.waitForIdle()
+        assertTrue("Back returns to Snippets", folderRowShown())
+        compose.onNodeWithContentDescription("New snippet").assertExists()
+        assertTrue("Snippets mode remembered", !settings.appStickersMode)
     }
 }

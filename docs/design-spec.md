@@ -1046,7 +1046,7 @@ The Settings screen was one long column of `ListItem`s under `primary` section h
 
 | Group | Rows |
 |---|---|
-| Keyboard | Style (preview + the inline radio list), Height (preview, Portrait and Landscape segmented rows, the try-it field), Show in the keyboard (Snippets / Images), Return after a snippet, Switch back to |
+| Keyboard | Style (preview + the inline radio list), Height (preview, Portrait and Landscape segmented rows, the try-it field), Show in the keyboard (Snippets / Stickers / Images), Return after a snippet, Switch back to |
 | Clipboard | Clear clipboard after copying (a dialog of radio rows: Off, 5 s, 10 s, 30 s, 1 min) |
 | Photos | Photo access, Return after an image |
 
@@ -1137,6 +1137,7 @@ A snippet lives in one folder and can carry any number of tags.
 
 ### 14.5 Jotter review
 
+- [ ] The selected folder chip trades its folder icon for `Icons.Rounded.Check`, so selection never rests on its fill alone (Erwann is colourblind).
 - [ ] The folder chip row ends with an outlined **"+ Add"** chip (`outlineVariant` border, `Icons.Rounded.Add`), which opens the New folder dialog.
 - [ ] **Search** is a full-width pill (`surfaceContainerHigh`, `CircleShape`, 56dp, 16dp side margins) with a leading search icon and a trailing ✕ that closes it, in place of the old bar with a back arrow.
 
@@ -1159,7 +1160,11 @@ A sticker is a saved image marked as a sticker. There are no packs, no downloads
 
 ### 15.2 App
 
-- [ ] A fixed "Stickers" chip straight after "All", which isn't draggable and has no rename or delete. Selecting it shows a grid: `(width − 32) / 88dp` clamped to 3–6 columns, `surfaceContainerLow` 12dp cells, the sticker `Fit` at a 10dp inset. No swipes. Reorder through the overflow Reorder mode.
+- [ ] **Snippets | Stickers switch** (Iris, 2026-10-22; Erwann: "bizarre de mélanger les folders de snippets avec les stickers"): a `SingleChoiceSegmentedButtonRow` between the wordmark and the folder row, full width less 16dp each side, always shown. Material's check mark stays on the selected side, so the state never rests on colour. Stickers are a kind of thing, not a folder: there is no Stickers chip in the folder row.
+  - Snippets: the folder row (`All` = every snippet, then folders, then "+ Add") and the tag row, as before; FAB "New snippet".
+  - Stickers: no folder or tag row; the grid below; FAB "Add stickers".
+  - The last mode reopens (`appStickersMode`). Back steps out one level: Reorder, then Stickers to Snippets, then a folder to All, then the app closes. Search stays global and finds both kinds, stickers with their pill. Overflow › Reorder applies to the mode on screen; the switch is disabled while reordering.
+- [ ] Stickers mode shows a grid: `(width − 32) / 88dp` clamped to 3–6 columns, `surfaceContainerLow` 12dp cells, the sticker `Fit` at a 10dp inset. No swipes. Reorder through the overflow Reorder mode.
 - [ ] Tap: the Organise sheet with a 160dp preview, a Description field, a Sticker switch and Delete. Long-press: Move to snippets, Delete.
 - [ ] FAB "Add stickers" (`AddPhotoAlternate`): the photo picker, up to 20 images. Snackbars: "Added 6 stickers · Undo", "Added 4 stickers · 2 moved from snippets", "Added 20 of 34 stickers".
 - [ ] Share sheet, for images: a "Save as: Image / Sticker" row that remembers the last choice. Sticker hides the folder and pin rows.

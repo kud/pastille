@@ -16,8 +16,8 @@ android {
         applicationId = "app.beansontoast.pastille"
         minSdk = 28
         targetSdk = 35
-        versionCode = 13
-        versionName = "0.1.2"
+        versionCode = 14
+        versionName = "0.1.3"
     }
 
     // CI writes the keystore from the PASTILLE_KEYSTORE_* secrets; without them the release build is left unsigned.

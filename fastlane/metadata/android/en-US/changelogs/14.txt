@@ -1,0 +1,1 @@
+Scrolling back to the top of the list no longer empties it for a moment, and the header opens fully again.

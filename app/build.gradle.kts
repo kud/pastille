@@ -34,6 +34,10 @@ android {
     }
 
     buildTypes {
+        // Installs beside the release build: a different signing key can never update it in place.
+        debug {
+            applicationIdSuffix = ".debug"
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true

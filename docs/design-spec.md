@@ -924,11 +924,12 @@ The owner's model is now Gboard's clipboard panel: a fixed height, and a 2-colum
 
 **Image tile** (Images mode, and image snippets in Snippets mode)
 
-- [ ] The image fills the tile: `ContentScale.Crop`, **`Alignment.TopCenter`**, clipped to the same 10dp shape. The top of a screenshot is its legible part.
+- [x] **Images mode tiles are 4:3, not 88dp** (owner, 2026-10-22: "centrer les images dans la box et aussi faire la case plus grande"). Height = column width × 3/4 (about 147dp on a 412dp phone), a photo's own shape, so a landscape photo shows whole and a portrait one loses only its edges. Capped so one full row plus a 24dp peek of the next always fits under the source chips (about 136dp at Compact), never below 88dp. `imageTileHeightDp` in `KeyboardPrefs.kt`, unit-tested. Image snippets in Snippets mode keep the equal 88dp tile.
+- [x] The image fills the tile: `ContentScale.Crop`, clipped to the same 10dp shape, **centred**, except a screen-shaped image (19:10 or taller, `cropKeepsTop`), which keeps `Alignment.TopCenter` because a screenshot's app bar is its legible part. Top-aligning everything cut photos to the top of a head.
 - [ ] Placeholder and broken states as §5, on `key`.
 - [ ] **Images mode:** no label, like Gboard's clipboard images. `contentDescription` = file name or "Screenshot, 14:32".
 - [ ] **Image snippets in Snippets mode:** a bottom scrim (`Brush.verticalGradient(Transparent → Black 45%)`, 32dp tall) carrying the title at 14sp Medium, white, one line, 12dp start padding. This tells a saved image apart from the photos in Images mode.
-- [ ] Wide 195 × 88dp tiles crop screenshots hard. That's the cost of equal tiles. Long-press opens the §11.10 **Preview** for the full image.
+- [ ] Tiles still crop: long-press opens the §11.10 **Preview** for the full image.
 
 **Fixed height**
 

@@ -170,6 +170,8 @@ import app.pastille.settings.KeyboardStyle
 import app.pastille.settings.PanelHeight
 import app.pastille.settings.TOOLBAR_HEIGHT_DP
 import app.pastille.settings.tileColumns
+import app.pastille.settings.cropKeepsTop
+import app.pastille.settings.imageTileHeightDp
 import app.pastille.settings.stickerColumns
 import app.pastille.share.isMeaningfulImageName
 import kotlinx.coroutines.Dispatchers
@@ -308,9 +310,8 @@ internal fun FolderChipRow(
 
 internal val TileShape = RoundedCornerShape(10.dp)
 internal val TileHeight = 88.dp
-internal val ImageTileHeight = 140.dp
 
-// Gboard clipboard tile: one fixed size for text and folders, taller for images; flat, a colour change on press.
+// Gboard clipboard tile: one fixed size for text and folders (image tiles size themselves in ImageGrid); flat, a colour change on press.
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun Tile(
@@ -396,7 +397,7 @@ internal fun SnippetTile(
                 modifier = Modifier.fillMaxSize(),
                 targetPx = 512,
                 contentScale = ContentScale.Crop,
-                alignment = Alignment.TopCenter,
+                alignment = null,
             )
             Box(
                 modifier = Modifier
@@ -468,12 +469,18 @@ internal fun rememberThumb(image: ImageItem, sizePx: Int): ThumbState {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-internal fun ImageTile(image: ImageItem, onTap: () -> Unit, onLongPress: () -> Unit, tapVerb: String = "Insert") {
+internal fun ImageTile(
+    image: ImageItem,
+    height: Dp,
+    onTap: () -> Unit,
+    onLongPress: () -> Unit,
+    tapVerb: String = "Insert",
+) {
     val state = rememberThumb(image, 512)
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(ImageTileHeight)
+            .height(height)
             .clip(TileShape)
             .combinedClickable(
                 onClickLabel = "$tapVerb image",
@@ -489,7 +496,7 @@ internal fun ImageTile(image: ImageItem, onTap: () -> Unit, onLongPress: () -> U
                     bitmap = current.bitmap.asImageBitmap(),
                     contentDescription = image.displayName,
                     contentScale = ContentScale.Crop,
-                    alignment = Alignment.TopCenter,
+                    alignment = if (cropKeepsTop(current.bitmap.width, current.bitmap.height)) Alignment.TopCenter else Alignment.Center,
                     modifier = Modifier.fillMaxSize(),
                 )
                 is ThumbState.Failed -> ThumbPlaceholder(shimmer = false) {
@@ -633,8 +640,12 @@ internal fun ImageGrid(
 ) {
     val haptics = LocalHapticFeedback.current
     BoxWithConstraints(modifier = modifier) {
+        val columns = tileColumns(maxWidth.value.toInt())
+        val columnWidth = (maxWidth - 12.dp - 8.dp * (columns - 1)) / columns
+        val gridHeight = if (constraints.hasBoundedHeight) maxHeight.value.toInt() else Int.MAX_VALUE
+        val tileHeight = imageTileHeightDp(columnWidth.value.toInt(), gridHeight).dp
         LazyVerticalGrid(
-            columns = GridCells.Fixed(tileColumns(maxWidth.value.toInt())),
+            columns = GridCells.Fixed(columns),
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(start = 6.dp, end = 6.dp, top = 4.dp, bottom = 20.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -654,6 +665,7 @@ internal fun ImageGrid(
             items(images, key = { it.uri.toString() }) { image ->
                 ImageTile(
                     image = image,
+                    height = tileHeight,
                     onTap = { actions.onImageTap(image) },
                     onLongPress = {
                         haptics.performHapticFeedback(HapticFeedbackType.LongPress)

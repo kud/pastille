@@ -55,6 +55,19 @@ fun panelHeightDp(preset: PanelHeight, landscape: Boolean, windowHeightDp: Int):
 
 fun tileColumns(widthDp: Int): Int = (widthDp / 195).coerceIn(2, 4)
 
+// Image tiles are 4:3, a photo's own shape, so a landscape photo shows whole and a portrait one
+// loses only its edges. Capped so one full row plus a peek of the next fits the grid at every
+// panel height (4dp top padding, 8dp gap, 24dp peek), never below the 88dp text tile.
+fun imageTileHeightDp(columnWidthDp: Int, gridHeightDp: Int): Int {
+    val photo = columnWidthDp * 3 / 4
+    val fits = gridHeightDp - 4 - 8 - 24
+    return minOf(photo, fits).coerceAtLeast(88)
+}
+
+// A thumbnail about as tall as a phone screen (19:10 or taller) is a screenshot: its app bar is
+// the legible part, so the crop keeps the top. Anything else, photos included, crops round the middle.
+fun cropKeepsTop(widthPx: Int, heightPx: Int): Boolean = widthPx > 0 && heightPx * 10 >= widthPx * 19
+
 // A switched-off mode gives way to the first enabled one in bar order.
 fun effectiveMode(saved: KeyboardMode, enabled: Set<KeyboardMode>): KeyboardMode = when {
     saved in enabled -> saved

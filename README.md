@@ -73,6 +73,10 @@ Or open the directory in Android Studio and run the `app` configuration on a dev
 - [Design spec](docs/design-spec.md): how the keyboard and app look and behave.
 - [Architecture](docs/architecture.md): schema, storage, image handling and the Quick Settings tile mechanics.
 
+## Support
+
+Pastille is free and stays free. If it saves you time, you can [buy me a coffee on Ko-fi](https://ko-fi.com/kud).
+
 ## Licence
 
 Copyright (c) 2026 Erwann Mest. Released under the GNU General Public License v3.0 or later; see [LICENSE](LICENSE).

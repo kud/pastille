@@ -480,7 +480,7 @@ UI copy says **"folder"** everywhere. Code can keep `category`.
 - [ ] Right side, left to right:
   - **Add:** `FilledTonalIconButton` (40dp) with `Icons.Filled.Add`, colours `secondaryContainer` / `onSecondaryContainer`, tooltip "New snippet". Opens the §7.1 Add state, pre-filled with the current folder. Snippets mode only.
   - **Open Pastille:** `IconButton` with `Icons.Outlined.Settings`, tooltip "Open Pastille". Opens the app's main screen.
-  - **Switch keyboard:** `IconButton` with `Icons.Outlined.Keyboard`, tooltip "Switch keyboard".
+  - **Switch keyboard:** `Icons.Outlined.Keyboard`, tooltip "Switch keyboard". A tap returns to the usual keyboard; a long press opens Android's keyboard picker (TalkBack: "Choose a keyboard"), on a 48 dp round target since `IconButton` has no long press.
 - [ ] **Remove** the standalone save-clipboard icon (`ContentPasteGo`). Clipboard saving lives in the Add state's "From clipboard" row (§7.1). Two adjacent icons for adding was the confusion.
 - [ ] I'm reversing my §3 call on the gear: on a keyboard the gear is _the_ convention for "go to this keyboard's app" (Gboard does exactly this), and the convention beats literal semantics. `OpenInNew` stays only on text links that say where they go ("Edit in Pastille ↗").
 - [ ] Width check at 360dp: segmented about 176dp, Add 40dp, two icons 96dp, padding 24dp, about 336dp in total. If the label scale pushes past that (large font settings), the segments drop to icons only (`Icons.Outlined.ShortText` and `Icons.Outlined.Image`, with the same content descriptions). Decide with `BoxWithConstraints` at < 360dp available.

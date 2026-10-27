@@ -3,13 +3,27 @@ name: release
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to create on stable's head and release (v + versionName from app/build.gradle.kts)"
+        required: true
 
 permissions:
   contents: write
 
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
   release:
+    # A pushed v* tag, or a manual run on stable naming the tag to create: a tag made
+    # with the workflow token would not start another run, so this one releases it.
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/stable')
     runs-on: ubuntu-latest
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -18,7 +32,13 @@ jobs:
         run: |
           git fetch origin stable
           git merge-base --is-ancestor "$GITHUB_SHA" origin/stable \
-            || { echo "::error::$GITHUB_REF_NAME is not on stable. Promote main to stable first."; exit 1; }
+            || { echo "::error::$TAG is not on stable. Promote main to stable first."; exit 1; }
+      - name: The tag matches the app's version
+        run: |
+          version=$(sed -n 's/^ *versionName = "\(.*\)"$/\1/p' app/build.gradle.kts)
+          [ -n "$version" ] || { echo "::error::versionName not found in app/build.gradle.kts"; exit 1; }
+          [ "$TAG" = "v$version" ] \
+            || { echo "::error::Tag $TAG does not match versionName $version. Bump the version first."; exit 1; }
       - uses: gradle/actions/wrapper-validation@v4
       - uses: actions/setup-java@v4
         with:
@@ -38,8 +58,21 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          version="${GITHUB_REF_NAME#v}"
+          version="${TAG#v}"
           cp app/build/outputs/apk/release/app-release.apk "pastille-$version.apk"
-          prerelease=""
-          case "$GITHUB_REF_NAME" in *-*) prerelease="--prerelease" ;; esac
-          gh release create "$GITHUB_REF_NAME" "pastille-$version.apk" --verify-tag --generate-notes $prerelease
+          flags=(--generate-notes)
+          case "$TAG" in *-*) flags+=(--prerelease) ;; esac
+          # A pushed tag must already exist; a manual run creates it on the commit it built.
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" >/dev/null 2>&1; then
+              echo "::error::Tag $TAG already exists"
+              exit 1
+            fi
+            flags+=(--target "$GITHUB_SHA")
+          else
+            flags+=(--verify-tag)
+          fi
+          gh release create "$TAG" "pastille-$version.apk" "${flags[@]}"
+      - name: Remove the keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/pastille-release.jks"

@@ -1,0 +1,1 @@
+Long press the keyboard key to pick any keyboard, and "Switch back to" now lists every installed keyboard by name.

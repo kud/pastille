@@ -216,6 +216,7 @@ interface KeyboardActions {
     fun onOpenAdd() {}
     fun onOpenApp() {}
     fun onSwitchKeyboard() {}
+    fun onPickKeyboard() {}
     fun onSnippetTap(snippet: SnippetRecord) {}
     fun onSnippetLongPress(snippet: SnippetRecord) {}
     fun onSelectSource(bucketId: Long) {}
@@ -385,23 +386,55 @@ private fun Toolbar(state: KeyboardUiState, actions: KeyboardActions, title: Str
                         ToolbarAction(icon = Icons.Rounded.SwapVert, label = "Reorder snippets", onClick = actions::onOpenReorder)
                     }
                 }
-                ToolbarAction(icon = Icons.Rounded.Keyboard, label = "Switch keyboard", onClick = actions::onSwitchKeyboard)
+                // A long press opens Android's keyboard picker, for any keyboard rather than the usual one.
+                ToolbarAction(
+                    icon = Icons.Rounded.Keyboard,
+                    label = "Switch keyboard",
+                    onClick = actions::onSwitchKeyboard,
+                    onLongClick = actions::onPickKeyboard,
+                    onLongClickLabel = "Choose a keyboard",
+                )
                 ToolbarAction(icon = Icons.Rounded.Settings, label = "Keyboard settings", onClick = actions::onOpenSettings)
             }
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-private fun ToolbarAction(icon: ImageVector, label: String, onClick: () -> Unit) {
+private fun ToolbarAction(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
+    onLongClickLabel: String? = null,
+) {
     TooltipBox(
         positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
         tooltip = { PlainTooltip { Text(label) } },
         state = rememberTooltipState(),
     ) {
-        IconButton(onClick = onClick) {
-            Icon(icon, contentDescription = label, tint = LocalKeyboardPalette.current.icon)
+        if (onLongClick == null) {
+            IconButton(onClick = onClick) {
+                Icon(icon, contentDescription = label, tint = LocalKeyboardPalette.current.icon)
+            }
+        } else {
+            // IconButton has no long press: the same 48 dp round target, with both gestures.
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .combinedClickable(
+                        role = Role.Button,
+                        onClickLabel = label,
+                        onLongClickLabel = onLongClickLabel,
+                        onLongClick = onLongClick,
+                        onClick = onClick,
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(icon, contentDescription = label, tint = LocalKeyboardPalette.current.icon)
+            }
         }
     }
 }

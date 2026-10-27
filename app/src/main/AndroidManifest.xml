@@ -6,6 +6,14 @@
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
+
+    <!-- From Android 11, InputMethodManager lists only the keyboards this app can see: without
+         this query "Switch back to" offered just "Main keyboard" and "Previous keyboard". -->
+    <queries>
+        <intent>
+            <action android:name="android.view.InputMethod" />
+        </intent>
+    </queries>
     <application
         android:name=".PastilleApplication"
         android:label="@string/app_name"

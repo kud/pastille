@@ -29,6 +29,7 @@ Pastille is an open-source Android keyboard for pasting, not typing. Tap a saved
 - Share text or an image from any app to Pastille to keep it as a snippet.
 - A Quick Settings tile that opens your snippets as a sheet to copy from, in any app.
 - Choose, separately for snippets and images, whether to return to your usual keyboard after inserting, and which keyboard that is.
+- Long-press the keyboard key to pick any other keyboard from Android's list.
 - Turn snippets, stickers or images off entirely if you only need some of them.
 - Gboard-style dark, light and Material You themes, with a choice of panel heights.
 - Back up and restore your snippets as a JSON file.

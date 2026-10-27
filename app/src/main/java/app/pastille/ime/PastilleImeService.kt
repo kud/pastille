@@ -823,6 +823,11 @@ class PastilleImeService :
         if (wanted) onSwitchKeyboard()
     }
 
+    override fun onPickKeyboard() {
+        if (destroyed) return
+        getSystemService(InputMethodManager::class.java)?.showInputMethodPicker()
+    }
+
     override fun onSwitchKeyboard() {
         if (destroyed) return
         val others = otherTypingKeyboards(this).map { it.id }

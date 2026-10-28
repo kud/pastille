@@ -91,12 +91,13 @@ class TagRepositoryTest {
     fun `backup v3 round-trips tags through export and import`() = runBlocking {
         val id = repository.upsert(SnippetRecord(title = "Sign-off", text = "Best wishes"))
         repository.setTags(id, listOf("email"))
-        val json = repository.exportJson().json
+        val json = repository.backupJson()
         repository.emptyBin()
         repository.delete(id)
         repository.emptyBin()
 
-        repository.importJson(json)
+        val file = java.io.File.createTempFile("backup", ".json").apply { writeText(json) }
+        repository.importBackup(file, java.nio.file.Files.createTempDirectory("images").toFile())
 
         assertEquals(listOf("email"), snippets().single().tags)
     }

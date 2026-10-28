@@ -56,6 +56,52 @@
             </intent-filter>
         </activity>
 
+        <!-- A backup sent to this phone (Quick Share's "Open", a file manager, a share of the file).
+             Matched by the standard ZIP types, since a custom extension or type is unreliable on
+             Android; the activity checks the contents and turns away any other zip. -->
+        <activity
+            android:name=".backup.ImportBackupActivity"
+            android:exported="true"
+            android:label="@string/import_backup_label"
+            android:theme="@style/Theme.Pastille.Translucent"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:launchMode="standard">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:mimeType="application/zip" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:mimeType="application/x-zip-compressed" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:mimeType="application/x-zip" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/zip" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/x-zip-compressed" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/x-zip" />
+            </intent-filter>
+        </activity>
+
         <service
             android:name=".ime.PastilleImeService"
             android:permission="android.permission.BIND_INPUT_METHOD"

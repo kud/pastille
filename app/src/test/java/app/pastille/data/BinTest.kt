@@ -51,7 +51,7 @@ class BinTest {
         assertEquals(emptyList<Long>(), liveIds())
         assertEquals(listOf(id), binIds())
         assertNull(repository.findTextDuplicate("example-passphrase"))
-        assertTrue(SnippetBackup.decode(repository.exportJson().json).snippets.isEmpty())
+        assertTrue(SnippetBackup.decode(repository.backupJson()).snippets.isEmpty())
         val binned = repository.get(id)!!
         assertEquals(now, binned.deletedAt)
         assertEquals("a binned snippet keeps its folder", folder, binned.categoryId)

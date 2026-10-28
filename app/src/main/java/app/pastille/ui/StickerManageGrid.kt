@@ -1,5 +1,8 @@
 package app.pastille.ui
 
+import app.pastille.share.shareSnippet
+import androidx.compose.material.icons.rounded.Share
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
@@ -79,6 +82,7 @@ internal fun StickerManageGrid(
         return
     }
     val haptics = LocalHapticFeedback.current
+    val context = LocalContext.current
     val density = LocalDensity.current
     val gridState = rememberLazyGridState()
     var order by remember(stickers, reordering) { mutableStateOf(stickers) }
@@ -136,6 +140,14 @@ internal fun StickerManageGrid(
                                 onClick = {
                                     menuOpen = false
                                     onMoveToSnippets(sticker)
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Share") },
+                                leadingIcon = { Icon(Icons.Rounded.Share, contentDescription = null) },
+                                onClick = {
+                                    menuOpen = false
+                                    shareSnippet(context, sticker)
                                 },
                             )
                             DropdownMenuItem(

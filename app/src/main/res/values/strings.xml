@@ -5,4 +5,5 @@
     <string name="tile_label">Pastille</string>
     <string name="tile_subtitle">Snippets</string>
     <string name="picker_label">Pastille snippets</string>
+    <string name="import_backup_label">Import to Pastille</string>
 </resources>

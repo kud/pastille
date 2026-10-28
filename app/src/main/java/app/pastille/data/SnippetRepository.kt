@@ -3,6 +3,7 @@ package app.pastille.data
 import android.content.Context
 import android.net.Uri
 import androidx.room.withTransaction
+import app.pastille.backup.BackupArchive
 import app.pastille.backup.SnippetBackup
 import app.pastille.images.ImageImportException
 import app.pastille.images.ImageImporter
@@ -16,14 +17,10 @@ import app.pastille.model.uniqueTitle
 import app.pastille.share.autoTitle
 import app.pastille.model.normaliseTag
 import kotlinx.coroutines.flow.Flow
+import java.io.File
+import java.io.OutputStream
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
-
-data class ExportResult(
-    val json: String,
-    val exported: Int,
-    val skippedImages: Int,
-)
 
 // One image brought in by [SnippetRepository.importImages], new or already there.
 data class ImportedImage(
@@ -357,21 +354,41 @@ class SnippetRepository private constructor(
         }
     }
 
-    suspend fun exportJson(): ExportResult {
+    // What a backup holds: every live snippet, image and sticker (never the bin), with its tags.
+    private suspend fun backupRecords(): List<SnippetRecord> {
         val entities = dao.getAll()
         val tagsBySnippet = tagDao.tagsFor(entities.map { it.id }).groupBy({ it.snippetId }, { it.name })
-        val records = entities.map { it.toRecord().copy(tags = tagsBySnippet[it.id].orEmpty()) }
-        val skipped = records.count { it.isImage }
-        return ExportResult(
-            json = SnippetBackup.encode(records, getCategories()),
-            exported = records.size - skipped,
-            skippedImages = skipped,
-        )
+        return entities.map { it.toRecord().copy(tags = tagsBySnippet[it.id].orEmpty()) }
     }
 
-    suspend fun importJson(raw: String, now: Long = System.currentTimeMillis()): Int =
-        db.withTransaction {
-            val contents = SnippetBackup.decode(raw)
+    /** Writes the whole collection as a backup archive ([BackupArchive]) to [out]. */
+    suspend fun exportBackup(out: OutputStream, imagesDir: File): BackupArchive.Written =
+        BackupArchive.write(out, backupRecords(), getCategories()) { File(imagesDir, it) }
+
+    /** The backup's JSON on its own, as the archive's pastille.json holds it. */
+    internal suspend fun backupJson(): String = SnippetBackup.encode(backupRecords(), getCategories())
+
+    /** Changes when the backup's contents do, but not when a snippet is only used. */
+    suspend fun backupFingerprint(): String =
+        SnippetBackup.fingerprint(backupRecords(), getCategories())
+
+    /**
+     * Imports a backup file: the zip archive, or an old JSON export (versions 1–3). Whatever is
+     * already here is skipped, so importing the same file twice adds nothing: text by exact text,
+     * images and stickers by their content-addressed file. Image files are copied in before the
+     * rows; if the rows then fail, the start-up orphan sweep removes the files.
+     */
+    suspend fun importBackup(
+        file: File,
+        imagesDir: File,
+        now: Long = System.currentTimeMillis(),
+    ): BackupArchive.Counts {
+        val contents = SnippetBackup.decode(BackupArchive.readJson(file))
+        val zip = BackupArchive.isZip(file)
+        val available = contents.snippets.mapNotNull { it.record.imageFile }.distinct()
+            .filter { zip && BackupArchive.extractImage(file, it, imagesDir) }
+            .toSet()
+        return db.withTransaction {
             val nameToId = categoryDao.getAll()
                 .associate { it.name.lowercase() to it.id }
                 .toMutableMap()
@@ -385,29 +402,65 @@ class SnippetRepository private constructor(
                     nameToId[key] = id
                 }
             }
-            var imported = 0
-            val ordered = contents.snippets.sortedBy { it.record.position }
+            var snippets = 0
+            var images = 0
+            var stickers = 0
+            val (stickerEntries, listEntries) = contents.snippets.partition { it.record.sticker }
+            val ordered = listEntries.sortedBy { it.record.position }
             val base = (dao.minPosition() ?: 0) - ordered.size
             ordered.forEachIndexed { index, entry ->
-                if (dao.findTextDuplicate(entry.record.text) != null) return@forEachIndexed
+                val record = entry.record
+                val image = record.imageFile
+                if (image != null) {
+                    if (image !in available || dao.findByImageFile(image) != null) return@forEachIndexed
+                } else if (dao.findTextDuplicate(record.text) != null) {
+                    return@forEachIndexed
+                }
                 val categoryId = entry.category?.let { nameToId[it.lowercase()] }
                 val newId = dao.upsert(
                     SnippetEntity(
-                        title = resolveTitle(entry.record.copy(id = 0, categoryId = categoryId)),
-                        text = entry.record.text,
-                        pinned = entry.record.pinned,
+                        title = resolveTitle(record.copy(id = 0, categoryId = categoryId)),
+                        text = if (image != null) "" else record.text,
+                        pinned = record.pinned,
                         createdAt = now,
                         updatedAt = now,
-                        lastUsedAt = entry.record.lastUsedAt,
+                        lastUsedAt = record.lastUsedAt,
                         categoryId = categoryId,
+                        imageFile = image,
+                        imageWidth = record.imageWidth,
+                        imageHeight = record.imageHeight,
                         position = base + index,
                     ),
                 )
-                linkTags(newId, entry.record.tags, now)
-                imported++
+                linkTags(newId, record.tags, now)
+                if (image != null) images++ else snippets++
             }
-            imported
+            stickerEntries.sortedBy { it.record.position }.forEach { entry ->
+                val record = entry.record
+                val image = record.imageFile ?: return@forEach
+                if (image !in available || dao.findByImageFile(image) != null) return@forEach
+                val newId = dao.upsert(
+                    SnippetEntity(
+                        title = resolveTitle(record.copy(id = 0, categoryId = null)),
+                        text = "",
+                        pinned = record.pinned,
+                        createdAt = now,
+                        updatedAt = now,
+                        lastUsedAt = record.lastUsedAt,
+                        categoryId = null,
+                        imageFile = image,
+                        imageWidth = record.imageWidth,
+                        imageHeight = record.imageHeight,
+                        position = nextStickerPosition(),
+                        sticker = true,
+                    ),
+                )
+                linkTags(newId, record.tags, now)
+                stickers++
+            }
+            BackupArchive.Counts(snippets = snippets, images = images, stickers = stickers)
         }
+    }
 
     private fun SnippetEntity.toRecord() = SnippetRecord(
         id = id,

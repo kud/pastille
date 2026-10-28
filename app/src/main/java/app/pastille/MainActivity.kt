@@ -78,6 +78,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // Leaving the app writes the automatic backup now rather than after its debounce.
+    override fun onStop() {
+        super.onStop()
+        (application as PastilleApplication).autoBackup.flush()
+    }
+
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         outState.putBoolean(EXTRA_FROM_KEYBOARD, fromKeyboard)

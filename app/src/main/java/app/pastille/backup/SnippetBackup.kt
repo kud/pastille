@@ -24,6 +24,12 @@ data class BackupSnippet(
     val position: Int = 0,
     // v3: tag names. Older files have none.
     val tags: List<String> = emptyList(),
+    // v4: an image snippet names its file inside the archive's images/ folder. Older files have
+    // text snippets only.
+    val image: String? = null,
+    val imageWidth: Int? = null,
+    val imageHeight: Int? = null,
+    val sticker: Boolean = false,
 )
 
 @Serializable
@@ -44,13 +50,17 @@ data class BackupContents(
 )
 
 object SnippetBackup {
-    const val CURRENT_VERSION = 3
+    const val CURRENT_VERSION = 4
 
     private val json = Json {
         prettyPrint = true
         ignoreUnknownKeys = true
     }
 
+    /**
+     * Every record goes in, image snippets and stickers included: their bytes travel beside the
+     * JSON in the archive ([BackupArchive]), named by [SnippetRecord.imageFile].
+     */
     fun encode(records: List<SnippetRecord>, categories: List<CategoryRecord> = emptyList()): String {
         val namesById = categories.associate { it.id to it.name }
         return json.encodeToString(
@@ -60,7 +70,7 @@ object SnippetBackup {
                 categories = categories.sortedBy { it.position }.map {
                     BackupCategory(name = it.name, position = it.position)
                 },
-                snippets = records.filter { !it.isImage }.map {
+                snippets = records.map {
                     BackupSnippet(
                         id = it.id,
                         title = it.title,
@@ -72,10 +82,24 @@ object SnippetBackup {
                         category = it.categoryId?.let(namesById::get),
                         position = it.position,
                         tags = it.tags,
+                        image = it.imageFile,
+                        imageWidth = it.imageWidth,
+                        imageHeight = it.imageHeight,
+                        sticker = it.sticker,
                     )
                 },
             ),
         )
+    }
+
+    /**
+     * What decides whether the backup file needs rewriting: the contents without `lastUsedAt`, so
+     * inserting a snippet from the keyboard (which moves `updatedAt` too) doesn't rewrite a file in Drive every time.
+     */
+    fun fingerprint(records: List<SnippetRecord>, categories: List<CategoryRecord>): String {
+        val stable = encode(records.map { it.copy(lastUsedAt = 0, updatedAt = 0) }, categories)
+        val digest = java.security.MessageDigest.getInstance("SHA-256").digest(stable.toByteArray())
+        return digest.joinToString("") { "%02x".format(it) }
     }
 
     fun decode(raw: String): BackupContents {
@@ -96,6 +120,10 @@ object SnippetBackup {
                         lastUsedAt = it.lastUsedAt,
                         position = it.position,
                         tags = it.tags,
+                        imageFile = it.image,
+                        imageWidth = it.imageWidth,
+                        imageHeight = it.imageHeight,
+                        sticker = it.sticker && it.image != null,
                     ),
                     category = it.category,
                 )

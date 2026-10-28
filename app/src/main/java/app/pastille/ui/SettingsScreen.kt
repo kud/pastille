@@ -77,6 +77,22 @@ import app.pastille.settings.KeyboardStyle
 import app.pastille.settings.canSwitchOff
 import app.pastille.settings.PanelHeight
 import app.pastille.settings.PastilleSettings
+import app.pastille.settings.BackupProblem
+import app.pastille.PastilleApplication
+import app.pastille.backup.AutoBackup
+import app.pastille.backup.BackupArchive
+import app.pastille.backup.BackupFiles
+import app.pastille.backup.ImportConfirmDialog
+import app.pastille.backup.importInBackground
+import android.widget.Toast
+import androidx.compose.material.icons.rounded.Backup
+import androidx.compose.material.icons.rounded.ErrorOutline
+import androidx.compose.material.icons.rounded.Restore
+import androidx.compose.material.icons.rounded.Sync
+import androidx.compose.material.icons.rounded.SyncDisabled
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -109,6 +125,7 @@ fun SettingsScreen(onBack: () -> Unit) {
             KeyboardGroup(settings)
             ClipboardGroup(settings)
             PhotosGroup(settings)
+            BackupGroup(settings)
         }
     }
 }
@@ -466,5 +483,119 @@ private fun ReturnKeyboardRow(settings: PastilleSettings) {
                 modifier = Modifier.align(Alignment.End),
             ) { Text("Enable keyboards") }
         }
+    }
+}
+
+@Composable
+private fun BackupGroup(settings: PastilleSettings) {
+    val context = LocalContext.current
+    val autoBackup = (context.applicationContext as PastilleApplication).autoBackup
+    val scope = rememberCoroutineScope()
+    // Follows writes made in the background (the status line changes after every backup).
+    val version by remember { settings.changes() }.collectAsStateWithLifecycle(initialValue = 0)
+    val uri = remember(version) { settings.backupUri }
+    val name = remember(version) { settings.backupName ?: BackupArchive.SUGGESTED_NAME }
+    val lastAt = remember(version) { settings.backupLastAt }
+    val problem = remember(version) { settings.backupProblem }
+    var busy by remember { mutableStateOf(false) }
+    var restoring by remember { mutableStateOf<Pair<File, BackupArchive.Counts>?>(null) }
+
+    fun say(message: String) = Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+
+    // ACTION_CREATE_DOCUMENT rather than a folder: Google Drive offers no folder picker, but it does
+    // create and keep a single file, and that file's grant can be made persistable.
+    val chooser = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument(BackupArchive.MIME),
+    ) { picked ->
+        if (picked != null) {
+            scope.launch {
+                busy = true
+                val outcome = autoBackup.choose(picked)
+                busy = false
+                if (outcome == AutoBackup.Outcome.Written) say("Backed up")
+            }
+        }
+    }
+
+    SettingsGroup(title = "Backup") {
+        if (uri == null) {
+            SettingsRow(
+                title = "Back up automatically",
+                subtitle = "Keep a copy in a file you choose, in Google Drive or on this phone. Pastille updates it after every change.",
+                icon = Icons.Rounded.Backup,
+                modifier = Modifier.clickable { chooser.launch(BackupArchive.SUGGESTED_NAME) },
+                trailing = { SettingsChevron() },
+            )
+        } else {
+            SettingsRow(
+                title = "Back up automatically",
+                subtitle = backupStatus(name, lastAt, problem, System.currentTimeMillis()),
+                icon = if (problem == null) Icons.Rounded.Backup else Icons.Rounded.ErrorOutline,
+                destructive = problem != null,
+                modifier = Modifier.clickable { chooser.launch(BackupArchive.SUGGESTED_NAME) },
+                trailing = { SettingsChevron() },
+            )
+            SettingsHairline()
+            SettingsRow(
+                title = "Back up now",
+                icon = Icons.Rounded.Sync,
+                enabled = !busy,
+                modifier = Modifier.clickable(enabled = !busy) {
+                    scope.launch {
+                        busy = true
+                        val outcome = autoBackup.backUp(force = true)
+                        busy = false
+                        if (outcome == AutoBackup.Outcome.Written) say("Backed up")
+                    }
+                },
+            )
+            SettingsHairline()
+            SettingsRow(
+                title = "Restore from this file",
+                subtitle = "Adds what isn't already in Pastille",
+                icon = Icons.Rounded.Restore,
+                enabled = !busy && problem != BackupProblem.Access,
+                modifier = Modifier.clickable(enabled = !busy && problem != BackupProblem.Access) {
+                    scope.launch {
+                        val file = runCatching { BackupFiles.copyIn(context, Uri.parse(uri)) }.getOrNull()
+                        val counts = file?.let { runCatching { BackupFiles.peek(it) }.getOrNull() }
+                        when {
+                            file == null -> say(IMPORT_UNREADABLE)
+                            counts == null -> {
+                                file.delete()
+                                say(IMPORT_NOT_A_BACKUP)
+                            }
+                            else -> restoring = file to counts
+                        }
+                    }
+                },
+            )
+            SettingsHairline()
+            SettingsRow(
+                title = "Stop backing up",
+                subtitle = "The file stays where it is",
+                icon = Icons.Rounded.SyncDisabled,
+                modifier = Modifier.clickable { autoBackup.stop() },
+            )
+        }
+    }
+    Text(
+        text = PRIVACY_NOTE,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 32.dp),
+    )
+    restoring?.let { (file, counts) ->
+        ImportConfirmDialog(
+            counts = counts,
+            onImport = {
+                restoring = null
+                importInBackground(context, file)
+            },
+            onCancel = {
+                restoring = null
+                file.delete()
+            },
+        )
     }
 }

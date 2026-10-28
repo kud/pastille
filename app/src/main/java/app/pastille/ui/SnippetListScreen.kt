@@ -178,6 +178,11 @@ import androidx.compose.material.icons.rounded.AddPhotoAlternate
 import app.pastille.settings.PastilleSettings
 import app.pastille.settings.setupNeedsPhotos
 import app.pastille.share.imageTitle
+import app.pastille.backup.BackupArchive
+import app.pastille.backup.BackupFiles
+import app.pastille.share.shareBackup
+import app.pastille.share.shareSnippet
+import androidx.compose.material.icons.rounded.Share
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
@@ -233,17 +238,21 @@ fun SnippetListScreen(
         .collectAsStateWithLifecycle(initialValue = emptyList())
     val organising = organisingId?.let { id -> snippets.firstOrNull { it.id == id } ?: stickers.firstOrNull { it.id == id } }
 
+    // Export, Import and Share backup: one format for all three, the zip archive with images and
+    // stickers (BackupArchive). Import still reads the old JSON exports.
     val exportLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/json"),
+        ActivityResultContracts.CreateDocument(BackupArchive.MIME),
     ) { uri ->
         if (uri != null) {
             scope.launch {
                 runCatching {
-                    val result = repository.exportJson()
-                    context.contentResolver.openOutputStream(uri)?.use { out ->
-                        out.write(result.json.toByteArray())
-                    } ?: error("Could not open $uri")
-                    exportMessage(result.exported, result.skippedImages)
+                    val (file, written) = BackupFiles.build(context)
+                    try {
+                        BackupFiles.writeTo(context, uri, file)
+                    } finally {
+                        file.delete()
+                    }
+                    exportMessage(written)
                 }.onSuccess { toast(context, it) }
                     .onFailure { toast(context, EXPORT_FAILED) }
             }
@@ -254,17 +263,22 @@ fun SnippetListScreen(
     ) { uri ->
         if (uri != null) {
             scope.launch {
-                val raw = runCatching {
-                    context.contentResolver.openInputStream(uri)?.use { it.bufferedReader().readText() }
-                }.getOrNull()
-                if (raw == null) {
+                val file = runCatching { BackupFiles.copyIn(context, uri) }.getOrNull()
+                if (file == null) {
                     toast(context, IMPORT_UNREADABLE)
                 } else {
-                    runCatching { repository.importJson(raw) }
+                    runCatching { BackupFiles.importFile(context, file) }
                         .onSuccess { toast(context, importMessage(it)) }
                         .onFailure { toast(context, IMPORT_NOT_A_BACKUP) }
                 }
             }
+        }
+    }
+    fun shareWholeBackup() {
+        scope.launch {
+            runCatching { BackupFiles.buildForSharing(context).first }
+                .onSuccess { shareBackup(context, it) }
+                .onFailure { toast(context, SHARE_FAILED) }
         }
     }
 
@@ -600,32 +614,10 @@ fun SnippetListScreen(
                             Icon(Icons.Rounded.MoreVert, contentDescription = "More options")
                         }
                         DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                            // The menu follows the mode on screen (Erwann, 2026-10-28): snippet
-                            // backup only on Snippets (stickers aren't exported), Reorder for
-                            // the mode shown, then what belongs to the whole app. New folder lives
-                            // at the end of the folder row ("+ Add"), next to the folders it makes.
-                            if (!stickersMode) {
-                                DropdownMenuItem(
-                                    text = { Text("Import snippets") },
-                                    leadingIcon = {
-                                        Icon(Icons.Rounded.FileDownload, contentDescription = null)
-                                    },
-                                    onClick = {
-                                        showMenu = false
-                                        importLauncher.launch(arrayOf("application/json"))
-                                    },
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Export snippets") },
-                                    leadingIcon = {
-                                        Icon(Icons.Rounded.FileUpload, contentDescription = null)
-                                    },
-                                    onClick = {
-                                        showMenu = false
-                                        exportLauncher.launch("pastille-snippets.json")
-                                    },
-                                )
-                            }
+                            // The menu follows the mode on screen (Erwann, 2026-10-28): Reorder for
+                            // the mode shown, then what belongs to the whole app. The backup now
+                            // carries stickers and images too, so it sits with the app-wide items.
+                            // New folder lives at the end of the folder row ("+ Add").
                             DropdownMenuItem(
                                 text = { Text("Reorder") },
                                 leadingIcon = {
@@ -648,6 +640,38 @@ fun SnippetListScreen(
                                 onClick = {
                                     showMenu = false
                                     context.startActivity(Intent(AndroidSettings.ACTION_INPUT_METHOD_SETTINGS))
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Import backup") },
+                                leadingIcon = {
+                                    Icon(Icons.Rounded.FileDownload, contentDescription = null)
+                                },
+                                onClick = {
+                                    showMenu = false
+                                    // Any type: Drive and file managers label zips and old JSON
+                                    // exports inconsistently, and the contents decide anyway.
+                                    importLauncher.launch(arrayOf("*/*"))
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Export backup") },
+                                leadingIcon = {
+                                    Icon(Icons.Rounded.FileUpload, contentDescription = null)
+                                },
+                                onClick = {
+                                    showMenu = false
+                                    exportLauncher.launch(BackupArchive.SUGGESTED_NAME)
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Share backup") },
+                                leadingIcon = {
+                                    Icon(Icons.Rounded.Share, contentDescription = null)
+                                },
+                                onClick = {
+                                    showMenu = false
+                                    shareWholeBackup()
                                 },
                             )
                             DropdownMenuItem(
@@ -974,6 +998,7 @@ internal fun SnippetRow(
     onMove: ((Long?) -> Unit)? = null,
     containerColor: Color = MaterialTheme.colorScheme.surface,
 ) {
+    val context = LocalContext.current
     var menuOpen by remember { mutableStateOf(false) }
     var moveMenuOpen by remember { mutableStateOf(false) }
     var expanded by rememberSaveable(snippet.id) { mutableStateOf(false) }
@@ -1109,6 +1134,16 @@ internal fun SnippetRow(
                         },
                     )
                 }
+                DropdownMenuItem(
+                    text = { Text("Share") },
+                    leadingIcon = {
+                        Icon(Icons.Rounded.Share, contentDescription = null)
+                    },
+                    onClick = {
+                        menuOpen = false
+                        if (!shareSnippet(context, snippet)) toast(context, "That image is gone")
+                    },
+                )
                 DropdownMenuItem(
                     text = { Text("Delete") },
                     leadingIcon = {

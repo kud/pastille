@@ -125,7 +125,45 @@ class PastilleSettings private constructor(private val prefs: SharedPreferences)
         get() = ClipboardClearDelay.fromKey(prefs.getString(KEY_CLIPBOARD_CLEAR_DELAY, null))
         set(value) = prefs.edit().putString(KEY_CLIPBOARD_CLEAR_DELAY, value.key).apply()
 
+    // Automatic backup (Settings › Backup): the file the user chose through the system picker, its
+    // name as the picker gave it, when it was last written, what was in it then, and what went wrong
+    // on the last attempt (null when it worked).
+    var backupUri: String?
+        get() = prefs.getString(KEY_BACKUP_URI, null)
+        set(value) = prefs.edit().apply { if (value == null) remove(KEY_BACKUP_URI) else putString(KEY_BACKUP_URI, value) }.apply()
+
+    var backupName: String?
+        get() = prefs.getString(KEY_BACKUP_NAME, null)
+        set(value) = prefs.edit().apply { if (value == null) remove(KEY_BACKUP_NAME) else putString(KEY_BACKUP_NAME, value) }.apply()
+
+    var backupLastAt: Long?
+        get() = if (prefs.contains(KEY_BACKUP_LAST_AT)) prefs.getLong(KEY_BACKUP_LAST_AT, 0) else null
+        set(value) = prefs.edit().apply { if (value == null) remove(KEY_BACKUP_LAST_AT) else putLong(KEY_BACKUP_LAST_AT, value) }.apply()
+
+    var backupFingerprint: String?
+        get() = prefs.getString(KEY_BACKUP_FINGERPRINT, null)
+        set(value) = prefs.edit().apply { if (value == null) remove(KEY_BACKUP_FINGERPRINT) else putString(KEY_BACKUP_FINGERPRINT, value) }.apply()
+
+    var backupProblem: BackupProblem?
+        get() = BackupProblem.fromKey(prefs.getString(KEY_BACKUP_PROBLEM, null))
+        set(value) = prefs.edit().apply { if (value == null) remove(KEY_BACKUP_PROBLEM) else putString(KEY_BACKUP_PROBLEM, value.key) }.apply()
+
+    fun clearBackup() {
+        prefs.edit()
+            .remove(KEY_BACKUP_URI)
+            .remove(KEY_BACKUP_NAME)
+            .remove(KEY_BACKUP_LAST_AT)
+            .remove(KEY_BACKUP_FINGERPRINT)
+            .remove(KEY_BACKUP_PROBLEM)
+            .apply()
+    }
+
     companion object {
+        private const val KEY_BACKUP_URI = "backup_uri"
+        private const val KEY_BACKUP_NAME = "backup_name"
+        private const val KEY_BACKUP_LAST_AT = "backup_last_at"
+        private const val KEY_BACKUP_FINGERPRINT = "backup_fingerprint"
+        private const val KEY_BACKUP_PROBLEM = "backup_problem"
         private const val PREFS_NAME = "pastille_settings"
         private const val KEY_CLIPBOARD_CLEAR_DELAY = "clipboard_clear_delay"
         private const val KEY_RETURN_KEYBOARD_ID = "return_keyboard_id"
@@ -170,3 +208,16 @@ fun returnKeyboardTarget(chosen: String?, otherKeyboardIds: List<String>): Strin
 // Only voice input is excluded: a keyboard may declare subtypes without setting a mode.
 fun isTypingKeyboard(subtypeModes: List<String>): Boolean =
     subtypeModes.isEmpty() || subtypeModes.any { it.isBlank() || it == "keyboard" }
+
+/** Why the last automatic backup didn't happen. */
+enum class BackupProblem(val key: String) {
+    // The file's permission is gone: it was deleted, moved, or the app holding it was signed out.
+    Access("access"),
+    // The file was there but the write or its check failed.
+    Write("write"),
+    ;
+
+    companion object {
+        fun fromKey(key: String?): BackupProblem? = entries.firstOrNull { it.key == key }
+    }
+}

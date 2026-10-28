@@ -142,7 +142,9 @@ jobs:
           echo "$(dirname "$apksigner")" >> "$GITHUB_PATH"
           apk=app/build/outputs/apk/release/app-release.apk
           "$apksigner" verify "$apk"
-          got=$("$apksigner" verify --print-certs "$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
+          # Public certificate digests only. The signer label varies with the scheme and build-tools.
+          "$apksigner" verify --print-certs "$apk" | grep 'SHA-256 digest'
+          got=$("$apksigner" verify --print-certs "$apk" | sed -n 's/^.*Signer.* certificate SHA-256 digest: //p' | sort -u)
           want=$(sed -n 's/^AllowedAPKSigningKeys: //p' docs/fdroid/app.beansontoast.pastille.yml)
           [ -n "$got" ] && [ "$got" = "$want" ] \
             || { echo "::error::Signing certificate $got is not the recipe's AllowedAPKSigningKeys $want"; exit 1; }

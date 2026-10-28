@@ -38,9 +38,7 @@ import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MultiChoiceSegmentedButtonRow
 import androidx.compose.material3.RadioButton
@@ -48,7 +46,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
@@ -60,7 +57,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
@@ -94,7 +90,8 @@ import androidx.compose.material.icons.rounded.Backup
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material.icons.rounded.Sync
-import androidx.compose.material.icons.rounded.SyncDisabled
+import androidx.compose.material.icons.rounded.FileOpen
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import java.io.File
@@ -144,6 +141,14 @@ fun SettingsScreen(onBack: () -> Unit) {
         }
     }
 }
+
+private val TapToChooseProblems = setOf(
+    BackupProblem.Access,
+    BackupProblem.Write,
+    BackupProblem.NotKept,
+    BackupProblem.ReadOnly,
+    BackupProblem.CantOverwrite,
+)
 
 private enum class SettingsPage(val title: String) { Main("Settings"), Style("Style"), Height("Height") }
 
@@ -242,7 +247,7 @@ private fun KeyboardGroup(settings: PastilleSettings, onOpen: (SettingsPage) -> 
         SettingsHairline()
         ToggleRow(
             title = "Return after a snippet",
-            subtitle = "Switch back to the keyboard you were using.",
+            subtitle = "Switch back to the keyboard you were using",
             icon = Icons.AutoMirrored.Rounded.KeyboardReturn,
             checked = returnAfterSnippet,
             onChange = {
@@ -261,8 +266,8 @@ private fun ClipboardGroup(settings: PastilleSettings) {
     var open by remember { mutableStateOf(false) }
     SettingsGroup(title = "Clipboard") {
         SettingsRow(
-            title = "Clear clipboard after copying",
-            subtitle = "${delay.label}. Only clears when Pastille can confirm the clipboard still holds its own copy.",
+            title = "Clear after copying",
+            subtitle = delay.label,
             icon = Icons.Rounded.ContentPaste,
             modifier = Modifier.clickable { open = true },
             trailing = { SettingsChevron() },
@@ -274,6 +279,12 @@ private fun ClipboardGroup(settings: PastilleSettings) {
             title = { Text("Clear clipboard after copying") },
             text = {
                 Column(Modifier.selectableGroup()) {
+                    Text(
+                        text = "Only clears when Pastille can confirm the clipboard still holds its own copy.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 8.dp),
+                    )
                     ClipboardClearDelay.entries.forEach { choice ->
                         StyleRow(
                             headline = choice.label,
@@ -307,7 +318,7 @@ private fun PhotosGroup(settings: PastilleSettings) {
         SettingsHairline()
         ToggleRow(
             title = "Return after an image",
-            subtitle = "Leave it off to paste several images in a row.",
+            subtitle = "Leave it off to paste several images in a row",
             icon = Icons.Rounded.Image,
             checked = returnAfterImage,
             onChange = {
@@ -577,35 +588,40 @@ private fun BackupGroup(settings: PastilleSettings) {
     val zipTypes = arrayOf(BackupArchive.MIME, "application/x-zip-compressed", "application/x-zip", "application/octet-stream")
 
     SettingsGroup(title = "Backup") {
+        // Sacha's switch, with a check on its thumb (Iris, 2026-10-28). On opens the file chooser,
+        // since there is nothing to sync until a file exists; off forgets the file and leaves it be.
+        val on = uri != null
+        val status = uri?.let { backupStatus(name, lastAt, problem, System.currentTimeMillis(), SyncDiagnosis.providerLabel(Uri.parse(it).authority)) }
+        // A problem whose message says "Tap to choose…" lives on the row that does that, never on the
+        // switch, where a tap would turn syncing off instead.
+        val actionable = on && problem in TapToChooseProblems
+        SettingsRow(
+            title = "Sync automatically",
+            subtitle = when {
+                !on -> "Off"
+                actionable -> "$name · Not syncing"
+                else -> status
+            },
+            icon = if (on && problem != null) Icons.Rounded.ErrorOutline else Icons.Rounded.Sync,
+            destructive = on && problem != null,
+            modifier = Modifier.toggleable(value = on, role = Role.Switch) { want ->
+                if (want) chooser.launch(BackupArchive.SUGGESTED_NAME) else autoBackup.stop()
+            },
+            trailing = { PastilleSwitch(checked = on) },
+        )
+        SettingsHairline()
         if (uri == null) {
-            SettingsRow(
-                title = "Sync automatically",
-                subtitle = "Keep your snippets in a file you choose, in Google Drive or on this phone. Pastille reads and updates it after every change.",
-                icon = Icons.Rounded.Backup,
-                modifier = Modifier.clickable { chooser.launch(BackupArchive.SUGGESTED_NAME) },
-                trailing = { SettingsChevron() },
-            )
-            SettingsHairline()
             SettingsRow(
                 title = "Use an existing file",
                 subtitle = "The file your other phone already syncs with",
-                icon = Icons.Rounded.Sync,
+                icon = Icons.Rounded.FileOpen,
                 modifier = Modifier.clickable { existing.launch(zipTypes) },
                 trailing = { SettingsChevron() },
             )
         } else {
             SettingsRow(
-                title = "Sync automatically",
-                subtitle = backupStatus(name, lastAt, problem, System.currentTimeMillis(), SyncDiagnosis.providerLabel(Uri.parse(uri).authority)),
-                icon = if (problem == null) Icons.Rounded.Backup else Icons.Rounded.ErrorOutline,
-                destructive = problem != null,
-                modifier = Modifier.clickable { chooser.launch(BackupArchive.SUGGESTED_NAME) },
-                trailing = { SettingsChevron() },
-            )
-            SettingsHairline()
-            SettingsRow(
                 title = "Sync now",
-                icon = Icons.Rounded.Sync,
+                icon = Icons.Rounded.Refresh,
                 enabled = !busy,
                 modifier = Modifier.clickable(enabled = !busy) {
                     scope.launch {
@@ -639,10 +655,12 @@ private fun BackupGroup(settings: PastilleSettings) {
             )
             SettingsHairline()
             SettingsRow(
-                title = "Stop syncing",
-                subtitle = "The file stays where it is",
-                icon = Icons.Rounded.SyncDisabled,
-                modifier = Modifier.clickable { autoBackup.stop() },
+                title = "Choose another file",
+                subtitle = if (actionable) status else "Start a new file, or fix access to this one",
+                icon = if (actionable) Icons.Rounded.ErrorOutline else Icons.Rounded.Backup,
+                destructive = actionable,
+                modifier = Modifier.clickable { chooser.launch(BackupArchive.SUGGESTED_NAME) },
+                trailing = { SettingsChevron() },
             )
         }
     }

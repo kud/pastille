@@ -11,6 +11,12 @@ interface TagDao {
     @Query("SELECT * FROM tags ORDER BY name COLLATE NOCASE ASC")
     fun observeAll(): Flow<List<TagEntity>>
 
+    @Query("SELECT * FROM tags")
+    suspend fun getAll(): List<TagEntity>
+
+    @Query("UPDATE tags SET uid = :uid, createdAt = :createdAt, updatedAt = :updatedAt WHERE id = :id")
+    suspend fun setIdentity(id: Long, uid: String, createdAt: Long, updatedAt: Long)
+
     @Query("SELECT * FROM tags WHERE name = :name LIMIT 1")
     suspend fun findByName(name: String): TagEntity?
 
@@ -29,6 +35,12 @@ interface TagDao {
             "ORDER BY tags.name COLLATE NOCASE ASC",
     )
     suspend fun tagsFor(snippetIds: List<Long>): List<SnippetTagName>
+
+    @Query(
+        "SELECT snippet_tags.snippetId AS snippetId, tags.name AS name FROM snippet_tags " +
+            "JOIN tags ON tags.id = snippet_tags.tagId",
+    )
+    suspend fun allSnippetTags(): List<SnippetTagName>
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun link(entity: SnippetTagEntity)

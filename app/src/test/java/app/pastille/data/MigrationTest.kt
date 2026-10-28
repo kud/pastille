@@ -89,7 +89,7 @@ class MigrationTest {
             ApplicationProvider.getApplicationContext(),
             PastilleDatabase::class.java,
             DB_NAME,
-        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6).build()
+        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7).build()
         helper.closeWhenFinished(database)
 
         val snippets = runBlocking { database.snippets().getAll() }
@@ -196,6 +196,105 @@ class MigrationTest {
             assertEquals(2L, cursor.getLong(0))
             assertEquals("abc.webp", cursor.getString(1))
             assertEquals(0, cursor.getInt(2))
+        }
+    }
+
+    @Test
+    fun migration6To7GivesEveryRowItsOwnUid() {
+        helper.createDatabase(DB_NAME, 6).apply {
+            execSQL("INSERT INTO categories (id, name, position, createdAt) VALUES (1, 'Work', 0, 100)")
+            execSQL("INSERT INTO tags (id, name, createdAt) VALUES (1, 'otp', 200)")
+            execSQL(
+                "INSERT INTO snippets (id, title, text, pinned, createdAt, updatedAt, lastUsedAt, categoryId, position, deletedAt, sticker) " +
+                    "VALUES (1, 'a', 'alpha', 1, 10, 20, 30, 1, 0, NULL, 0)",
+            )
+            execSQL(
+                "INSERT INTO snippets (id, title, text, pinned, createdAt, updatedAt, lastUsedAt, categoryId, position, deletedAt, sticker) " +
+                    "VALUES (2, 'b', 'beta', 0, 11, 21, 31, NULL, 1, 500, 0)",
+            )
+            execSQL("INSERT INTO snippet_tags (snippetId, tagId) VALUES (1, 1)")
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(DB_NAME, 7, true, MIGRATION_6_7)
+
+        val uuid = Regex("^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
+        val uids = mutableListOf<String>()
+        db.query("SELECT id, title, text, updatedAt, lastUsedAt, categoryId, deletedAt, uid FROM snippets ORDER BY id").use { c ->
+            assertTrue(c.moveToNext())
+            assertEquals("alpha", c.getString(2))
+            assertEquals(20L, c.getLong(3))
+            assertEquals(30L, c.getLong(4))
+            assertEquals(1L, c.getLong(5))
+            uids += c.getString(7)
+            assertTrue(c.moveToNext())
+            assertEquals(500L, c.getLong(6))
+            uids += c.getString(7)
+        }
+        db.query("SELECT uid, updatedAt FROM categories").use { c ->
+            assertTrue(c.moveToNext())
+            uids += c.getString(0)
+            assertEquals(100L, c.getLong(1))
+        }
+        db.query("SELECT uid, updatedAt FROM tags").use { c ->
+            assertTrue(c.moveToNext())
+            uids += c.getString(0)
+            assertEquals(200L, c.getLong(1))
+        }
+        uids.forEach { assertTrue("$it should be a v4 UUID", uuid.matches(it)) }
+        assertEquals(uids.size, uids.toSet().size)
+        db.query("SELECT COUNT(*) FROM tombstones").use { c ->
+            assertTrue(c.moveToNext())
+            assertEquals(0, c.getInt(0))
+        }
+        try {
+            db.execSQL("UPDATE snippets SET uid = '${uids[0]}' WHERE id = 2")
+            fail("expected the unique uid index to reject a duplicate")
+        } catch (_: SQLException) {
+        }
+    }
+
+    // A phone that has run every version: data from v1, folders and tags added on the way, then the
+    // whole chain to v7 through Room itself, then a use, an edit and a delete as the app does them.
+    @Test
+    fun upgradeFromVersion1KeepsRealDataAndSyncsIt() {
+        createVersion1WithTwoSnippets()
+        helper.runMigrationsAndValidate(DB_NAME, 5, true, MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).apply {
+            execSQL("INSERT INTO categories (id, name, position, createdAt) VALUES (7, 'Codes', 0, 40)")
+            execSQL("UPDATE snippets SET categoryId = 7 WHERE id = 2")
+            execSQL("INSERT INTO tags (id, name, createdAt) VALUES (3, 'otp', 50)")
+            execSQL("INSERT INTO snippet_tags (snippetId, tagId) VALUES (2, 3)")
+            close()
+        }
+
+        val database = Room.databaseBuilder(
+            ApplicationProvider.getApplicationContext(),
+            PastilleDatabase::class.java,
+            DB_NAME,
+        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7).build()
+        helper.closeWhenFinished(database)
+        val repository = SnippetRepository.forDatabase(database)
+
+        runBlocking {
+            val state = repository.syncState()
+            assertEquals(setOf("hello there", "multi\nline"), state.snippets.map { it.text }.toSet())
+            val multi = state.snippets.single { it.text == "multi\nline" }
+            assertEquals(state.categories.single().uid, multi.categoryUid)
+            assertEquals(listOf("otp"), multi.tags)
+            assertEquals(21L, multi.updatedAt)
+
+            // Using a snippet is not an edit any more.
+            repository.recordUse(2, now = 9_000)
+            val used = repository.syncState().snippets.single { it.text == "multi\nline" }
+            assertEquals(9_000L, used.lastUsedAt)
+            assertEquals(21L, used.updatedAt)
+
+            // Moving it is, and deleting it for good leaves a tombstone under its uid.
+            repository.setCategory(listOf(2), null, now = 9_500)
+            assertEquals(9_500L, repository.get(2)!!.updatedAt)
+            repository.delete(2, now = 10_000)
+            repository.emptyBin()
+            assertEquals(listOf(multi.uid), repository.syncState().tombstones.map { it.uid })
         }
     }
 

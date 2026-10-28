@@ -17,6 +17,8 @@ data class SnippetRecord(
     val sticker: Boolean = false,
     // Attached in memory from snippet_tags; not a column.
     val tags: List<String> = emptyList(),
+    // Stable across devices (v7); empty only on a record not yet saved.
+    val uid: String = "",
 ) {
     val isImage: Boolean get() = imageFile != null
 }

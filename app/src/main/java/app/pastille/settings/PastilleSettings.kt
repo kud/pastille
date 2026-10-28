@@ -125,7 +125,88 @@ class PastilleSettings private constructor(private val prefs: SharedPreferences)
         get() = ClipboardClearDelay.fromKey(prefs.getString(KEY_CLIPBOARD_CLEAR_DELAY, null))
         set(value) = prefs.edit().putString(KEY_CLIPBOARD_CLEAR_DELAY, value.key).apply()
 
+    // Automatic backup (Settings › Backup): the file the user chose through the system picker, its
+    // name as the picker gave it, when it was last written, what was in it then, and what went wrong
+    // on the last attempt (null when it worked).
+    var backupUri: String?
+        get() = prefs.getString(KEY_BACKUP_URI, null)
+        set(value) = prefs.edit().apply { if (value == null) remove(KEY_BACKUP_URI) else putString(KEY_BACKUP_URI, value) }.apply()
+
+    var backupName: String?
+        get() = prefs.getString(KEY_BACKUP_NAME, null)
+        set(value) = prefs.edit().apply { if (value == null) remove(KEY_BACKUP_NAME) else putString(KEY_BACKUP_NAME, value) }.apply()
+
+    var backupLastAt: Long?
+        get() = if (prefs.contains(KEY_BACKUP_LAST_AT)) prefs.getLong(KEY_BACKUP_LAST_AT, 0) else null
+        set(value) = prefs.edit().apply { if (value == null) remove(KEY_BACKUP_LAST_AT) else putLong(KEY_BACKUP_LAST_AT, value) }.apply()
+
+    var backupFingerprint: String?
+        get() = prefs.getString(KEY_BACKUP_FINGERPRINT, null)
+        set(value) = prefs.edit().apply { if (value == null) remove(KEY_BACKUP_FINGERPRINT) else putString(KEY_BACKUP_FINGERPRINT, value) }.apply()
+
+    var backupProblem: BackupProblem?
+        get() = BackupProblem.fromKey(prefs.getString(KEY_BACKUP_PROBLEM, null))
+        set(value) = prefs.edit().apply { if (value == null) remove(KEY_BACKUP_PROBLEM) else putString(KEY_BACKUP_PROBLEM, value.key) }.apply()
+
+    // Sync: what the shared file looked like when we last read or wrote it, so an unchanged file
+    // isn't read again. Size and modified time come from the provider; the hash is ours.
+    var syncRemoteSize: Long?
+        get() = if (prefs.contains(KEY_SYNC_SIZE)) prefs.getLong(KEY_SYNC_SIZE, 0) else null
+        set(value) = prefs.edit().apply { if (value == null) remove(KEY_SYNC_SIZE) else putLong(KEY_SYNC_SIZE, value) }.apply()
+
+    var syncRemoteModified: Long?
+        get() = if (prefs.contains(KEY_SYNC_MODIFIED)) prefs.getLong(KEY_SYNC_MODIFIED, 0) else null
+        set(value) = prefs.edit().apply { if (value == null) remove(KEY_SYNC_MODIFIED) else putLong(KEY_SYNC_MODIFIED, value) }.apply()
+
+    var syncRemoteHash: String?
+        get() = prefs.getString(KEY_SYNC_HASH, null)
+        set(value) = prefs.edit().apply { if (value == null) remove(KEY_SYNC_HASH) else putString(KEY_SYNC_HASH, value) }.apply()
+
+    // A write to the shared file that started and was never confirmed by reading it back: the hash
+    // of what it was meant to hold. While it is set, a file that isn't a whole archive any more is
+    // this phone's own interrupted write, which the next sync may replace.
+    // Committed, not applied: it has to be on disk before the first byte goes out, or a process
+    // killed mid-write would forget it.
+    var syncPendingWrite: String?
+        get() = prefs.getString(KEY_SYNC_PENDING, null)
+        @android.annotation.SuppressLint("ApplySharedPref")
+        set(value) {
+            prefs.edit().apply { if (value == null) remove(KEY_SYNC_PENDING) else putString(KEY_SYNC_PENDING, value) }.commit()
+        }
+
+    // The hash of what the file held just before this phone last replaced it. A cloud provider's
+    // cache can serve those old bytes again for a while; reading them back as news would undo the
+    // write, so they are skipped.
+    var syncReplacedHash: String?
+        get() = prefs.getString(KEY_SYNC_REPLACED, null)
+        set(value) = prefs.edit().apply { if (value == null) remove(KEY_SYNC_REPLACED) else putString(KEY_SYNC_REPLACED, value) }.apply()
+
+    fun clearBackup() {
+        prefs.edit()
+            .remove(KEY_BACKUP_URI)
+            .remove(KEY_BACKUP_NAME)
+            .remove(KEY_BACKUP_LAST_AT)
+            .remove(KEY_BACKUP_FINGERPRINT)
+            .remove(KEY_BACKUP_PROBLEM)
+            .remove(KEY_SYNC_SIZE)
+            .remove(KEY_SYNC_MODIFIED)
+            .remove(KEY_SYNC_HASH)
+            .remove(KEY_SYNC_PENDING)
+            .remove(KEY_SYNC_REPLACED)
+            .apply()
+    }
+
     companion object {
+        private const val KEY_BACKUP_URI = "backup_uri"
+        private const val KEY_BACKUP_NAME = "backup_name"
+        private const val KEY_BACKUP_LAST_AT = "backup_last_at"
+        private const val KEY_BACKUP_FINGERPRINT = "backup_fingerprint"
+        private const val KEY_BACKUP_PROBLEM = "backup_problem"
+        private const val KEY_SYNC_SIZE = "sync_remote_size"
+        private const val KEY_SYNC_MODIFIED = "sync_remote_modified"
+        private const val KEY_SYNC_HASH = "sync_remote_hash"
+        private const val KEY_SYNC_PENDING = "sync_pending_write"
+        private const val KEY_SYNC_REPLACED = "sync_replaced_hash"
         private const val PREFS_NAME = "pastille_settings"
         private const val KEY_CLIPBOARD_CLEAR_DELAY = "clipboard_clear_delay"
         private const val KEY_RETURN_KEYBOARD_ID = "return_keyboard_id"
@@ -170,3 +251,29 @@ fun returnKeyboardTarget(chosen: String?, otherKeyboardIds: List<String>): Strin
 // Only voice input is excluded: a keyboard may declare subtypes without setting a mode.
 fun isTypingKeyboard(subtypeModes: List<String>): Boolean =
     subtypeModes.isEmpty() || subtypeModes.any { it.isBlank() || it == "keyboard" }
+
+/** Why the last automatic backup didn't happen. */
+enum class BackupProblem(val key: String) {
+    // The file's permission is gone: it was deleted, moved, or the app holding it was signed out.
+    Access("access"),
+    // The file was there but the write or its check failed.
+    Write("write"),
+    // The file couldn't be read (Drive offline, still downloading, or not a backup yet). Nothing is
+    // written until it reads, so this phone never overwrites changes it hasn't seen.
+    Read("read"),
+    // The storage app didn't keep Pastille's permission to the file (takePersistableUriPermission
+    // threw, or returned without persisting it): syncing works only until the phone restarts.
+    NotKept("not-kept"),
+    // The storage app granted reading but not writing this file.
+    ReadOnly("read-only"),
+    // The storage app refuses every write mode that empties the file first, and the new backup is
+    // shorter than the old one: writing it would leave the old one's end behind, so nothing was written.
+    CantOverwrite("cant-overwrite"),
+    // The file read back differs from what was written, even after waiting for the storage app.
+    Mismatch("mismatch"),
+    ;
+
+    companion object {
+        fun fromKey(key: String?): BackupProblem? = entries.firstOrNull { it.key == key }
+    }
+}

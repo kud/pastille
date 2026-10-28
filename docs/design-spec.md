@@ -308,10 +308,10 @@ Replace the two arrows with:
 
 - [ ] **Search:** `IconButton(Icons.Outlined.Search, "Search snippets")`. It opens an M3 `SearchBar` in expanded mode (full-screen, `inputField` focused, IME open by intent). Results show the 6.1 row style across all categories. The in-content `OutlinedTextField` search is **removed**, which also fixes the IME covering the FAB on launch (section 4): nothing focuses a text field until the user asks.
 - [x] **Overflow:** `IconButton(Icons.Filled.MoreVert, "More options")`, opening a `DropdownMenu` with leading icons in `onSurfaceVariant`. **It follows the mode on screen** (Iris, 2026-10-28; Erwann: « Un nouveau folder ça dépend de sticker ou prompt, pas des settings global »): what acts on one kind shows only in that mode, then a divider, then what belongs to the whole app.
-  - **Snippets:** "Import snippets" (`FileDownload`), "Export snippets" (`FileUpload`), "Reorder" (`SwapVert`).
-  - **Stickers:** "Reorder" only. Stickers have no folders, and the export skips images, so neither belongs here.
-  - `HorizontalDivider`, then in both modes: "Keyboard setup" (`Keyboard`, `ACTION_INPUT_METHOD_SETTINGS`), "Settings", "Bin", always shown and "Bin (N)" once it holds something (Erwann, 2026-10-28), "Last crash report" when one exists.
-  - **Not in the menu:** "New folder" lives only at the end of the folder row ("+ Add", §14.5), beside the folders it makes; a second door in the overflow showed it on Stickers too. "Try the keyboard" lives only in Settings › Height, under the preview it tests: it helps once, while setting up, and was noise in the everyday menu.
+  - **Snippets:** "Reorder" (`SwapVert`).
+  - **Stickers:** "Reorder" only. Stickers have no folders.
+  - `HorizontalDivider`, then in both modes: "Import backup" (`FileDownload`), "Export backup" (`FileUpload`), "Share backup" (`Share`): the backup carries snippets, stickers and images, so it belongs to the whole app (Maya, 2026-10-28; for Iris to confirm). Then "Keyboard setup" (`Keyboard`, `ACTION_INPUT_METHOD_SETTINGS`), "Settings", "Bin", always shown and "Bin (N)" once it holds something (Erwann, 2026-10-28).
+  - **Not in the menu:** "New folder" lives only at the end of the folder row ("+ Add", §14.5), beside the folders it makes; a second door in the overflow showed it on Stickers too. "Try the keyboard" is gone from the app (Erwann, 2026-10-28: « On s'en fout de tester le clavier dans les settings »); any text field tests it. "Last crash report" lives in Settings › About (§12), beside the version a bug report needs.
 
 ### 8.4 Colour roles
 
@@ -1034,7 +1034,7 @@ The Settings screen was one long column of `ListItem`s under `primary` section h
 - [x] `LargeTopAppBar` that collapses on scroll (`exitUntilCollapsedScrollBehavior`, wired with `nestedScroll` on the `Scaffold`).
 - [x] The back arrow sits in a `FilledTonalIconButton`.
 
-**Groups**, in this order: **Keyboard**, **Clipboard**, **Photos**, then a destructive card when there is one.
+**Groups**, in this order: **Keyboard**, **Clipboard**, **Photos**, **Backup**, **About**, then a destructive card when there is one.
 
 - [x] Each group is a `surfaceContainer` card: 20dp corners, 16dp side margins, 12dp between groups.
 - [x] The group header sits above its card in `titleSmall` `onSurfaceVariant`, inset 16dp so it lines up with the card's content.
@@ -1043,9 +1043,10 @@ The Settings screen was one long column of `ListItem`s under `primary` section h
 
 | Group | Rows |
 |---|---|
-| Keyboard | Style (preview + the inline radio list), Height (preview, Portrait and Landscape segmented rows, the try-it field), Show in the keyboard (Snippets / Stickers / Images), Return after a snippet, Switch back to (an inline radio list) |
+| Keyboard | Style (preview + the inline radio list), Height (preview, Portrait and Landscape segmented rows), Show in the keyboard (Snippets / Stickers / Images), Return after a snippet, Switch back to (an inline radio list) |
 | Clipboard | Clear clipboard after copying (a dialog of radio rows: Off, 5 s, 10 s, 30 s, 1 min) |
 | Photos | Photo access, Return after an image |
+| About | Pastille (version), Source code, Licence, Third-party notices, Last crash report (only when one exists) |
 
 **Row anatomy** (shared composables in `ui/SettingsGroup.kt`: `SettingsGroup`, `SettingsRow`, `SettingsRowDetail`, `SettingsHairline`, `SettingsChevron`)
 
@@ -1062,6 +1063,14 @@ The Settings screen was one long column of `ListItem`s under `primary` section h
 - [x] **The style radio list stays inline:** each option is a row whose 36dp leading slot holds the `RadioButton`, so its text lines up with the tiles above. No hairlines between the options; they're one choice.
 - [x] **Detail content** that belongs to a row (previews, segmented buttons) sits under it at the card's full inner width (16dp each side), so the four height options never squeeze.
 - [x] The whole row is the touch target (`selectable`, `toggleable` or `clickable` on the row), with Material's ripple.
+
+**About** (Iris, 2026-10-28; Erwann: « Dans les settings on veut le about et la version »)
+
+- [x] **Pastille:** subtitle "Version 0.1.5 (16)", from `BuildConfig` (`versionName (versionCode)`, "· debug" on the debug build, which installs beside the release one). Tapping copies "Pastille 0.1.5 (16)" (TalkBack: "Copy version"); a toast confirms below Android 13, where the system doesn't.
+- [x] **Source code:** "github.com/kud/pastille", an `ACTION_VIEW` intent to the browser (TalkBack: "Open in browser"), with a trailing `OpenInNew` rather than the chevron, since it leaves the app. Pastille has no `INTERNET` permission and doesn't need one for this.
+- [x] **Licence:** "GPL-3.0-or-later", the SPDX id as the subtitle. Not tappable.
+- [x] **Third-party notices (2026-10-28):** "Code from others that Pastille includes", with a chevron; opens a plain `AlertDialog` listing each notice (name in `titleSmall`, what it is for in `bodyMedium` `onSurfaceVariant`, the licence text selectable in monospace `bodySmall`), from `THIRD_PARTY_NOTICES` in `ui/ThirdPartyNoticesDialog.kt`, which mirrors `docs/third-party-notices.md`. Offline: the MIT notice must ship in the APK, not only on GitHub.
+- [x] **Last crash report:** moved from the list's overflow (§8.3), where a diagnostic sat among everyday actions. Shown only when one exists, read again on resume; opens the same copyable dialog (`CrashReportDialog`).
 
 **Destructive** (none today)
 
@@ -1181,3 +1190,15 @@ GIF search, network sticker search, packs, stores, Emoji Kitchen, AI stickers or
 ### 15.4 Motion
 
 Only the selected pill's width change is new: `SHORT_MS` with `Standard`, snapping under reduced motion. Everything else uses existing tokens: the X slide between tabs, `animateItem` on cells, and the Actions state rising (§10.6.3).
+
+
+## 15. Share and backup (2026-10-28)
+
+- **Share:** a snippet row's long-press menu and the sticker grid's long-press menu gain "Share" (`Icons.Rounded.Share`), above Delete. It opens the system share sheet, where Quick Share appears by itself.
+- **Settings › Backup**, the last group, in the existing `SettingsGroup` / `SettingsRow` style:
+  - Off: one row, "Back up automatically", subtitle "Keep a copy in a file you choose, in Google Drive or on this phone. Pastille updates it after every change.", chevron; opens the system "create file" picker.
+  - On: "Back up automatically" with "pastille-backup.zip · Last backed up 5 min ago" (tap: choose another file), then "Back up now", "Restore from this file" ("Adds what isn't already in Pastille", one confirmation), "Stop backing up" ("The file stays where it is").
+  - Problem: the first row turns destructive (error tile, error title) and reads "Can't reach pastille-backup.zip. Tap to choose a file again." or "The last backup to pastille-backup.zip failed. Tap to choose a file again."
+  - Under the group, `bodySmall` in `onSurfaceVariant`: "Your snippets, stickers and images stay on your phone unless you export, share or back them up yourself."
+- **Receiving a backup:** a plain `AlertDialog` over a translucent activity: "Import this backup?", "This backup holds 12 snippets and 3 stickers. Anything already in Pastille is skipped.", Import / Cancel; the result is a toast.
+- **QR code (2026-10-28):** a text snippet's long-press menu gains "Show QR code" (`Icons.Rounded.QrCode2`), after Share and before "Send to another phone". It opens a full-screen dialog on plain white whatever the theme: the title (`titleLarge`, black, two lines at most) with a Close button on its right, the code centred and as wide as the screen allows (at most 480dp) with its four-module white quiet zone, and under it, in `bodyMedium` grey: "Scan it with the other phone's camera, then share the text to Pastille." While it shows, the screen stays on at full brightness. TalkBack reads the code as "QR code for <title>". Too long for the biggest code, the item stays in the menu, disabled, with a second line in `bodySmall`: "Too long for a QR code: send it to another phone instead". Images and stickers have no QR item.

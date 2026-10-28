@@ -54,10 +54,7 @@ import androidx.compose.ui.semantics.semantics
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.material.icons.Icons
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -72,7 +69,6 @@ import androidx.compose.material.icons.automirrored.rounded.ShortText
 import androidx.compose.material.icons.automirrored.rounded.DriveFileMove
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Delete
@@ -144,11 +140,8 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -159,7 +152,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.pastille.R
-import app.pastille.crash.CrashLog
 import app.pastille.data.SnippetRepository
 import app.pastille.images.ImageStore
 import app.pastille.images.ImageThumbnail
@@ -178,6 +170,17 @@ import androidx.compose.material.icons.rounded.AddPhotoAlternate
 import app.pastille.settings.PastilleSettings
 import app.pastille.settings.setupNeedsPhotos
 import app.pastille.share.imageTitle
+import app.pastille.backup.BackupArchive
+import app.pastille.backup.BackupFiles
+import app.pastille.share.shareBackup
+import app.pastille.share.shareSnippet
+import app.pastille.share.sendToPhone
+import androidx.compose.material.icons.automirrored.rounded.SendToMobile
+import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.QrCode2
+import app.pastille.qr.SnippetQr
+import app.pastille.qr.SnippetQrDialog
+import app.pastille.qr.QR_TOO_LONG
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
@@ -206,15 +209,11 @@ fun SnippetListScreen(
     var searching by rememberSaveable { mutableStateOf(false) }
     var refreshTick by remember { mutableStateOf(0) }
     var showMenu by remember { mutableStateOf(false) }
-    var showCrashDialog by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
     val scrollBehavior = rememberListDrivenScrollBehavior()
     val binned by remember { repository.observeBin() }
         .collectAsStateWithLifecycle(initialValue = emptyList())
     val binCount = binned.size
-    val hasCrashReport = remember(showMenu) {
-        CrashLog.forContext(context).entries().isNotEmpty()
-    }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { refreshTick++ }
     val onboarding = rememberOnboarding(refreshTick)
     val settings = remember { PastilleSettings.forContext(context) }
@@ -233,17 +232,21 @@ fun SnippetListScreen(
         .collectAsStateWithLifecycle(initialValue = emptyList())
     val organising = organisingId?.let { id -> snippets.firstOrNull { it.id == id } ?: stickers.firstOrNull { it.id == id } }
 
+    // Export, Import and Share backup: one format for all three, the zip archive with images and
+    // stickers (BackupArchive). Import still reads the old JSON exports.
     val exportLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/json"),
+        ActivityResultContracts.CreateDocument(BackupArchive.MIME),
     ) { uri ->
         if (uri != null) {
             scope.launch {
                 runCatching {
-                    val result = repository.exportJson()
-                    context.contentResolver.openOutputStream(uri)?.use { out ->
-                        out.write(result.json.toByteArray())
-                    } ?: error("Could not open $uri")
-                    exportMessage(result.exported, result.skippedImages)
+                    val (file, written) = BackupFiles.build(context)
+                    try {
+                        BackupFiles.writeTo(context, uri, file)
+                    } finally {
+                        file.delete()
+                    }
+                    exportMessage(written)
                 }.onSuccess { toast(context, it) }
                     .onFailure { toast(context, EXPORT_FAILED) }
             }
@@ -254,17 +257,22 @@ fun SnippetListScreen(
     ) { uri ->
         if (uri != null) {
             scope.launch {
-                val raw = runCatching {
-                    context.contentResolver.openInputStream(uri)?.use { it.bufferedReader().readText() }
-                }.getOrNull()
-                if (raw == null) {
+                val file = runCatching { BackupFiles.copyIn(context, uri) }.getOrNull()
+                if (file == null) {
                     toast(context, IMPORT_UNREADABLE)
                 } else {
-                    runCatching { repository.importJson(raw) }
+                    runCatching { BackupFiles.importFile(context, file) }
                         .onSuccess { toast(context, importMessage(it)) }
                         .onFailure { toast(context, IMPORT_NOT_A_BACKUP) }
                 }
             }
+        }
+    }
+    fun shareWholeBackup() {
+        scope.launch {
+            runCatching { BackupFiles.buildForSharing(context).first }
+                .onSuccess { shareBackup(context, it) }
+                .onFailure { toast(context, SHARE_FAILED) }
         }
     }
 
@@ -452,49 +460,6 @@ fun SnippetListScreen(
     }
     val categoryNames = remember(categories) { categories.associate { it.id to it.name } }
 
-    if (showCrashDialog) {
-        val entries = remember(showCrashDialog) { CrashLog.forContext(context).entries() }
-        val clipboard = LocalClipboardManager.current
-        val crashText = remember(entries) { entries.joinToString("\n\nâââ\n\n") }
-        AlertDialog(
-            onDismissRequest = { showCrashDialog = false },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        clipboard.setText(AnnotatedString(crashText))
-                        showCrashDialog = false
-                    },
-                    enabled = entries.isNotEmpty(),
-                ) {
-                    Text("Copy")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showCrashDialog = false }) {
-                    Text("Close")
-                }
-            },
-            title = { Text("Last crash report") },
-            text = {
-                if (entries.isEmpty()) {
-                    Text("No crashes recorded.")
-                } else {
-                    Column(
-                        modifier = Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState()),
-                    ) {
-                        SelectionContainer {
-                            Text(
-                                text = crashText,
-                                style = MaterialTheme.typography.bodySmall,
-                                fontFamily = FontFamily.Monospace,
-                            )
-                        }
-                    }
-                }
-            },
-        )
-    }
-
     BackHandler(enabled = searching) {
         searching = false
         query = ""
@@ -600,32 +565,10 @@ fun SnippetListScreen(
                             Icon(Icons.Rounded.MoreVert, contentDescription = "More options")
                         }
                         DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                            // The menu follows the mode on screen (Erwann, 2026-10-28): snippet
-                            // backup only on Snippets (stickers aren't exported), Reorder for
-                            // the mode shown, then what belongs to the whole app. New folder lives
-                            // at the end of the folder row ("+ Add"), next to the folders it makes.
-                            if (!stickersMode) {
-                                DropdownMenuItem(
-                                    text = { Text("Import snippets") },
-                                    leadingIcon = {
-                                        Icon(Icons.Rounded.FileDownload, contentDescription = null)
-                                    },
-                                    onClick = {
-                                        showMenu = false
-                                        importLauncher.launch(arrayOf("application/json"))
-                                    },
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Export snippets") },
-                                    leadingIcon = {
-                                        Icon(Icons.Rounded.FileUpload, contentDescription = null)
-                                    },
-                                    onClick = {
-                                        showMenu = false
-                                        exportLauncher.launch("pastille-snippets.json")
-                                    },
-                                )
-                            }
+                            // The menu follows the mode on screen (Erwann, 2026-10-28): Reorder for
+                            // the mode shown, then what belongs to the whole app. The backup now
+                            // carries stickers and images too, so it sits with the app-wide items.
+                            // New folder lives at the end of the folder row ("+ Add").
                             DropdownMenuItem(
                                 text = { Text("Reorder") },
                                 leadingIcon = {
@@ -651,6 +594,38 @@ fun SnippetListScreen(
                                 },
                             )
                             DropdownMenuItem(
+                                text = { Text("Import backup") },
+                                leadingIcon = {
+                                    Icon(Icons.Rounded.FileDownload, contentDescription = null)
+                                },
+                                onClick = {
+                                    showMenu = false
+                                    // Any type: Drive and file managers label zips and old JSON
+                                    // exports inconsistently, and the contents decide anyway.
+                                    importLauncher.launch(arrayOf("*/*"))
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Export backup") },
+                                leadingIcon = {
+                                    Icon(Icons.Rounded.FileUpload, contentDescription = null)
+                                },
+                                onClick = {
+                                    showMenu = false
+                                    exportLauncher.launch(BackupArchive.SUGGESTED_NAME)
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Share backup") },
+                                leadingIcon = {
+                                    Icon(Icons.Rounded.Share, contentDescription = null)
+                                },
+                                onClick = {
+                                    showMenu = false
+                                    shareWholeBackup()
+                                },
+                            )
+                            DropdownMenuItem(
                                 text = { Text("Settings") },
                                 leadingIcon = {
                                     Icon(Icons.Rounded.Settings, contentDescription = null)
@@ -670,18 +645,6 @@ fun SnippetListScreen(
                                     onOpenBin()
                                 },
                             )
-                            if (hasCrashReport) {
-                                DropdownMenuItem(
-                                    text = { Text("Last crash report") },
-                                    leadingIcon = {
-                                        Icon(Icons.Rounded.BugReport, contentDescription = null)
-                                    },
-                                    onClick = {
-                                        showMenu = false
-                                        showCrashDialog = true
-                                    },
-                                )
-                            }
                         }
                     },
                     colors = TopAppBarDefaults.largeTopAppBarColors(
@@ -974,8 +937,11 @@ internal fun SnippetRow(
     onMove: ((Long?) -> Unit)? = null,
     containerColor: Color = MaterialTheme.colorScheme.surface,
 ) {
+    val context = LocalContext.current
+    val rowScope = rememberCoroutineScope()
     var menuOpen by remember { mutableStateOf(false) }
     var moveMenuOpen by remember { mutableStateOf(false) }
+    var qrOpen by remember { mutableStateOf(false) }
     var expanded by rememberSaveable(snippet.id) { mutableStateOf(false) }
     var overflows by remember(snippet.id) { mutableStateOf(false) }
     var deleting by remember(snippet.id) { mutableStateOf(false) }
@@ -1110,6 +1076,58 @@ internal fun SnippetRow(
                     )
                 }
                 DropdownMenuItem(
+                    text = { Text("Share") },
+                    leadingIcon = {
+                        Icon(Icons.Rounded.Share, contentDescription = null)
+                    },
+                    onClick = {
+                        menuOpen = false
+                        if (!shareSnippet(context, snippet)) toast(context, "That image is gone")
+                    },
+                )
+                // Text only: a camera reads it and shares it into Pastille. Too long for the
+                // biggest code, the item says so and Send to another phone, just below, carries it.
+                if (!snippet.isImage) {
+                    val qrFits = remember(snippet.text) { SnippetQr.fits(snippet.text) }
+                    DropdownMenuItem(
+                        text = {
+                            Column {
+                                Text("Show QR code")
+                                if (!qrFits) {
+                                    Text(
+                                        text = QR_TOO_LONG,
+                                        style = MaterialTheme.typography.bodySmall,
+                                    )
+                                }
+                            }
+                        },
+                        leadingIcon = {
+                            Icon(Icons.Rounded.QrCode2, contentDescription = null)
+                        },
+                        enabled = qrFits,
+                        onClick = {
+                            menuOpen = false
+                            qrOpen = true
+                        },
+                    )
+                }
+                // A file, not text: Quick Share's "Open" on the other phone lands in "Import to
+                // Pastille", where plain text would only reach the clipboard.
+                DropdownMenuItem(
+                    text = { Text("Send to another phone") },
+                    leadingIcon = {
+                        Icon(Icons.AutoMirrored.Rounded.SendToMobile, contentDescription = null)
+                    },
+                    onClick = {
+                        menuOpen = false
+                        rowScope.launch {
+                            runCatching { BackupFiles.buildToSend(context, snippet) }
+                                .onSuccess { sendToPhone(context, it) }
+                                .onFailure { toast(context, SEND_FAILED) }
+                        }
+                    },
+                )
+                DropdownMenuItem(
                     text = { Text("Delete") },
                     leadingIcon = {
                         Icon(Icons.Rounded.Delete, contentDescription = null)
@@ -1118,6 +1136,13 @@ internal fun SnippetRow(
                         menuOpen = false
                         onDelete()
                     },
+                )
+            }
+            if (qrOpen) {
+                SnippetQrDialog(
+                    title = rowTitle(snippet.title, snippet.text).ifBlank { "Snippet" },
+                    text = snippet.text,
+                    onDismiss = { qrOpen = false },
                 )
             }
             if (onMove != null) {

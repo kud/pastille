@@ -35,7 +35,7 @@ class BackupRulesTest {
         "database" to ".",
         "file" to "images/",
         "file" to "crashes/",
-        // Written by two-phone sync (filesDir/sync/base.json); harmless before that lands.
+        // Two-phone sync keeps its merge base here (filesDir/sync/base.json).
         "file" to "sync/",
         "sharedpref" to prefsFile,
     )

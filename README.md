@@ -32,7 +32,9 @@ Pastille is an open-source Android keyboard for pasting, not typing. Tap a saved
 - Long-press the keyboard key to pick any other keyboard from Android's list.
 - Turn snippets, stickers or images off entirely if you only need some of them.
 - Gboard-style dark, light and Material You themes, with a choice of panel heights.
-- Back up and restore your snippets as a JSON file.
+- Share a snippet, sticker or image through Android's share sheet (Quick Share included), or the whole collection as one backup file. Open a backup someone sent you and Pastille imports it, skipping what you already have.
+- Show a text snippet as a QR code, full screen, for another phone to read with its camera.
+- Sync snippets, stickers and images through a file you choose, in Google Drive or on the phone: Pastille reads it and updates it after every change, so two phones that choose the same file keep the same collection (Settings › Backup).
 
 ## Install
 
@@ -45,7 +47,7 @@ Pastille needs Android 9 (API 28) or later.
 
 1. Open the Pastille app and follow the setup card, or do it by hand in the next steps.
 2. Enable Pastille under Settings → System → Keyboard → On-screen keyboard.
-3. In any text field, switch to Pastille with the keyboard switcher, or use the test field under Settings › Height.
+3. In any text field, switch to Pastille with the keyboard switcher.
 4. Optionally, grant photo access in Pastille's Settings to see recent images in the panel.
 
 ### Quick Settings tile
@@ -57,7 +59,7 @@ The Pastille Quick Settings tile opens a sheet of your snippets and recent image
 - Pastille requests no `INTERNET` permission and has no analytics or network libraries. Your snippets, stickers and images stay on your phone unless you export, share or back them up yourself.
 - Snippets live in a local Room database on your device.
 - Pastille opts out of Android's cloud backup, so nothing goes to Google's backup servers. Moving to a new phone with Android's device-to-device transfer (by cable or over Wi-Fi) still brings your snippets, stickers, images and settings.
-- Exports only move when you ask: export and import go through the system file picker (Storage Access Framework), so you choose where the file is saved or read from.
+- Backups only move when you ask: export, import and automatic backup go through the system file picker (Storage Access Framework), and sharing through the system share sheet, so you choose where every file goes. If that place is Google Drive, Drive's own app does the uploading, not Pastille.
 - Photo access is optional and only used to show recent images in the panel.
 
 ## Build
@@ -74,6 +76,7 @@ Or open the directory in Android Studio and run the `app` configuration on a dev
 
 - [Design spec](docs/design-spec.md): how the keyboard and app look and behave.
 - [Architecture](docs/architecture.md): schema, storage, image handling and the Quick Settings tile mechanics.
+- [Third-party notices](docs/third-party-notices.md): code from others that Pastille includes.
 
 ## Support
 

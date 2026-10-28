@@ -3,7 +3,14 @@ package app.pastille.data
 import android.content.Context
 import android.net.Uri
 import androidx.room.withTransaction
+import app.pastille.backup.BackupArchive
 import app.pastille.backup.SnippetBackup
+import app.pastille.sync.MergeResult
+import app.pastille.sync.SyncCategory
+import app.pastille.sync.SyncSnippet
+import app.pastille.sync.SyncState
+import app.pastille.sync.SyncTag
+import app.pastille.sync.SyncTombstone
 import app.pastille.images.ImageImportException
 import app.pastille.images.ImageImporter
 import app.pastille.model.CategoryRecord
@@ -16,14 +23,10 @@ import app.pastille.model.uniqueTitle
 import app.pastille.share.autoTitle
 import app.pastille.model.normaliseTag
 import kotlinx.coroutines.flow.Flow
+import java.io.File
+import java.io.OutputStream
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
-
-data class ExportResult(
-    val json: String,
-    val exported: Int,
-    val skippedImages: Int,
-)
 
 // One image brought in by [SnippetRepository.importImages], new or already there.
 data class ImportedImage(
@@ -52,6 +55,7 @@ class SnippetRepository private constructor(
     private val dao: SnippetDao,
     private val categoryDao: CategoryDao,
     private val tagDao: TagDao,
+    private val tombstoneDao: TombstoneDao,
 ) {
 
     // Tags are attached in memory from one snippet_tags flow: never a query per row.
@@ -73,6 +77,9 @@ class SnippetRepository private constructor(
     /** Replaces a snippet's tags; names are normalised, and tags nobody carries any more go. */
     suspend fun setTags(snippetId: Long, names: List<String>, now: Long = System.currentTimeMillis()) {
         db.withTransaction {
+            val before = tagDao.tagsFor(listOf(snippetId)).map { it.name }.toSet()
+            val after = names.map(::normaliseTag).filter { it.isNotEmpty() }.toSet()
+            if (before != after) dao.getById(snippetId)?.let { dao.upsert(it.copy(updatedAt = now)) }
             tagDao.unlinkSnippet(snippetId)
             linkTags(snippetId, names, now)
             tagDao.deleteUnused()
@@ -87,8 +94,10 @@ class SnippetRepository private constructor(
     }
 
     suspend fun upsert(record: SnippetRecord, now: Long = System.currentTimeMillis()): Long {
+        val uid = record.uid.ifEmpty { if (record.id == 0L) newUid() else dao.getById(record.id)?.uid ?: newUid() }
         val entity = SnippetEntity(
             id = record.id,
+            uid = uid,
             title = resolveTitle(record),
             text = record.text,
             pinned = record.pinned,
@@ -107,11 +116,11 @@ class SnippetRepository private constructor(
 
     private suspend fun newTopPosition(): Int = (dao.minPosition() ?: 1) - 1
 
-    suspend fun setSnippetOrder(shown: List<SnippetRecord>, newOrder: List<Long>) {
+    suspend fun setSnippetOrder(shown: List<SnippetRecord>, newOrder: List<Long>, now: Long = System.currentTimeMillis()) {
         db.withTransaction {
             val stored = dao.getByIds(shown.map { it.id }).associate { it.id to it.position }
             positionWrites(shown, stored, newOrder).forEach { (id, position) ->
-                dao.updatePosition(id, position)
+                dao.updatePosition(id, position, now)
             }
         }
     }
@@ -139,8 +148,9 @@ class SnippetRepository private constructor(
     }
 
     // Undo after a delete: the row is put back as it was, out of the bin.
-    suspend fun restore(record: SnippetRecord): Long =
-        dao.upsert(record.copy(deletedAt = null).toEntity())
+    // It counts as an edit, so a sync that already carried the delete takes the undo too.
+    suspend fun restore(record: SnippetRecord, now: Long = System.currentTimeMillis()): Long =
+        dao.upsert(record.copy(deletedAt = null, updatedAt = now).toEntity())
 
     suspend fun findTextDuplicate(text: String): SnippetRecord? =
         dao.findTextDuplicate(text)?.toRecord()
@@ -177,20 +187,20 @@ class SnippetRepository private constructor(
 
     // A sticker must be an image, so a text row is refused (false). Turning it on clears the folder and
     // puts it at the end of the sticker order; turning it off brings it back at the top level, first.
-    suspend fun setSticker(id: Long, on: Boolean): Boolean = db.withTransaction {
+    suspend fun setSticker(id: Long, on: Boolean, now: Long = System.currentTimeMillis()): Boolean = db.withTransaction {
         val row = dao.getById(id) ?: return@withTransaction false
         if (row.imageFile == null) return@withTransaction false
         if (row.sticker == on) return@withTransaction true
         val position = if (on) nextStickerPosition() else newTopPosition()
-        dao.setSticker(id, on, categoryId = null, position = position)
+        dao.setSticker(id, on, categoryId = null, position = position, now = now)
         true
     }
 
     private suspend fun nextStickerPosition(): Int = (dao.maxStickerPosition() ?: -1) + 1
 
-    suspend fun setTitle(id: Long, title: String) {
+    suspend fun setTitle(id: Long, title: String, now: Long = System.currentTimeMillis()) {
         val trimmed = title.trim()
-        if (trimmed.isNotEmpty()) dao.setTitle(id, trimmed)
+        if (trimmed.isNotEmpty()) dao.editTitle(id, trimmed, now)
     }
 
     /**
@@ -241,7 +251,7 @@ class SnippetRepository private constructor(
                     categoryId = if (sticker) null else categoryId,
                     now = now,
                 )
-                if (sticker) dao.setSticker(id, true, categoryId = null, position = nextStickerPosition())
+                if (sticker) dao.setSticker(id, true, categoryId = null, position = nextStickerPosition(), now = now)
                 ImportedImage(id, stored.fileName, title, stored.width, stored.height).also { created.add(it) }
             }
             images.add(image)
@@ -257,9 +267,9 @@ class SnippetRepository private constructor(
         result.converted.forEach { restore(it) }
     }
 
-    suspend fun setCategory(ids: List<Long>, categoryId: Long?) {
+    suspend fun setCategory(ids: List<Long>, categoryId: Long?, now: Long = System.currentTimeMillis()) {
         if (ids.isEmpty()) return
-        dao.setCategory(ids, categoryId)
+        dao.setCategory(ids, categoryId, now)
     }
 
     // Deleting moves a snippet to the bin; only the bin itself deletes for good.
@@ -267,8 +277,8 @@ class SnippetRepository private constructor(
         dao.moveToBin(id, now)
     }
 
-    suspend fun restoreFromBin(id: Long) {
-        dao.restoreFromBin(id)
+    suspend fun restoreFromBin(id: Long, now: Long = System.currentTimeMillis()) {
+        dao.restoreFromBin(id, now)
     }
 
     fun observeBin(): Flow<List<SnippetRecord>> =
@@ -291,8 +301,11 @@ class SnippetRepository private constructor(
     suspend fun referencedImageFiles(): Set<String> = dao.allImageFiles().toSet()
 
     // Snippet rows and their snippet_tags rows go together, in the caller's transaction.
-    private suspend fun hardDelete(ids: List<Long>) {
+    // Each deleted row leaves a tombstone, so the deletion reaches the other phone through sync.
+    private suspend fun hardDelete(ids: List<Long>, now: Long = System.currentTimeMillis()) {
         if (ids.isEmpty()) return
+        val uids = dao.uidsFor(ids).filter { it.isNotEmpty() }
+        tombstoneDao.insertAll(uids.map { TombstoneEntity(uid = it, kind = KIND_SNIPPET, deletedAt = now) })
         dao.deleteByIds(ids)
         tagDao.unlinkSnippets(ids)
         tagDao.deleteUnused()
@@ -317,97 +330,323 @@ class SnippetRepository private constructor(
         return categoryDao.insert(CategoryEntity(name = trimmed, position = position, createdAt = now))
     }
 
-    suspend fun renameCategory(id: Long, name: String) {
+    suspend fun renameCategory(id: Long, name: String, now: Long = System.currentTimeMillis()) {
         val trimmed = name.trim()
         require(trimmed.isNotEmpty()) { "Category name must not be blank" }
         val existing = categoryDao.findByName(trimmed)
         if (existing != null && existing.id != id) {
             throw IllegalArgumentException("A category named $trimmed already exists")
         }
-        categoryDao.rename(id, trimmed)
+        categoryDao.rename(id, trimmed, now)
     }
 
-    suspend fun moveCategory(id: Long, delta: Int) {
+    suspend fun moveCategory(id: Long, delta: Int, now: Long = System.currentTimeMillis()) {
         db.withTransaction {
             val current = categoryDao.getAll().map { it.toRecord() }
             val before = current.associate { it.id to it.position }
             val reordered = reorderCategories(current, id, delta)
             reordered.forEach {
                 if (before[it.id] != it.position) {
-                    categoryDao.updatePosition(it.id, it.position)
+                    categoryDao.updatePosition(it.id, it.position, now)
                 }
             }
         }
     }
 
-    suspend fun setCategoryOrder(newOrder: List<Long>) {
+    suspend fun setCategoryOrder(newOrder: List<Long>, now: Long = System.currentTimeMillis()) {
         db.withTransaction {
             val current = categoryDao.getAll().map { it.toRecord() }
             val before = current.associate { it.id to it.position }
             orderCategories(current, newOrder).forEach {
-                if (before[it.id] != it.position) categoryDao.updatePosition(it.id, it.position)
+                if (before[it.id] != it.position) categoryDao.updatePosition(it.id, it.position, now)
             }
         }
     }
 
-    suspend fun deleteCategory(id: Long) {
+    suspend fun deleteCategory(id: Long, now: Long = System.currentTimeMillis()) {
         db.withTransaction {
+            categoryDao.getById(id)?.let {
+                tombstoneDao.insertAll(listOf(TombstoneEntity(uid = it.uid, kind = KIND_CATEGORY, deletedAt = now)))
+            }
             dao.clearCategory(id)
             categoryDao.deleteById(id)
         }
     }
 
-    suspend fun exportJson(): ExportResult {
+    // What a backup holds: every live snippet, image and sticker (never the bin), with its tags.
+    private suspend fun backupRecords(): List<SnippetRecord> {
         val entities = dao.getAll()
         val tagsBySnippet = tagDao.tagsFor(entities.map { it.id }).groupBy({ it.snippetId }, { it.name })
-        val records = entities.map { it.toRecord().copy(tags = tagsBySnippet[it.id].orEmpty()) }
-        val skipped = records.count { it.isImage }
-        return ExportResult(
-            json = SnippetBackup.encode(records, getCategories()),
-            exported = records.size - skipped,
-            skippedImages = skipped,
+        return entities.map { it.toRecord().copy(tags = tagsBySnippet[it.id].orEmpty()) }
+    }
+
+    /**
+     * Writes the whole collection as a backup archive ([BackupArchive]) to [out]. [withSync] adds what
+     * only the synced file needs (the bin, tag ids, tombstones); Export and Share leave them out.
+     */
+    suspend fun exportBackup(out: OutputStream, imagesDir: File, withSync: Boolean = false): BackupArchive.Written =
+        BackupArchive.writeState(out, syncState(), withSync) { File(imagesDir, it) }
+
+    /**
+     * "Send to another phone": an archive of just these snippets or stickers (by local id), in the
+     * same format and with the same uids as a backup, so the other phone imports it like one and a
+     * later sync sees one item, not two.
+     */
+    suspend fun exportItems(out: OutputStream, imagesDir: File, ids: Collection<Long>): BackupArchive.Written {
+        val uids = dao.uidsFor(ids.toList()).filter { it.isNotEmpty() }.toSet()
+        return BackupArchive.writeState(out, BackupArchive.only(syncState(), uids), withSync = false) { File(imagesDir, it) }
+    }
+
+    /**
+     * Whether a received item is already here, by the rules import skips on: the same uid among
+     * live rows, the same text, or the same image file.
+     */
+    suspend fun holds(record: SnippetRecord): Boolean {
+        if (liveUid(record.uid)) return true
+        val image = record.imageFile
+        return if (image != null) dao.findByImageFile(image) != null else dao.findTextDuplicate(record.text) != null
+    }
+
+    // The sender's uid when nothing here uses it, bin included (upsert would replace that row);
+    // otherwise a fresh one.
+    private suspend fun liveUid(uid: String): Boolean =
+        uid.isNotEmpty() && dao.findByUid(uid)?.let { it.deletedAt == null } == true
+
+    private suspend fun incomingUid(uid: String): String =
+        if (uid.isNotEmpty() && dao.findByUid(uid) == null) uid else newUid()
+
+    /** Everything sync compares, read in one transaction: every row, the bin included. */
+    suspend fun syncState(): SyncState = db.withTransaction {
+        val categories = categoryDao.getAll()
+        val categoryUids = categories.associate { it.id to it.uid }
+        val rows = dao.getEverything()
+        val tagsBySnippet = tagDao.allSnippetTags().groupBy({ it.snippetId }, { it.name })
+        SyncState(
+            snippets = rows.map { row ->
+                SyncSnippet(
+                    uid = row.uid,
+                    title = row.title,
+                    text = row.text,
+                    pinned = row.pinned,
+                    createdAt = row.createdAt,
+                    updatedAt = row.updatedAt,
+                    lastUsedAt = row.lastUsedAt,
+                    categoryUid = row.categoryId?.let(categoryUids::get),
+                    imageFile = row.imageFile,
+                    imageWidth = row.imageWidth,
+                    imageHeight = row.imageHeight,
+                    position = row.position,
+                    deletedAt = row.deletedAt,
+                    sticker = row.sticker,
+                    tags = tagsBySnippet[row.id].orEmpty().map { it.lowercase() }.distinct().sorted(),
+                )
+            },
+            categories = categories.map { SyncCategory(it.uid, it.name, it.position, it.createdAt, it.updatedAt) },
+            tags = tagDao.getAll().map { SyncTag(it.uid, it.name, it.createdAt, it.updatedAt) },
+            tombstones = tombstoneDao.getAll().map { SyncTombstone(it.uid, it.kind, it.deletedAt) },
         )
     }
 
-    suspend fun importJson(raw: String, now: Long = System.currentTimeMillis()): Int =
-        db.withTransaction {
-            val contents = SnippetBackup.decode(raw)
-            val nameToId = categoryDao.getAll()
+    /**
+     * Makes this database hold [result]'s state, in one transaction, touching only rows that differ
+     * (so an idempotent merge writes nothing). A snippet whose image file isn't here ([hasImage]) is
+     * left as it was: it can't be shown, and the next sync brings it once the file is readable.
+     * Titles and positions are taken as merged, never re-resolved, so both phones agree.
+     */
+    suspend fun applySync(result: MergeResult, hasImage: (String) -> Boolean) = db.withTransaction {
+        val merged = result.state
+
+        // Same item on both phones: keep the row, take the shared uid.
+        val categoriesByUid = categoryDao.getAll().associateBy { it.uid }
+        result.renamedCategories.forEach { (old, new) ->
+            categoriesByUid[old]?.let { categoryDao.replace(it.copy(uid = new)) }
+        }
+        val rowsByUid = dao.getEverything().associateBy { it.uid }
+        result.renamedSnippets.forEach { (old, new) -> rowsByUid[old]?.let { dao.setUid(it.id, new) } }
+
+        // Folders: drop the gone, park changed names (the unique index), then write.
+        val localCategories = categoryDao.getAll().associateBy { it.uid }
+        val mergedCategories = merged.categories.associateBy { it.uid }
+        localCategories.values.filter { it.uid !in mergedCategories }.forEach {
+            dao.clearCategory(it.id)
+            categoryDao.deleteById(it.id)
+        }
+        val renamed = merged.categories.filter { c -> localCategories[c.uid]?.let { it.name != c.name } == true }
+        renamed.forEach { c -> categoryDao.setName(localCategories.getValue(c.uid).id, "\u0001${c.uid}") }
+        merged.categories.forEach { c ->
+            val existing = localCategories[c.uid]
+            val entity = CategoryEntity(
+                id = existing?.id ?: 0,
+                name = c.name,
+                position = c.position,
+                createdAt = c.createdAt,
+                uid = c.uid,
+                updatedAt = c.updatedAt,
+            )
+            if (existing == null || existing != entity || c in renamed) categoryDao.replace(entity)
+        }
+        val categoryIds = categoryDao.getAll().associate { it.uid to it.id }
+
+        // Snippets.
+        val local = dao.getEverything().associateBy { it.uid }
+        val localTags = tagDao.allSnippetTags().groupBy({ it.snippetId }, { it.name.lowercase() })
+        val mergedUids = merged.snippets.map { it.uid }.toSet()
+        val gone = local.values.filter { it.uid !in mergedUids }.map { it.id }
+        if (gone.isNotEmpty()) {
+            dao.deleteByIds(gone)
+            tagDao.unlinkSnippets(gone)
+        }
+        val now = System.currentTimeMillis()
+        merged.snippets.forEach { s ->
+            val existing = local[s.uid]
+            if (s.imageFile != null && !hasImage(s.imageFile)) return@forEach
+            val entity = SnippetEntity(
+                id = existing?.id ?: 0,
+                uid = s.uid,
+                title = s.title,
+                text = s.text,
+                pinned = s.pinned,
+                createdAt = s.createdAt,
+                updatedAt = s.updatedAt,
+                lastUsedAt = s.lastUsedAt,
+                categoryId = s.categoryUid?.let(categoryIds::get),
+                imageFile = s.imageFile,
+                imageWidth = s.imageWidth,
+                imageHeight = s.imageHeight,
+                position = s.position,
+                deletedAt = s.deletedAt,
+                sticker = s.sticker,
+            )
+            val id = existing?.takeIf { it == entity }?.id ?: dao.upsert(entity)
+            val before = existing?.let { localTags[it.id].orEmpty().distinct().sorted() }.orEmpty()
+            if (before != s.tags) {
+                tagDao.unlinkSnippet(id)
+                linkTags(id, s.tags, now)
+            }
+        }
+        tagDao.deleteUnused()
+
+        // Tags: one uid per name on both phones.
+        val tagsByName = tagDao.getAll().associateBy { it.name.lowercase() }
+        merged.tags.forEach { t ->
+            val row = tagsByName[t.name.lowercase()] ?: return@forEach
+            if (row.uid != t.uid || row.createdAt != t.createdAt || row.updatedAt != t.updatedAt) {
+                tagDao.setIdentity(row.id, t.uid, t.createdAt, t.updatedAt)
+            }
+        }
+
+        val tombstones = tombstoneDao.getAll().toSet()
+        val wanted = merged.tombstones.map { TombstoneEntity(it.uid, it.kind, it.deletedAt) }.toSet()
+        if (tombstones != wanted) {
+            tombstoneDao.clear()
+            tombstoneDao.insertAll(wanted.toList())
+        }
+    }
+
+    /** The backup's JSON on its own, as the archive's pastille.json holds it. */
+    internal suspend fun backupJson(): String = SnippetBackup.encode(backupRecords(), getCategories())
+
+    /** Changes when the backup's contents do, but not when a snippet is only used. */
+    suspend fun backupFingerprint(): String = SnippetBackup.fingerprint(syncState())
+
+    /**
+     * Imports a backup file: the zip archive, or an old JSON export (versions 1–3). Whatever is
+     * already here is skipped, so importing the same file twice adds nothing: the same uid, text by
+     * exact text, images and stickers by their content-addressed file. Rows keep the file's uids
+     * (folders too) unless one is taken here, so a later sync pairs them with the sender's.
+     * Image files are copied in before the
+     * rows; if the rows then fail, the start-up orphan sweep removes the files.
+     */
+    suspend fun importBackup(
+        file: File,
+        imagesDir: File,
+        now: Long = System.currentTimeMillis(),
+    ): BackupArchive.Counts {
+        val contents = SnippetBackup.decode(BackupArchive.readJson(file))
+        val zip = BackupArchive.isZip(file)
+        val available = contents.snippets.mapNotNull { it.record.imageFile }.distinct()
+            .filter { zip && BackupArchive.extractImage(file, it, imagesDir) }
+            .toSet()
+        return db.withTransaction {
+            val existingCategories = categoryDao.getAll()
+            val categoryUids = existingCategories.map { it.uid }.toMutableSet()
+            val nameToId = existingCategories
                 .associate { it.name.lowercase() to it.id }
                 .toMutableMap()
             var position = (categoryDao.maxPosition() ?: -1) + 1
             contents.categories.sortedBy { it.position }.forEach { backupCategory ->
                 val key = backupCategory.name.lowercase()
                 if (!nameToId.containsKey(key)) {
+                    val uid = backupCategory.uid.takeIf { it.isNotEmpty() && it !in categoryUids } ?: newUid()
                     val id = categoryDao.insert(
-                        CategoryEntity(name = backupCategory.name, position = position++, createdAt = now),
+                        CategoryEntity(name = backupCategory.name, position = position++, createdAt = now, uid = uid),
                     )
+                    categoryUids += uid
                     nameToId[key] = id
                 }
             }
-            var imported = 0
-            val ordered = contents.snippets.sortedBy { it.record.position }
+            var snippets = 0
+            var images = 0
+            var stickers = 0
+            val (stickerEntries, listEntries) = contents.snippets.partition { it.record.sticker }
+            val ordered = listEntries.sortedBy { it.record.position }
             val base = (dao.minPosition() ?: 0) - ordered.size
             ordered.forEachIndexed { index, entry ->
-                if (dao.findTextDuplicate(entry.record.text) != null) return@forEachIndexed
+                val record = entry.record
+                val image = record.imageFile
+                if (liveUid(record.uid)) return@forEachIndexed
+                if (image != null) {
+                    if (image !in available || dao.findByImageFile(image) != null) return@forEachIndexed
+                } else if (dao.findTextDuplicate(record.text) != null) {
+                    return@forEachIndexed
+                }
                 val categoryId = entry.category?.let { nameToId[it.lowercase()] }
                 val newId = dao.upsert(
                     SnippetEntity(
-                        title = resolveTitle(entry.record.copy(id = 0, categoryId = categoryId)),
-                        text = entry.record.text,
-                        pinned = entry.record.pinned,
+                        uid = incomingUid(record.uid),
+                        title = resolveTitle(record.copy(id = 0, categoryId = categoryId)),
+                        text = if (image != null) "" else record.text,
+                        pinned = record.pinned,
                         createdAt = now,
                         updatedAt = now,
-                        lastUsedAt = entry.record.lastUsedAt,
+                        lastUsedAt = record.lastUsedAt,
                         categoryId = categoryId,
+                        imageFile = image,
+                        imageWidth = record.imageWidth,
+                        imageHeight = record.imageHeight,
                         position = base + index,
                     ),
                 )
-                linkTags(newId, entry.record.tags, now)
-                imported++
+                linkTags(newId, record.tags, now)
+                if (image != null) images++ else snippets++
             }
-            imported
+            stickerEntries.sortedBy { it.record.position }.forEach { entry ->
+                val record = entry.record
+                val image = record.imageFile ?: return@forEach
+                if (image !in available || dao.findByImageFile(image) != null || liveUid(record.uid)) return@forEach
+                val newId = dao.upsert(
+                    SnippetEntity(
+                        uid = incomingUid(record.uid),
+                        title = resolveTitle(record.copy(id = 0, categoryId = null)),
+                        text = "",
+                        pinned = record.pinned,
+                        createdAt = now,
+                        updatedAt = now,
+                        lastUsedAt = record.lastUsedAt,
+                        categoryId = null,
+                        imageFile = image,
+                        imageWidth = record.imageWidth,
+                        imageHeight = record.imageHeight,
+                        position = nextStickerPosition(),
+                        sticker = true,
+                    ),
+                )
+                linkTags(newId, record.tags, now)
+                stickers++
+            }
+            BackupArchive.Counts(snippets = snippets, images = images, stickers = stickers)
         }
+    }
 
     private fun SnippetEntity.toRecord() = SnippetRecord(
         id = id,
@@ -424,9 +663,11 @@ class SnippetRepository private constructor(
         position = position,
         deletedAt = deletedAt,
         sticker = sticker,
+        uid = uid,
     )
 
     private fun SnippetRecord.toEntity() = SnippetEntity(
+        uid = uid.ifEmpty { newUid() },
         id = id,
         title = title,
         text = text,
@@ -447,17 +688,22 @@ class SnippetRepository private constructor(
         id = id,
         name = name,
         position = position,
+        uid = uid,
+        createdAt = createdAt,
+        updatedAt = updatedAt,
     )
 
     companion object {
         const val BIN_RETENTION_MS = 30L * 24 * 60 * 60 * 1000
         const val MAX_IMPORT = 20
+        const val KIND_SNIPPET = "snippet"
+        const val KIND_CATEGORY = "category"
 
         fun forContext(context: Context): SnippetRepository {
             return forDatabase(DatabaseHolder.get(context))
         }
 
         internal fun forDatabase(db: PastilleDatabase): SnippetRepository =
-            SnippetRepository(db, db.snippets(), db.categories(), db.tags())
+            SnippetRepository(db, db.snippets(), db.categories(), db.tags(), db.tombstones())
     }
 }

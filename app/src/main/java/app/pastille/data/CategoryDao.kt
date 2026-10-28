@@ -23,11 +23,17 @@ interface CategoryDao {
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(entity: CategoryEntity): Long
 
-    @Query("UPDATE categories SET name = :name WHERE id = :id")
-    suspend fun rename(id: Long, name: String)
+    @Query("UPDATE categories SET name = :name, updatedAt = :now WHERE id = :id")
+    suspend fun rename(id: Long, name: String, now: Long)
 
-    @Query("UPDATE categories SET position = :position WHERE id = :id")
-    suspend fun updatePosition(id: Long, position: Int)
+    @Query("UPDATE categories SET position = :position, updatedAt = :now WHERE id = :id")
+    suspend fun updatePosition(id: Long, position: Int, now: Long)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun replace(entity: CategoryEntity): Long
+
+    @Query("UPDATE categories SET name = :name WHERE id = :id")
+    suspend fun setName(id: Long, name: String)
 
     @Query("SELECT MAX(position) FROM categories")
     suspend fun maxPosition(): Int?

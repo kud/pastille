@@ -3,6 +3,7 @@ package app.pastille
 import android.app.Application
 import android.content.pm.PackageManager
 import android.os.Build
+import app.pastille.backup.AutoBackup
 import app.pastille.clipboard.ClipboardClearer
 import app.pastille.clipboard.SystemClipboardAccess
 import app.pastille.crash.CrashLog
@@ -18,6 +19,9 @@ class PastilleApplication : Application() {
 
     // Outlives any one screen: startup chores, and writes a closing sheet must not cancel.
     val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    // Settings › Backup: rewrites the chosen file after changes; see AutoBackup.
+    val autoBackup by lazy { AutoBackup(this, backgroundScope) }
 
     val clipboardClearer by lazy {
         ClipboardClearer(
@@ -41,6 +45,7 @@ class PastilleApplication : Application() {
             }
             previous?.uncaughtException(thread, throwable)
         }
+        autoBackup.start()
         backgroundScope.launch {
             runCatching { SnippetRepository.forContext(this@PastilleApplication).backfillTitles() }
         }

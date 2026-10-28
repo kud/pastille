@@ -19,13 +19,18 @@ interface SnippetDao {
     @Query("SELECT * FROM snippets WHERE id = :id")
     suspend fun getById(id: Long): SnippetEntity?
 
+    // Any row, the bin included: uids are unique across the table, and upsert replaces on conflict.
+    @Query("SELECT * FROM snippets WHERE uid = :uid LIMIT 1")
+    suspend fun findByUid(uid: String): SnippetEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(entity: SnippetEntity): Long
 
     @Query("DELETE FROM snippets WHERE id = :id")
     suspend fun deleteById(id: Long)
 
-    @Query("UPDATE snippets SET lastUsedAt = :now, updatedAt = :now WHERE id = :id")
+    // A use, not an edit (v7): updatedAt stays, so sync doesn't treat inserting a snippet as editing it.
+    @Query("UPDATE snippets SET lastUsedAt = :now WHERE id = :id")
     suspend fun touch(id: Long, now: Long)
 
     @Query("UPDATE snippets SET categoryId = NULL WHERE categoryId = :categoryId")
@@ -41,8 +46,8 @@ interface SnippetDao {
     @Query("SELECT imageFile FROM snippets WHERE imageFile IS NOT NULL")
     suspend fun allImageFiles(): List<String>
 
-    @Query("UPDATE snippets SET categoryId = :categoryId WHERE id IN (:ids)")
-    suspend fun setCategory(ids: List<Long>, categoryId: Long?)
+    @Query("UPDATE snippets SET categoryId = :categoryId, updatedAt = :now WHERE id IN (:ids)")
+    suspend fun setCategory(ids: List<Long>, categoryId: Long?, now: Long)
 
     @Query("SELECT title FROM snippets WHERE categoryId IS :categoryId AND id != :excludeId AND deletedAt IS NULL")
     suspend fun titlesInCategory(categoryId: Long?, excludeId: Long): List<String>
@@ -53,11 +58,14 @@ interface SnippetDao {
     @Query("UPDATE snippets SET title = :title WHERE id = :id")
     suspend fun setTitle(id: Long, title: String)
 
+    @Query("UPDATE snippets SET title = :title, updatedAt = :now WHERE id = :id")
+    suspend fun editTitle(id: Long, title: String, now: Long)
+
     @Query("DELETE FROM snippets WHERE id IN (:ids)")
     suspend fun deleteByIds(ids: List<Long>)
 
-    @Query("UPDATE snippets SET position = :position WHERE id = :id")
-    suspend fun updatePosition(id: Long, position: Int)
+    @Query("UPDATE snippets SET position = :position, updatedAt = :now WHERE id = :id")
+    suspend fun updatePosition(id: Long, position: Int, now: Long)
 
     @Query("SELECT * FROM snippets WHERE id IN (:ids)")
     suspend fun getByIds(ids: List<Long>): List<SnippetEntity>
@@ -65,11 +73,11 @@ interface SnippetDao {
     @Query("SELECT MIN(position) FROM snippets")
     suspend fun minPosition(): Int?
 
-    @Query("UPDATE snippets SET deletedAt = :now WHERE id = :id")
+    @Query("UPDATE snippets SET deletedAt = :now, updatedAt = :now WHERE id = :id")
     suspend fun moveToBin(id: Long, now: Long)
 
-    @Query("UPDATE snippets SET deletedAt = NULL WHERE id = :id")
-    suspend fun restoreFromBin(id: Long)
+    @Query("UPDATE snippets SET deletedAt = NULL, updatedAt = :now WHERE id = :id")
+    suspend fun restoreFromBin(id: Long, now: Long)
 
     @Query("SELECT * FROM snippets WHERE deletedAt IS NOT NULL ORDER BY deletedAt DESC")
     fun observeBin(): Flow<List<SnippetEntity>>
@@ -89,6 +97,16 @@ interface SnippetDao {
     @Query("SELECT MAX(position) FROM snippets WHERE sticker = 1")
     suspend fun maxStickerPosition(): Int?
 
-    @Query("UPDATE snippets SET sticker = :sticker, categoryId = :categoryId, position = :position WHERE id = :id")
-    suspend fun setSticker(id: Long, sticker: Boolean, categoryId: Long?, position: Int)
+    @Query("UPDATE snippets SET sticker = :sticker, categoryId = :categoryId, position = :position, updatedAt = :now WHERE id = :id")
+    suspend fun setSticker(id: Long, sticker: Boolean, categoryId: Long?, position: Int, now: Long)
+
+    // Sync (v7): every row, the bin included, and the few writes a merge needs.
+    @Query("SELECT * FROM snippets")
+    suspend fun getEverything(): List<SnippetEntity>
+
+    @Query("SELECT uid FROM snippets WHERE id IN (:ids)")
+    suspend fun uidsFor(ids: List<Long>): List<String>
+
+    @Query("UPDATE snippets SET uid = :uid WHERE id = :id")
+    suspend fun setUid(id: Long, uid: String)
 }

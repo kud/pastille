@@ -4,8 +4,8 @@ import androidx.room.Database
 import androidx.room.RoomDatabase
 
 @Database(
-    entities = [SnippetEntity::class, CategoryEntity::class, TagEntity::class, SnippetTagEntity::class],
-    version = 6,
+    entities = [SnippetEntity::class, CategoryEntity::class, TagEntity::class, SnippetTagEntity::class, TombstoneEntity::class],
+    version = 7,
     exportSchema = true,
 )
 abstract class PastilleDatabase : RoomDatabase() {
@@ -14,4 +14,6 @@ abstract class PastilleDatabase : RoomDatabase() {
     abstract fun categories(): CategoryDao
 
     abstract fun tags(): TagDao
+
+    abstract fun tombstones(): TombstoneDao
 }

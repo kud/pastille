@@ -165,6 +165,8 @@ class PastilleImeService :
 
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
+        // The keyboard opening is a good moment to pick up the other phone's changes; at most once a minute.
+        (application as? app.pastille.PastilleApplication)?.autoBackup?.syncSoon(minIntervalMs = 60_000)
         openCount.intValue++
         reduceMotion.value = PastilleMotion.reduceMotion()
         if (!restarting) {

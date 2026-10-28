@@ -86,19 +86,19 @@ class SnippetBackupTest {
 
     @Test
     fun unknownVersionIsRejected() {
-        val raw = """{"version": 4, "snippets": []}"""
+        val raw = """{"version": 5, "snippets": []}"""
 
         try {
             SnippetBackup.decode(raw)
             fail("expected IllegalArgumentException for unknown version")
         } catch (e: IllegalArgumentException) {
-            assertTrue(e.message!!.contains("4"))
+            assertTrue(e.message!!.contains("5"))
         }
     }
 
     @Test
     fun futurePayloadShapeStillRejectedOnVersion() {
-        val raw = SnippetBackup.encode(samples, categories).replace("\"version\": 3", "\"version\": 99")
+        val raw = SnippetBackup.encode(samples, categories).replace("\"version\": 4", "\"version\": 99")
 
         try {
             SnippetBackup.decode(raw)
@@ -109,7 +109,7 @@ class SnippetBackupTest {
     }
 
     @Test
-    fun encodeExcludesImageSnippets() {
+    fun version4CarriesImageSnippetsAndStickers() {
         val records = samples + SnippetRecord(
             id = 3,
             title = "screenshot",
@@ -120,12 +120,16 @@ class SnippetBackupTest {
             imageFile = "abc123.jpg",
             imageWidth = 100,
             imageHeight = 200,
+            sticker = true,
         )
 
         val decoded = SnippetBackup.decode(SnippetBackup.encode(records, categories))
 
-        assertEquals(2, decoded.snippets.size)
-        assertTrue(decoded.snippets.none { it.record.imageFile != null })
+        assertEquals(3, decoded.snippets.size)
+        val image = decoded.snippets.single { it.record.imageFile != null }.record
+        assertEquals("abc123.jpg", image.imageFile)
+        assertEquals(200, image.imageHeight)
+        assertTrue(image.sticker)
     }
 
     @Test
@@ -134,7 +138,7 @@ class SnippetBackupTest {
 
         val decoded = SnippetBackup.decode(SnippetBackup.encode(tagged, categories))
 
-        assertTrue(SnippetBackup.encode(tagged, categories).contains("\"version\": 3"))
+        assertTrue(SnippetBackup.encode(tagged, categories).contains("\"version\": 4"))
         assertEquals(listOf("email", "work"), decoded.snippets.single { it.record.title == "greeting" }.record.tags)
         assertEquals(emptyList<String>(), decoded.snippets.single { it.record.title == "" }.record.tags)
     }

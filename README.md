@@ -33,7 +33,7 @@ Pastille is an open-source Android keyboard for pasting, not typing. Tap a saved
 - Turn snippets, stickers or images off entirely if you only need some of them.
 - Gboard-style dark, light and Material You themes, with a choice of panel heights.
 - Share a snippet, sticker or image through Android's share sheet (Quick Share included), or the whole collection as one backup file. Open a backup someone sent you and Pastille imports it, skipping what you already have.
-- Back up snippets, stickers and images to a file you choose, in Google Drive or on the phone, and Pastille keeps it up to date after every change (Settings › Backup).
+- Sync snippets, stickers and images through a file you choose, in Google Drive or on the phone: Pastille reads it and updates it after every change, so two phones that choose the same file keep the same collection (Settings › Backup).
 
 ## Install
 

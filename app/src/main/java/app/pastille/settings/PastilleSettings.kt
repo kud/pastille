@@ -162,6 +162,25 @@ class PastilleSettings private constructor(private val prefs: SharedPreferences)
         get() = prefs.getString(KEY_SYNC_HASH, null)
         set(value) = prefs.edit().apply { if (value == null) remove(KEY_SYNC_HASH) else putString(KEY_SYNC_HASH, value) }.apply()
 
+    // A write to the shared file that started and was never confirmed by reading it back: the hash
+    // of what it was meant to hold. While it is set, a file that isn't a whole archive any more is
+    // this phone's own interrupted write, which the next sync may replace.
+    // Committed, not applied: it has to be on disk before the first byte goes out, or a process
+    // killed mid-write would forget it.
+    var syncPendingWrite: String?
+        get() = prefs.getString(KEY_SYNC_PENDING, null)
+        @android.annotation.SuppressLint("ApplySharedPref")
+        set(value) {
+            prefs.edit().apply { if (value == null) remove(KEY_SYNC_PENDING) else putString(KEY_SYNC_PENDING, value) }.commit()
+        }
+
+    // The hash of what the file held just before this phone last replaced it. A cloud provider's
+    // cache can serve those old bytes again for a while; reading them back as news would undo the
+    // write, so they are skipped.
+    var syncReplacedHash: String?
+        get() = prefs.getString(KEY_SYNC_REPLACED, null)
+        set(value) = prefs.edit().apply { if (value == null) remove(KEY_SYNC_REPLACED) else putString(KEY_SYNC_REPLACED, value) }.apply()
+
     fun clearBackup() {
         prefs.edit()
             .remove(KEY_BACKUP_URI)
@@ -172,6 +191,8 @@ class PastilleSettings private constructor(private val prefs: SharedPreferences)
             .remove(KEY_SYNC_SIZE)
             .remove(KEY_SYNC_MODIFIED)
             .remove(KEY_SYNC_HASH)
+            .remove(KEY_SYNC_PENDING)
+            .remove(KEY_SYNC_REPLACED)
             .apply()
     }
 
@@ -184,6 +205,8 @@ class PastilleSettings private constructor(private val prefs: SharedPreferences)
         private const val KEY_SYNC_SIZE = "sync_remote_size"
         private const val KEY_SYNC_MODIFIED = "sync_remote_modified"
         private const val KEY_SYNC_HASH = "sync_remote_hash"
+        private const val KEY_SYNC_PENDING = "sync_pending_write"
+        private const val KEY_SYNC_REPLACED = "sync_replaced_hash"
         private const val PREFS_NAME = "pastille_settings"
         private const val KEY_CLIPBOARD_CLEAR_DELAY = "clipboard_clear_delay"
         private const val KEY_RETURN_KEYBOARD_ID = "return_keyboard_id"
@@ -238,6 +261,16 @@ enum class BackupProblem(val key: String) {
     // The file couldn't be read (Drive offline, still downloading, or not a backup yet). Nothing is
     // written until it reads, so this phone never overwrites changes it hasn't seen.
     Read("read"),
+    // The storage app didn't keep Pastille's permission to the file (takePersistableUriPermission
+    // threw, or returned without persisting it): syncing works only until the phone restarts.
+    NotKept("not-kept"),
+    // The storage app granted reading but not writing this file.
+    ReadOnly("read-only"),
+    // The storage app refuses every write mode that empties the file first, and the new backup is
+    // shorter than the old one: writing it would leave the old one's end behind, so nothing was written.
+    CantOverwrite("cant-overwrite"),
+    // The file read back differs from what was written, even after waiting for the storage app.
+    Mismatch("mismatch"),
     ;
 
     companion object {

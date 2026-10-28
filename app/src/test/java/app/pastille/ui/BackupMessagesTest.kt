@@ -45,7 +45,12 @@ class BackupMessagesTest {
         val access = backupStatus("pastille-backup.zip", now, BackupProblem.Access, now)
         assertTrue(access, access.startsWith("Can't reach pastille-backup.zip") && access.endsWith("choose a file again."))
         assertTrue(backupStatus("b.zip", now, BackupProblem.Write, now).contains("failed"))
-        assertEquals("b.zip · Waiting for Drive", backupStatus("b.zip", now, BackupProblem.Read, now))
+        assertEquals("b.zip · Waiting for Drive", backupStatus("b.zip", now, BackupProblem.Read, now, "Drive"))
+        assertEquals("b.zip · Waiting for pCloud", backupStatus("b.zip", now, BackupProblem.Read, now, "pCloud"))
+        assertTrue(backupStatus("b.zip", now, BackupProblem.NotKept, now, "pCloud").startsWith("pCloud didn't keep permission to b.zip"))
+        assertTrue(backupStatus("b.zip", now, BackupProblem.CantOverwrite, now, "pCloud").startsWith("pCloud can't overwrite b.zip"))
+        assertTrue(backupStatus("b.zip", now, BackupProblem.ReadOnly, now, "the storage app").startsWith("The storage app only lets Pastille read"))
+        assertTrue(backupStatus("b.zip", now, BackupProblem.Mismatch, now, "pCloud").startsWith("pCloud didn't save b.zip"))
     }
 
     @Test

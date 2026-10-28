@@ -33,6 +33,7 @@ Pastille is an open-source Android keyboard for pasting, not typing. Tap a saved
 - Turn snippets, stickers or images off entirely if you only need some of them.
 - Gboard-style dark, light and Material You themes, with a choice of panel heights.
 - Share a snippet, sticker or image through Android's share sheet (Quick Share included), or the whole collection as one backup file. Open a backup someone sent you and Pastille imports it, skipping what you already have.
+- Show a text snippet as a QR code, full screen, for another phone to read with its camera.
 - Sync snippets, stickers and images through a file you choose, in Google Drive or on the phone: Pastille reads it and updates it after every change, so two phones that choose the same file keep the same collection (Settings › Backup).
 
 ## Install
@@ -46,7 +47,7 @@ Pastille needs Android 9 (API 28) or later.
 
 1. Open the Pastille app and follow the setup card, or do it by hand in the next steps.
 2. Enable Pastille under Settings → System → Keyboard → On-screen keyboard.
-3. In any text field, switch to Pastille with the keyboard switcher, or use the test field under Settings › Height.
+3. In any text field, switch to Pastille with the keyboard switcher.
 4. Optionally, grant photo access in Pastille's Settings to see recent images in the panel.
 
 ### Quick Settings tile
@@ -74,6 +75,7 @@ Or open the directory in Android Studio and run the `app` configuration on a dev
 
 - [Design spec](docs/design-spec.md): how the keyboard and app look and behave.
 - [Architecture](docs/architecture.md): schema, storage, image handling and the Quick Settings tile mechanics.
+- [Third-party notices](docs/third-party-notices.md): code from others that Pastille includes.
 
 ## Support
 

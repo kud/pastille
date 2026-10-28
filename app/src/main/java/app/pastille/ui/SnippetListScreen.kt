@@ -54,10 +54,7 @@ import androidx.compose.ui.semantics.semantics
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.material.icons.Icons
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -72,7 +69,6 @@ import androidx.compose.material.icons.automirrored.rounded.ShortText
 import androidx.compose.material.icons.automirrored.rounded.DriveFileMove
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Delete
@@ -152,11 +148,8 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -166,7 +159,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.pastille.R
-import app.pastille.crash.CrashLog
 import app.pastille.data.SnippetRepository
 import app.pastille.images.ImageStore
 import app.pastille.images.ImageThumbnail
@@ -192,6 +184,10 @@ import app.pastille.share.shareSnippet
 import app.pastille.share.sendToPhone
 import androidx.compose.material.icons.automirrored.rounded.SendToMobile
 import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.QrCode2
+import app.pastille.qr.SnippetQr
+import app.pastille.qr.SnippetQrDialog
+import app.pastille.qr.QR_TOO_LONG
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
@@ -220,15 +216,11 @@ fun SnippetListScreen(
     var searching by rememberSaveable { mutableStateOf(false) }
     var refreshTick by remember { mutableStateOf(0) }
     var showMenu by remember { mutableStateOf(false) }
-    var showCrashDialog by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
     val scrollBehavior = rememberListDrivenScrollBehavior()
     val binned by remember { repository.observeBin() }
         .collectAsStateWithLifecycle(initialValue = emptyList())
     val binCount = binned.size
-    val hasCrashReport = remember(showMenu) {
-        CrashLog.forContext(context).entries().isNotEmpty()
-    }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { refreshTick++ }
     val onboarding = rememberOnboarding(refreshTick)
     val settings = remember { PastilleSettings.forContext(context) }
@@ -475,49 +467,6 @@ fun SnippetListScreen(
     }
     val categoryNames = remember(categories) { categories.associate { it.id to it.name } }
 
-    if (showCrashDialog) {
-        val entries = remember(showCrashDialog) { CrashLog.forContext(context).entries() }
-        val clipboard = LocalClipboardManager.current
-        val crashText = remember(entries) { entries.joinToString("\n\nâââ\n\n") }
-        AlertDialog(
-            onDismissRequest = { showCrashDialog = false },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        clipboard.setText(AnnotatedString(crashText))
-                        showCrashDialog = false
-                    },
-                    enabled = entries.isNotEmpty(),
-                ) {
-                    Text("Copy")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showCrashDialog = false }) {
-                    Text("Close")
-                }
-            },
-            title = { Text("Last crash report") },
-            text = {
-                if (entries.isEmpty()) {
-                    Text("No crashes recorded.")
-                } else {
-                    Column(
-                        modifier = Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState()),
-                    ) {
-                        SelectionContainer {
-                            Text(
-                                text = crashText,
-                                style = MaterialTheme.typography.bodySmall,
-                                fontFamily = FontFamily.Monospace,
-                            )
-                        }
-                    }
-                }
-            },
-        )
-    }
-
     BackHandler(enabled = searching) {
         searching = false
         query = ""
@@ -703,18 +652,6 @@ fun SnippetListScreen(
                                     onOpenBin()
                                 },
                             )
-                            if (hasCrashReport) {
-                                DropdownMenuItem(
-                                    text = { Text("Last crash report") },
-                                    leadingIcon = {
-                                        Icon(Icons.Rounded.BugReport, contentDescription = null)
-                                    },
-                                    onClick = {
-                                        showMenu = false
-                                        showCrashDialog = true
-                                    },
-                                )
-                            }
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
@@ -1028,6 +965,7 @@ internal fun SnippetRow(
     val rowScope = rememberCoroutineScope()
     var menuOpen by remember { mutableStateOf(false) }
     var moveMenuOpen by remember { mutableStateOf(false) }
+    var qrOpen by remember { mutableStateOf(false) }
     var expanded by rememberSaveable(snippet.id) { mutableStateOf(false) }
     var overflows by remember(snippet.id) { mutableStateOf(false) }
     var deleting by remember(snippet.id) { mutableStateOf(false) }
@@ -1161,6 +1099,32 @@ internal fun SnippetRow(
                         if (!shareSnippet(context, snippet)) toast(context, "That image is gone")
                     },
                 )
+                // Text only: a camera reads it and shares it into Pastille. Too long for the
+                // biggest code, the item says so and Send to another phone, just below, carries it.
+                if (!snippet.isImage) {
+                    val qrFits = remember(snippet.text) { SnippetQr.fits(snippet.text) }
+                    DropdownMenuItem(
+                        text = {
+                            Column {
+                                Text("Show QR code")
+                                if (!qrFits) {
+                                    Text(
+                                        text = QR_TOO_LONG,
+                                        style = MaterialTheme.typography.bodySmall,
+                                    )
+                                }
+                            }
+                        },
+                        leadingIcon = {
+                            Icon(Icons.Rounded.QrCode2, contentDescription = null)
+                        },
+                        enabled = qrFits,
+                        onClick = {
+                            menuOpen = false
+                            qrOpen = true
+                        },
+                    )
+                }
                 // A file, not text: Quick Share's "Open" on the other phone lands in "Import to
                 // Pastille", where plain text would only reach the clipboard.
                 DropdownMenuItem(
@@ -1186,6 +1150,13 @@ internal fun SnippetRow(
                         menuOpen = false
                         onDelete()
                     },
+                )
+            }
+            if (qrOpen) {
+                SnippetQrDialog(
+                    title = rowTitle(snippet.title, snippet.text).ifBlank { "Snippet" },
+                    text = snippet.text,
+                    onDismiss = { qrOpen = false },
                 )
             }
             if (onMove != null) {

@@ -70,6 +70,8 @@ android {
 
     buildFeatures {
         compose = true
+        // Settings › About reads the version from it.
+        buildConfig = true
     }
 
     testOptions {

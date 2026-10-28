@@ -67,23 +67,37 @@ const val SHARE_FAILED = "Couldn't prepare the backup to share."
 
 /**
  * Settings › Backup's status line: what file, and when this phone last synced with it, or what went
- * wrong and the one thing to do about it.
+ * wrong and the one thing to do about it. [provider] is the storage app's name
+ * ([app.pastille.backup.SyncDiagnosis.providerLabel]), so a pCloud problem never says "Drive".
  */
 fun backupStatus(
     name: String,
     lastAt: Long?,
     problem: app.pastille.settings.BackupProblem?,
     now: Long,
-): String = when (problem) {
-    app.pastille.settings.BackupProblem.Access -> "Can't reach $name. Tap to choose a file again."
-    app.pastille.settings.BackupProblem.Write -> "The last sync with $name failed. Tap to choose a file again."
-    app.pastille.settings.BackupProblem.Read -> "$name · Waiting for Drive"
-    null -> if (lastAt == null) {
-        "$name · Not synced yet"
-    } else {
-        val ago = relativeTime(lastAt, now)
-        val phrase = if (ago == "Just now" || ago == "Yesterday") ago.lowercase() else ago
-        "$name · Synced $phrase"
+    provider: String = "the storage app",
+): String {
+    // "The storage app" opens a sentence; a brand keeps its own case ("pCloud", never "PCloud").
+    val who = if (provider.first().isLowerCase() && ' ' in provider) provider.replaceFirstChar { it.uppercase() } else provider
+    return when (problem) {
+        app.pastille.settings.BackupProblem.Access -> "Can't reach $name. Tap to choose a file again."
+        app.pastille.settings.BackupProblem.Write -> "The last sync with $name failed. Tap to choose a file again."
+        app.pastille.settings.BackupProblem.Read -> "$name · Waiting for $provider"
+        app.pastille.settings.BackupProblem.NotKept ->
+            "$who didn't keep permission to $name, so syncing stops when the phone restarts. Tap to choose it again."
+        app.pastille.settings.BackupProblem.ReadOnly ->
+            "$who only lets Pastille read $name. Tap to create a new file instead."
+        app.pastille.settings.BackupProblem.CantOverwrite ->
+            "$who can't overwrite $name, so Pastille left it as it was. Tap to choose a file somewhere else."
+        app.pastille.settings.BackupProblem.Mismatch ->
+            "$who didn't save $name as Pastille wrote it. Pastille will try again after the next change."
+        null -> if (lastAt == null) {
+            "$name · Not synced yet"
+        } else {
+            val ago = relativeTime(lastAt, now)
+            val phrase = if (ago == "Just now" || ago == "Yesterday") ago.lowercase() else ago
+            "$name · Synced $phrase"
+        }
     }
 }
 

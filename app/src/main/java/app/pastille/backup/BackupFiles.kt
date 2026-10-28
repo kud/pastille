@@ -2,6 +2,7 @@ package app.pastille.backup
 
 import android.content.Context
 import android.net.Uri
+import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import app.pastille.data.SnippetRepository
 import app.pastille.images.ImageStore
@@ -64,21 +65,76 @@ object BackupFiles {
 
     /**
      * Replaces the contents of the document at [uri] with [source], then reads it back and compares.
-     * "wt" truncates; some providers only take "rwt". Plain "w" is never used: on several Android
-     * versions it doesn't truncate, which would leave the end of a longer old zip behind.
+     * "wt" truncates; some providers only take "rwt". Plain "w" doesn't truncate on several Android
+     * versions, so it is used only when a provider refuses both and [currentLength] (what the file
+     * holds now) is known and no longer than [source]: then nothing of the old file survives past the
+     * new end. Otherwise it throws [CantOverwrite] before touching the file.
+     *
+     * Cloud providers (pCloud, Drive) may serve the old bytes for a moment after a write while they
+     * upload, so a mismatch is read again after [readBackDelaysMs] before it counts
+     * ([ReadBackMismatch]). Returns the mode it wrote with, for the diagnostic log.
      */
-    suspend fun writeTo(context: Context, uri: Uri, source: File) = withContext(Dispatchers.IO) {
+    suspend fun writeTo(
+        context: Context,
+        uri: Uri,
+        source: File,
+        currentLength: Long? = null,
+        readBackDelaysMs: List<Long> = listOf(500, 1_500, 3_000),
+    ): String = withContext(Dispatchers.IO) {
         val resolver = context.contentResolver
-        val stream = try {
-            resolver.openOutputStream(uri, "wt")
-        } catch (_: IllegalArgumentException) {
-            resolver.openOutputStream(uri, "rwt")
-        } ?: throw FileNotFoundException("Could not open $uri")
+        var lastWriteMode = "wt"
+        var refused: Exception? = null
+        var stream: java.io.OutputStream? = null
+        for (mode in listOf("wt", "rwt")) {
+            stream = try {
+                resolver.openOutputStream(uri, mode)
+            } catch (error: IllegalArgumentException) {
+                refused = error; null
+            } catch (error: UnsupportedOperationException) {
+                refused = error; null
+            } catch (error: FileNotFoundException) {
+                // Some providers report an unsupported mode as "not found"; a file truly gone
+                // shows up when every mode fails and it is no longer listed.
+                refused = error; null
+            }
+            if (stream != null) {
+                lastWriteMode = mode
+                break
+            }
+        }
+        if (stream == null) {
+            if (!exists(context, uri)) throw (refused as? FileNotFoundException) ?: FileNotFoundException("Document gone")
+            if (!SyncDiagnosis.plainWriteIsSafe(source.length(), currentLength)) {
+                throw CantOverwrite("Provider refused wt and rwt; new ${source.length()} B, current ${currentLength ?: "unknown"}")
+            }
+            stream = resolver.openOutputStream(uri, "w") ?: throw FileNotFoundException("Could not open for writing")
+            lastWriteMode = "w"
+        }
         stream.use { out -> source.inputStream().use { it.copyTo(out) } }
         val expected = source.inputStream().use(::sha256)
-        val actual = resolver.openInputStream(uri)?.use(::sha256)
-            ?: throw FileNotFoundException("Could not read back $uri")
-        if (!expected.contentEquals(actual)) throw IOException("Backup file doesn't match what was written")
+        val delays = listOf(0L) + readBackDelaysMs
+        for ((attempt, delayMs) in delays.withIndex()) {
+            if (delayMs > 0) kotlinx.coroutines.delay(delayMs)
+            val actual = resolver.openInputStream(uri)?.use(::sha256)
+                ?: throw FileNotFoundException("Could not read back")
+            if (expected.contentEquals(actual)) return@withContext lastWriteMode
+            if (attempt == delays.lastIndex) {
+                throw ReadBackMismatch("Read-back differs after ${delays.sum()} ms, mode $lastWriteMode")
+            }
+        }
+        lastWriteMode
+    }
+
+    /**
+     * The document's flags (DocumentsContract.Document.COLUMN_FLAGS), or null when the provider
+     * doesn't answer: whether it says it takes writes and deletes, for the diagnostic log.
+     */
+    fun flags(context: Context, uri: Uri): Int? = try {
+        context.contentResolver.query(uri, arrayOf(DocumentsContract.Document.COLUMN_FLAGS), null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getInt(0) else null
+        }
+    } catch (_: Exception) {
+        null
     }
 
     /** Builds the backup in cache/shared/, the folder the FileProvider serves, for the share sheet. */
@@ -140,12 +196,13 @@ object BackupFiles {
 
     /** The provider's size and last-modified time for [uri]; either may be null when it doesn't say. */
     fun stat(context: Context, uri: Uri): Pair<Long?, Long?> = try {
-        val columns = arrayOf(OpenableColumns.SIZE, android.provider.DocumentsContract.Document.COLUMN_LAST_MODIFIED)
+        val columns = arrayOf(OpenableColumns.SIZE, DocumentsContract.Document.COLUMN_LAST_MODIFIED)
         context.contentResolver.query(uri, columns, null, null, null)?.use { cursor ->
             if (!cursor.moveToFirst()) return@use null to null
             val size = if (cursor.isNull(0)) null else cursor.getLong(0)
             val modified = if (cursor.getColumnCount() < 2 || cursor.isNull(1)) null else cursor.getLong(1)
-            size to modified
+            // A size of 0 is real (a file just created); a modified time of 0 means "don't know".
+            size to SyncDiagnosis.knownModified(modified)
         } ?: (null to null)
     } catch (_: Exception) {
         null to null

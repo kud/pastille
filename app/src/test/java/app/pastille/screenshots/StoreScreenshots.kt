@@ -3,7 +3,6 @@ package app.pastille.screenshots
 import android.app.Application
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.drawable.AdaptiveIconDrawable
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
@@ -12,38 +11,22 @@ import android.graphics.Typeface
 import android.view.inputmethod.InputMethodInfo
 import android.view.inputmethod.InputMethodManager
 import androidx.activity.ComponentActivity
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import app.pastille.data.PastilleDatabase
@@ -79,20 +62,19 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.File
-import java.io.ByteArrayOutputStream
-import java.io.DataOutputStream
-import java.util.zip.CRC32
-import java.util.zip.DeflaterOutputStream
 
 /**
  * The store and README screenshots, rendered from the real composables on invented fixtures.
  * Run with `./scripts/screenshots.sh`; excluded from ordinary test runs (see app/build.gradle.kts).
+ * One subclass per screen, at the end of this file: Gradle forks a JVM per test class, and Robolectric's
+ * native canvas aborts the process (exit 134) when several renders share one.
+ * The listing icon and feature graphic live in [StoreListingArt].
  * Every name, place and line of text here is made up: never put real data in this file.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(qualifiers = "w360dp-h800dp-xxhdpi")
-class StoreScreenshots {
+abstract class StoreScreenshots {
 
     @get:Rule
     val compose = createAndroidComposeRule<ComponentActivity>()
@@ -100,6 +82,7 @@ class StoreScreenshots {
     private lateinit var db: PastilleDatabase
     private lateinit var repository: SnippetRepository
     private val app get() = ApplicationProvider.getApplicationContext<Application>()
+
     @Before
     fun setUp() {
         db = Room.inMemoryDatabaseBuilder(app, PastilleDatabase::class.java).allowMainThreadQueries().build()
@@ -118,8 +101,7 @@ class StoreScreenshots {
         db.close()
     }
 
-    @Test
-    fun snippetList() {
+    protected fun snippetList() {
         seedSnippets()
         PastilleSettings.forContext(app).appStickersMode = false
         compose.setContent {
@@ -131,8 +113,7 @@ class StoreScreenshots {
         compose.capture("1-snippet-list")
     }
 
-    @Test
-    fun keyboardSnippets() {
+    protected fun keyboardSnippets() {
         val folders = listOf(
             CategoryRecord(id = 1, name = "Work", position = 0),
             CategoryRecord(id = 2, name = "Travel", position = 1),
@@ -149,8 +130,7 @@ class StoreScreenshots {
         compose.capture("2-keyboard-snippets")
     }
 
-    @Test
-    fun stickerList() {
+    protected fun stickerList() {
         seedStickers()
         PastilleSettings.forContext(app).appStickersMode = true
         compose.setContent {
@@ -162,8 +142,7 @@ class StoreScreenshots {
         compose.capture("3-stickers")
     }
 
-    @Test
-    fun keyboardStickers() {
+    protected fun keyboardStickers() {
         val stickers = writeStickers().mapIndexed { index, (name, file) ->
             SnippetRecord(
                 id = index + 1L, title = name, text = "", imageFile = file,
@@ -178,8 +157,7 @@ class StoreScreenshots {
         compose.capture("4-keyboard-stickers")
     }
 
-    @Test
-    fun snippetEditor() {
+    protected fun snippetEditor() {
         val ids = seedSnippets()
         compose.setContent {
             PastilleTheme(darkTheme = false, dynamicColor = false) {
@@ -190,8 +168,7 @@ class StoreScreenshots {
         compose.capture("5-snippet-editor")
     }
 
-    @Test
-    fun settings() {
+    protected fun settings() {
         compose.setContent {
             PastilleTheme(darkTheme = false, dynamicColor = false) {
                 SettingsScreen(onBack = {})
@@ -267,12 +244,15 @@ class StoreScreenshots {
             Canvas(bitmap).draw()
             val file = "sticker-${name.lowercase().replace(' ', '-')}.png"
             writePng(bitmap, File(dir, file))
+            // Decode once here, on the test thread: when the first decode happens on one of the
+            // keyboard's IO threads, Robolectric's native graphics can fail to find java/nio/FloatBuffer
+            // and abort the JVM (exit 134).
+            checkNotNull(ImageStore.forContext(app).loadThumbnail(file, STICKER_PX)) { "sticker $file did not decode" }
             name to file
         }
     }
 
     private companion object {
-        const val OUT_DIR_PROPERTY = "pastille.screenshots.dir"
         const val STICKER_PX = 384
         const val HOUR = 3_600_000L
         const val DAY = 24 * HOUR
@@ -343,4 +323,40 @@ class StoreScreenshots {
             "OK" to { label("OK!", 0xFF3DDC84, 0xFF0B2A14, 110f, 4f) },
         )
     }
+}
+
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+class SnippetListShot : StoreScreenshots() {
+    @Test
+    fun render() = snippetList()
+}
+
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+class KeyboardSnippetsShot : StoreScreenshots() {
+    @Test
+    fun render() = keyboardSnippets()
+}
+
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+class StickerListShot : StoreScreenshots() {
+    @Test
+    fun render() = stickerList()
+}
+
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+class KeyboardStickersShot : StoreScreenshots() {
+    @Test
+    fun render() = keyboardStickers()
+}
+
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+class SnippetEditorShot : StoreScreenshots() {
+    @Test
+    fun render() = snippetEditor()
+}
+
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+class SettingsShot : StoreScreenshots() {
+    @Test
+    fun render() = settings()
 }

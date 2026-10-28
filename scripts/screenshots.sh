@@ -6,6 +6,8 @@
 # Extra arguments go to Gradle, e.g. `./scripts/screenshots.sh --offline`.
 set -eu
 cd "$(dirname "$0")/.."
-rm -f fastlane/metadata/android/en-US/images/phoneScreenshots/*.png
+# Clear every output first, so the closing ls proves this run wrote them.
+rm -f fastlane/metadata/android/en-US/images/phoneScreenshots/*.png fastlane/metadata/android/en-US/images/featureGraphic.png \
+  fastlane/metadata/android/en-US/images/icon.png assets/icon.png
 ./gradlew "$@" -Pscreenshots :app:testDebugUnitTest --tests 'app.pastille.screenshots.*'
 ls -1 fastlane/metadata/android/en-US/images/phoneScreenshots/*.png fastlane/metadata/android/en-US/images/featureGraphic.png fastlane/metadata/android/en-US/images/icon.png assets/icon.png

@@ -84,7 +84,8 @@ android {
                 )
                 it.outputs.upToDateWhen { false }
                 it.maxHeapSize = "2g"
-                // One JVM per screen: Robolectric's native canvas aborts the process when several share one.
+                // One JVM per test class (forkEvery counts classes, not methods): Robolectric's native canvas
+                // aborts the process (exit 134) when too many renders share one, so the listing art has its own.
                 it.forkEvery = 1
             } else {
                 it.exclude("app/pastille/screenshots/**")

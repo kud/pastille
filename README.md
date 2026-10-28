@@ -45,7 +45,7 @@ Pastille needs Android 9 (API 28) or later.
 
 1. Open the Pastille app and follow the setup card, or do it by hand in the next steps.
 2. Enable Pastille under Settings → System → Keyboard → On-screen keyboard.
-3. In any text field, switch to Pastille with the keyboard switcher, or use "Try the keyboard" in the app's menu.
+3. In any text field, switch to Pastille with the keyboard switcher, or use the test field under Settings › Height.
 4. Optionally, grant photo access in Pastille's Settings to see recent images in the panel.
 
 ### Quick Settings tile

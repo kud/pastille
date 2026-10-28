@@ -307,14 +307,11 @@ The current `TopAppBar` has "Pastille" at default title weight and two bare arro
 Replace the two arrows with:
 
 - [ ] **Search:** `IconButton(Icons.Outlined.Search, "Search snippets")`. It opens an M3 `SearchBar` in expanded mode (full-screen, `inputField` focused, IME open by intent). Results show the 6.1 row style across all categories. The in-content `OutlinedTextField` search is **removed**, which also fixes the IME covering the FAB on launch (section 4): nothing focuses a text field until the user asks.
-- [ ] **Overflow:** `IconButton(Icons.Filled.MoreVert, "More options")`, opening a `DropdownMenu` with leading icons in `onSurfaceVariant`, in this order:
-  - "Import snippets" — `Icons.Outlined.FileDownload`
-  - "Export snippets" — `Icons.Outlined.FileUpload`
-  - `HorizontalDivider`
-  - "Keyboard setup" — `Icons.Outlined.Keyboard` (opens the existing enable/switch steps, or `ACTION_INPUT_METHOD_SETTINGS`)
-  - "Last crash report" — `Icons.Outlined.BugReport`, **only when a crash report exists** (if dev.2 has added crash capture; omit otherwise)
-  - Build B: "New category" (see 6.3)
-- [ ] Don't add a Settings item until there is a settings screen. An entry that leads to nothing is worse than no entry.
+- [x] **Overflow:** `IconButton(Icons.Filled.MoreVert, "More options")`, opening a `DropdownMenu` with leading icons in `onSurfaceVariant`. **It follows the mode on screen** (Iris, 2026-10-28; Erwann: « Un nouveau folder ça dépend de sticker ou prompt, pas des settings global »): what acts on one kind shows only in that mode, then a divider, then what belongs to the whole app.
+  - **Snippets:** "Import snippets" (`FileDownload`), "Export snippets" (`FileUpload`), "Reorder" (`SwapVert`).
+  - **Stickers:** "Reorder" only. Stickers have no folders, and the export skips images, so neither belongs here.
+  - `HorizontalDivider`, then in both modes: "Keyboard setup" (`Keyboard`, `ACTION_INPUT_METHOD_SETTINGS`), "Settings", "Bin (N)" when the bin isn't empty, "Last crash report" when one exists.
+  - **Not in the menu:** "New folder" lives only at the end of the folder row ("+ Add", §14.5), beside the folders it makes; a second door in the overflow showed it on Stickers too. "Try the keyboard" lives only in Settings › Height, under the preview it tests: it helps once, while setting up, and was noise in the everyday menu.
 
 ### 8.4 Colour roles
 
@@ -529,7 +526,7 @@ One level only, no nesting. A snippet is either at the top level (no folder) or 
 - [ ] **Folder screen:** a new destination.
   - Top bar: a `TopAppBar` (not large) with a back arrow and the folder name in `titleLarge`, plus an overflow with "Rename folder" and "Delete folder". Delete confirms: "Snippets in Work move to the top level." Snippets are never deleted with a folder.
   - FAB "New snippet" pre-fills this folder.
-- [ ] **New folder:** header overflow "New folder" (§8.3), with an `AlertDialog` containing one text field.
+- [x] **New folder:** the folder row's "+ Add" chip (§14.5), with an `AlertDialog` containing one text field. Not in the overflow (§8.3).
 - [ ] **Search** (§8.3) searches everything, with the folder name in each result's meta row.
 
 ### 10.5 Titles, and title-only buttons in the keyboard
@@ -1046,7 +1043,7 @@ The Settings screen was one long column of `ListItem`s under `primary` section h
 
 | Group | Rows |
 |---|---|
-| Keyboard | Style (preview + the inline radio list), Height (preview, Portrait and Landscape segmented rows, the try-it field), Show in the keyboard (Snippets / Stickers / Images), Return after a snippet, Switch back to |
+| Keyboard | Style (preview + the inline radio list), Height (preview, Portrait and Landscape segmented rows, the try-it field), Show in the keyboard (Snippets / Stickers / Images), Return after a snippet, Switch back to (an inline radio list) |
 | Clipboard | Clear clipboard after copying (a dialog of radio rows: Off, 5 s, 10 s, 30 s, 1 min) |
 | Photos | Photo access, Return after an image |
 
@@ -1054,7 +1051,14 @@ The Settings screen was one long column of `ListItem`s under `primary` section h
 
 - [x] **Icon tile:** 36dp, 10dp corners, `secondaryContainer`, with a 20dp `onSecondaryContainer` icon. The same accent on every row.
 - [x] **Text:** title `bodyLarge` at medium weight in `onSurface`; subtitle `bodyMedium` `onSurfaceVariant`. Disabled rows draw both at 38%.
-- [x] **Chevron** (`KeyboardArrowRight`, `onSurfaceVariant`) only on rows that open something: Switch back to (a menu) and Photo access while it can still ask (the system permission dialog). Switch rows keep their trailing `Switch`.
+- [x] **Chevron** (`KeyboardArrowRight`, `onSurfaceVariant`) only on rows that open something: Photo access (the system prompt, or the app's system settings page). Switch rows keep their trailing `Switch`.
+- [x] **Switch back to** (Iris, 2026-10-28; Erwann: « On peut pas avoir la liste entière réellement ici ? Installés ? Et en plus "previous keyboard" »): the header row ("After a snippet or image goes in"), then every typing keyboard as an inline radio list like Style's, so the choice is visible without opening anything and the selection is the radio's dot, not a colour:
+  - the enabled keyboards in the system's order, the first marked "Main keyboard" (it stores null, so it follows the system and never appears twice);
+  - "Previous keyboard", "Whichever you used before Pastille";
+  - installed keyboards that aren't enabled, disabled at 38% with "Not enabled" (Android only switches to enabled ones), and under them one "Enable keyboards" `TextButton` to `ACTION_INPUT_METHOD_SETTINGS`. The list is read again on resume.
+  - The selection shows what will happen (`returnKeyboardChoices`, after `returnKeyboardTarget`): a chosen keyboard since disabled shows the main one selected; with no other keyboard, Previous. Stored values are unchanged: null, `previous`, or an IME id. Voice input stays out (`isTypingKeyboard`).
+- [x] **Photo access is not a switch** (Iris, 2026-10-28, on Erwann's question): an app can only ask for a permission, never grant itself one, and turning images off already exists as Show in the keyboard › Images. The row states where access stands and opens the one place that changes it: the system prompt while it has never been answered, or on "Selected photos only" (Android 14 offers "Allow all"); otherwise the app's page in system settings (`ACTION_APPLICATION_DETAILS_SETTINGS`), since the system stops asking after two refusals. With Images hidden in the keyboard it reads "Only used by the Images tab, which is hidden."
+- [x] **The setup card asks for photos once.** Declining or choosing "Select photos" is an answer (`photoPromptAnswered`), and the card drops the step; Settings › Photo access is where it changes later. It used to ask forever, with a button the system no longer answered.
 - [x] **The style radio list stays inline:** each option is a row whose 36dp leading slot holds the `RadioButton`, so its text lines up with the tiles above. No hairlines between the options; they're one choice.
 - [x] **Detail content** that belongs to a row (previews, segmented buttons) sits under it at the card's full inner width (16dp each side), so the four height options never squeeze.
 - [x] The whole row is the touch target (`selectable`, `toggleable` or `clickable` on the row), with Material's ripple.

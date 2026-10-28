@@ -29,6 +29,12 @@ class PastilleSettings private constructor(private val prefs: SharedPreferences)
         get() = prefs.getBoolean(KEY_APP_STICKERS_MODE, false)
         set(value) = prefs.edit().putBoolean(KEY_APP_STICKERS_MODE, value).apply()
 
+    // True once the system photo prompt has been answered, either way. The setup card asks once;
+    // after that, Settings › Photo access is where it changes (the system stops asking after two refusals).
+    var photoPromptAnswered: Boolean
+        get() = prefs.getBoolean(KEY_PHOTO_PROMPT_ANSWERED, false)
+        set(value) = prefs.edit().putBoolean(KEY_PHOTO_PROMPT_ANSWERED, value).apply()
+
     var keyboardCategoryId: Long?
         get() = readCategoryId(KEY_KEYBOARD_CATEGORY_ID)
         set(value) = writeCategoryId(KEY_KEYBOARD_CATEGORY_ID, value)
@@ -129,6 +135,7 @@ class PastilleSettings private constructor(private val prefs: SharedPreferences)
         private const val KEY_RETURN_AFTER_IMAGE = "return_after_image"
         private const val KEY_APP_CATEGORY_ID = "app_category_id"
         private const val KEY_APP_STICKERS_MODE = "app_stickers_mode"
+        private const val KEY_PHOTO_PROMPT_ANSWERED = "photo_prompt_answered"
         private const val KEY_KEYBOARD_CATEGORY_ID = "keyboard_category_id"
         private const val KEY_KEYBOARD_STYLE = "keyboard_style"
         private const val KEY_KEYBOARD_STYLE_CHOSEN = "keyboard_style_chosen"

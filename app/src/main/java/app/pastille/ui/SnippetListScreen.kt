@@ -66,7 +66,6 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TextField
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material.icons.rounded.GridView
-import androidx.compose.material.icons.rounded.CreateNewFolder
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.ShortText
@@ -177,6 +176,7 @@ import android.provider.OpenableColumns
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.compose.material.icons.rounded.AddPhotoAlternate
 import app.pastille.settings.PastilleSettings
+import app.pastille.settings.setupNeedsPhotos
 import app.pastille.share.imageTitle
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -226,7 +226,6 @@ fun SnippetListScreen(
         .collectAsStateWithLifecycle(initialValue = null as List<CategoryRecord>?)
     val categories = loadedCategories.orEmpty()
     var showCreateFolder by remember { mutableStateOf(false) }
-    var showTryIt by remember { mutableStateOf(false) }
     var organisingId by rememberSaveable { mutableStateOf<Long?>(null) }
     // The folder the snippet had when the sheet opened, for the snackbar's Undo.
     var organisingFrom by rememberSaveable { mutableStateOf<Long?>(null) }
@@ -244,13 +243,9 @@ fun SnippetListScreen(
                     context.contentResolver.openOutputStream(uri)?.use { out ->
                         out.write(result.json.toByteArray())
                     } ?: error("Could not open $uri")
-                    if (result.skippedImages > 0) {
-                        "Exported ${result.exported} snippets (${result.skippedImages} image snippets aren't included)"
-                    } else {
-                        "Exported ${result.exported} snippets"
-                    }
+                    exportMessage(result.exported, result.skippedImages)
                 }.onSuccess { toast(context, it) }
-                    .onFailure { toast(context, "Export failed: ${it.message}") }
+                    .onFailure { toast(context, EXPORT_FAILED) }
             }
         }
     }
@@ -259,13 +254,16 @@ fun SnippetListScreen(
     ) { uri ->
         if (uri != null) {
             scope.launch {
-                runCatching {
-                    val raw = context.contentResolver.openInputStream(uri)?.use {
-                        it.bufferedReader().readText()
-                    } ?: error("Could not open $uri")
-                    repository.importJson(raw)
-                }.onSuccess { toast(context, "Imported $it snippets") }
-                    .onFailure { toast(context, "Import failed: ${it.message}") }
+                val raw = runCatching {
+                    context.contentResolver.openInputStream(uri)?.use { it.bufferedReader().readText() }
+                }.getOrNull()
+                if (raw == null) {
+                    toast(context, IMPORT_UNREADABLE)
+                } else {
+                    runCatching { repository.importJson(raw) }
+                        .onSuccess { toast(context, importMessage(it)) }
+                        .onFailure { toast(context, IMPORT_NOT_A_BACKUP) }
+                }
             }
         }
     }
@@ -560,9 +558,6 @@ fun SnippetListScreen(
         )
     }
 
-    if (showTryIt) {
-        TryItDialog(onDismiss = { showTryIt = false })
-    }
 
     if (showCreateFolder) {
         CategoryNameDialog(
@@ -605,36 +600,32 @@ fun SnippetListScreen(
                             Icon(Icons.Rounded.MoreVert, contentDescription = "More options")
                         }
                         DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                            DropdownMenuItem(
-                                text = { Text("New folder") },
-                                leadingIcon = {
-                                    Icon(Icons.Rounded.CreateNewFolder, contentDescription = null)
-                                },
-                                onClick = {
-                                    showMenu = false
-                                    showCreateFolder = true
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Import snippets") },
-                                leadingIcon = {
-                                    Icon(Icons.Rounded.FileDownload, contentDescription = null)
-                                },
-                                onClick = {
-                                    showMenu = false
-                                    importLauncher.launch(arrayOf("application/json"))
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Export snippets") },
-                                leadingIcon = {
-                                    Icon(Icons.Rounded.FileUpload, contentDescription = null)
-                                },
-                                onClick = {
-                                    showMenu = false
-                                    exportLauncher.launch("pastille-snippets.json")
-                                },
-                            )
+                            // The menu follows the mode on screen (Erwann, 2026-10-28): snippet
+                            // backup only on Snippets (stickers aren't exported), Reorder for
+                            // the mode shown, then what belongs to the whole app. New folder lives
+                            // at the end of the folder row ("+ Add"), next to the folders it makes.
+                            if (!stickersMode) {
+                                DropdownMenuItem(
+                                    text = { Text("Import snippets") },
+                                    leadingIcon = {
+                                        Icon(Icons.Rounded.FileDownload, contentDescription = null)
+                                    },
+                                    onClick = {
+                                        showMenu = false
+                                        importLauncher.launch(arrayOf("application/json"))
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Export snippets") },
+                                    leadingIcon = {
+                                        Icon(Icons.Rounded.FileUpload, contentDescription = null)
+                                    },
+                                    onClick = {
+                                        showMenu = false
+                                        exportLauncher.launch("pastille-snippets.json")
+                                    },
+                                )
+                            }
                             DropdownMenuItem(
                                 text = { Text("Reorder") },
                                 leadingIcon = {
@@ -649,16 +640,6 @@ fun SnippetListScreen(
                                 },
                             )
                             HorizontalDivider()
-                            DropdownMenuItem(
-                                text = { Text("Try the keyboard") },
-                                leadingIcon = {
-                                    Icon(Icons.Rounded.Edit, contentDescription = null)
-                                },
-                                onClick = {
-                                    showMenu = false
-                                    showTryIt = true
-                                },
-                            )
                             DropdownMenuItem(
                                 text = { Text("Keyboard setup") },
                                 leadingIcon = {
@@ -891,8 +872,8 @@ private fun Wordmark(collapsedFraction: Float) {
 }
 
 /** What the setup card still asks for, read again on every resume and after the photo prompt. */
-private class Onboarding(val imeEnabled: Boolean, val photosGranted: Boolean, val onPhotosAnswered: () -> Unit) {
-    val needed: Boolean get() = !imeEnabled || !photosGranted
+private class Onboarding(val imeEnabled: Boolean, val photosNeeded: Boolean, val onPhotosAnswered: () -> Unit) {
+    val needed: Boolean get() = !imeEnabled || photosNeeded
 }
 
 /**
@@ -906,19 +887,33 @@ private class Onboarding(val imeEnabled: Boolean, val photosGranted: Boolean, va
 @Composable
 private fun rememberOnboarding(refreshTick: Int): Onboarding {
     val context = LocalContext.current
+    val settings = remember { PastilleSettings.forContext(context) }
     var photosAsked by remember { mutableStateOf(0) }
     val imeEnabled = remember(refreshTick) { isPastilleEnabled(context) }
-    val photosGranted = remember(refreshTick, photosAsked) {
-        ImageSourceReader.hasPermission(context) && !ImageSourceReader.hasOnlyPartialAccess(context)
+    // Asked once, like Settings › Photo access words it: declining or "Select photos" is an answer,
+    // and the card no longer asks; Settings is where it changes. It used to nag forever.
+    val photosNeeded = remember(refreshTick, photosAsked) {
+        setupNeedsPhotos(
+            granted = ImageSourceReader.hasPermission(context),
+            partialOnly = ImageSourceReader.hasOnlyPartialAccess(context),
+            answered = settings.photoPromptAnswered,
+        )
     }
-    return Onboarding(imeEnabled, photosGranted, onPhotosAnswered = { photosAsked++ })
+    return Onboarding(
+        imeEnabled = imeEnabled,
+        photosNeeded = photosNeeded,
+        onPhotosAnswered = {
+            settings.photoPromptAnswered = true
+            photosAsked++
+        },
+    )
 }
 
 @Composable
 private fun OnboardingCard(onboarding: Onboarding) {
     val context = LocalContext.current
     val imeEnabled = onboarding.imeEnabled
-    val photosGranted = onboarding.photosGranted
+    val photosNeeded = onboarding.photosNeeded
     val onPhotosAnswered by rememberUpdatedState(onboarding.onPhotosAnswered)
     val photoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         onPhotosAnswered()
@@ -941,7 +936,7 @@ private fun OnboardingCard(onboarding: Onboarding) {
                     },
                 )
             }
-            if (!photosGranted) {
+            if (photosNeeded) {
                 SetupRow(
                     text = "Allow photo access so your images show in the keyboard",
                     button = "Allow",
@@ -950,18 +945,6 @@ private fun OnboardingCard(onboarding: Onboarding) {
             }
         }
     }
-}
-
-@Composable
-private fun TryItDialog(onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Done") }
-        },
-        title = { Text("Try the keyboard") },
-        text = { TryItField() },
-    )
 }
 
 @Composable

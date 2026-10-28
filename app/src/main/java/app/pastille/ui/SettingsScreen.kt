@@ -1,14 +1,16 @@
 package app.pastille.ui
 
 import android.Manifest
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
+import android.provider.Settings as AndroidSettings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -31,8 +33,6 @@ import androidx.compose.material.icons.rounded.Keyboard
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
@@ -53,6 +53,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -61,10 +62,15 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.pastille.ime.ImageSourceReader
 import app.pastille.ime.KeyboardHeightPreview
 import app.pastille.ime.KeyboardStylePreview
+import app.pastille.ime.installedTypingKeyboards
 import app.pastille.ime.otherTypingKeyboards
+import app.pastille.settings.PhotoAccessAction
+import app.pastille.settings.photoAccessAction
+import app.pastille.settings.returnKeyboardChoices
 import app.pastille.settings.ClipboardClearDelay
 import app.pastille.settings.KeyboardMode
 import app.pastille.settings.KeyboardStyle
@@ -228,8 +234,11 @@ private fun ClipboardGroup(settings: PastilleSettings) {
 @Composable
 private fun PhotosGroup(settings: PastilleSettings) {
     var returnAfterImage by remember { mutableStateOf(settings.returnAfterImage) }
+    // Follows Settings › Show in the keyboard › Images live, which another group writes.
+    val version by remember { settings.changes() }.collectAsStateWithLifecycle(initialValue = 0)
+    val imagesShown = remember(version) { settings.imagesEnabled }
     SettingsGroup(title = "Photos") {
-        PhotoAccessRow()
+        PhotoAccessRow(imagesShown)
         SettingsHairline()
         ToggleRow(
             title = "Return after an image",
@@ -329,31 +338,45 @@ private fun HeightRow(
 }
 
 @Composable
-private fun PhotoAccessRow() {
+private fun PhotoAccessRow(imagesShown: Boolean) {
     val context = LocalContext.current
+    val settings = remember { PastilleSettings.forContext(context) }
     var granted by remember { mutableStateOf(ImageSourceReader.hasPermission(context)) }
     var partialOnly by remember { mutableStateOf(ImageSourceReader.hasOnlyPartialAccess(context)) }
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    var answered by remember { mutableStateOf(settings.photoPromptAnswered) }
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        settings.photoPromptAnswered = true
+        answered = true
+        granted = ImageSourceReader.hasPermission(context)
+        partialOnly = ImageSourceReader.hasOnlyPartialAccess(context)
+    }
     LifecycleResumeEffect(Unit) {
         granted = ImageSourceReader.hasPermission(context)
         partialOnly = ImageSourceReader.hasOnlyPartialAccess(context)
         onPauseOrDispose { }
     }
-    val canAsk = !granted || partialOnly
+    // Not a switch: an app can't grant itself a permission, only ask, and the Images tab already
+    // has its own on/off under "Show in the keyboard". The row says where access stands and opens
+    // the one place that changes it.
+    val status = when {
+        partialOnly -> "Selected photos only, so the keyboard can't see your latest screenshot. Tap to allow all."
+        granted -> "Allowed. Your recent images appear in the keyboard."
+        answered -> "Not allowed. Tap to change it in system settings."
+        else -> "Tap to show your recent screenshots in the keyboard."
+    }
     SettingsRow(
         title = "Photo access",
-        subtitle = when {
-            partialOnly -> "Selected photos only, so the keyboard can't see your latest screenshot. Tap to allow all."
-            granted -> "Granted. Your recent images appear in the keyboard."
-            else -> "Tap to show your recent screenshots in the keyboard."
-        },
+        subtitle = if (imagesShown) status else "Only used by the Images tab, which is hidden.",
         icon = Icons.Rounded.PhotoLibrary,
-        modifier = if (canAsk) Modifier.clickable { launcher.launch(photoPermission()) } else Modifier,
-        trailing = if (canAsk) {
-            { SettingsChevron() }
-        } else {
-            null
+        modifier = Modifier.clickable {
+            when (photoAccessAction(granted, partialOnly, answered)) {
+                PhotoAccessAction.Ask -> launcher.launch(photoPermission())
+                PhotoAccessAction.OpenSystemSettings -> context.startActivity(
+                    Intent(AndroidSettings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)),
+                )
+            }
         },
+        trailing = { SettingsChevron() },
     )
 }
 
@@ -405,42 +428,43 @@ private fun ModesRow(
 @Composable
 private fun ReturnKeyboardRow(settings: PastilleSettings) {
     val context = LocalContext.current
-    val keyboards = remember {
-        otherTypingKeyboards(context).map { it.id to it.loadLabel(context.packageManager).toString() }
+    fun labelled(list: List<android.view.inputmethod.InputMethodInfo>) =
+        list.map { it.id to it.loadLabel(context.packageManager).toString() }
+    // Read again on resume: the way back from Android's keyboard settings is the usual reason it changed.
+    var enabled by remember { mutableStateOf(labelled(otherTypingKeyboards(context))) }
+    var installed by remember { mutableStateOf(labelled(installedTypingKeyboards(context))) }
+    LifecycleResumeEffect(Unit) {
+        enabled = labelled(otherTypingKeyboards(context))
+        installed = labelled(installedTypingKeyboards(context))
+        onPauseOrDispose { }
     }
     var chosen by remember { mutableStateOf(settings.returnKeyboardId) }
-    var open by remember { mutableStateOf(false) }
-    val mainName = keyboards.firstOrNull()?.second
-    val current = when {
-        chosen == PastilleSettings.PREVIOUS_KEYBOARD -> "Previous keyboard"
-        chosen != null && keyboards.any { it.first == chosen } -> keyboards.first { it.first == chosen }.second
-        else -> mainName?.let { "Main keyboard ($it)" } ?: "Main keyboard"
-    }
-    fun choose(value: String?) {
-        chosen = value
-        settings.returnKeyboardId = value
-        open = false
-    }
-    Box {
-        SettingsRow(
-            title = "Switch back to",
-            subtitle = current,
-            icon = Icons.Rounded.Keyboard,
-            modifier = Modifier.clickable { open = true },
-            trailing = { SettingsChevron() },
-        )
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            DropdownMenuItem(
-                text = { Text(mainName?.let { "Main keyboard ($it)" } ?: "Main keyboard") },
-                onClick = { choose(null) },
+    val choices = returnKeyboardChoices(chosen, enabled, installed)
+    SettingsRow(
+        title = "Switch back to",
+        subtitle = "After a snippet or image goes in",
+        icon = Icons.Rounded.Keyboard,
+    )
+    Column(Modifier.selectableGroup()) {
+        choices.forEach { choice ->
+            StyleRow(
+                headline = choice.label,
+                supporting = choice.note,
+                selected = choice.selected,
+                enabled = choice.available,
+                onClick = {
+                    chosen = choice.value
+                    settings.returnKeyboardId = choice.value
+                },
             )
-            keyboards.forEach { (id, name) ->
-                DropdownMenuItem(text = { Text(name) }, onClick = { choose(id) })
-            }
-            DropdownMenuItem(
-                text = { Text("Previous keyboard") },
-                onClick = { choose(PastilleSettings.PREVIOUS_KEYBOARD) },
-            )
+        }
+    }
+    if (choices.any { !it.available }) {
+        SettingsRowDetail {
+            TextButton(
+                onClick = { context.startActivity(Intent(AndroidSettings.ACTION_INPUT_METHOD_SETTINGS)) },
+                modifier = Modifier.align(Alignment.End),
+            ) { Text("Enable keyboards") }
         }
     }
 }

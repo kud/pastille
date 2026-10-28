@@ -310,7 +310,7 @@ Replace the two arrows with:
 - [x] **Overflow:** `IconButton(Icons.Filled.MoreVert, "More options")`, opening a `DropdownMenu` with leading icons in `onSurfaceVariant`. **It follows the mode on screen** (Iris, 2026-10-28; Erwann: « Un nouveau folder ça dépend de sticker ou prompt, pas des settings global »): what acts on one kind shows only in that mode, then a divider, then what belongs to the whole app.
   - **Snippets:** "Import snippets" (`FileDownload`), "Export snippets" (`FileUpload`), "Reorder" (`SwapVert`).
   - **Stickers:** "Reorder" only. Stickers have no folders, and the export skips images, so neither belongs here.
-  - `HorizontalDivider`, then in both modes: "Keyboard setup" (`Keyboard`, `ACTION_INPUT_METHOD_SETTINGS`), "Settings", "Bin (N)" when the bin isn't empty, "Last crash report" when one exists.
+  - `HorizontalDivider`, then in both modes: "Keyboard setup" (`Keyboard`, `ACTION_INPUT_METHOD_SETTINGS`), "Settings", "Bin", always shown and "Bin (N)" once it holds something (Erwann, 2026-10-28), "Last crash report" when one exists.
   - **Not in the menu:** "New folder" lives only at the end of the folder row ("+ Add", §14.5), beside the folders it makes; a second door in the overflow showed it on Stickers too. "Try the keyboard" lives only in Settings › Height, under the preview it tests: it helps once, while setting up, and was noise in the everyday menu.
 
 ### 8.4 Colour roles
@@ -1116,7 +1116,7 @@ The tile opens a sheet of snippets and images to copy, over whatever app is open
 ### 14.3 Bin (issue #5)
 
 - [ ] Deleting a snippet moves it to the bin for 30 days. The snackbar everywhere in the app reads "Moved to bin" with "Undo".
-- [ ] **Entry point:** "Bin (N)" in the list's overflow menu, hidden when the bin is empty.
+- [ ] **Entry point:** "Bin" in the list's overflow menu, always shown so the bin can be found before it is needed; "Bin (N)" once it holds something (Erwann, 2026-10-28).
 - [ ] **Bin screen:** a `TopAppBar` titled "Bin" with a back arrow and "Empty bin" in its overflow; under it, "Snippets are deleted forever after 30 days." in `bodyMedium`, `onSurfaceVariant`.
 - [ ] **Row:** title (`titleMedium`), one line of preview, then `⧗ 27 days left · from ▭ Personal` in `labelSmall` (`Icons.Rounded.HourglassEmpty`, 14dp; folder icon 12dp), and a trailing Restore `IconButton` (`Icons.Rounded.Restore`). "Days left" rounds up and turns `error` at 3 days or fewer; the hourglass stays, so colour is never the only signal. "from ▭ Personal" is dropped when the folder no longer exists.
 - [ ] Tapping a row opens a read-only preview with Restore and Close.

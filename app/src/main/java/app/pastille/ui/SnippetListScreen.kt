@@ -660,18 +660,16 @@ fun SnippetListScreen(
                                     onOpenSettings()
                                 },
                             )
-                            if (binCount > 0) {
-                                DropdownMenuItem(
-                                    text = { Text("Bin ($binCount)") },
-                                    leadingIcon = {
-                                        Icon(Icons.Rounded.Delete, contentDescription = null)
-                                    },
-                                    onClick = {
-                                        showMenu = false
-                                        onOpenBin()
-                                    },
-                                )
-                            }
+                            DropdownMenuItem(
+                                text = { Text(if (binCount > 0) "Bin ($binCount)" else "Bin") },
+                                leadingIcon = {
+                                    Icon(Icons.Rounded.Delete, contentDescription = null)
+                                },
+                                onClick = {
+                                    showMenu = false
+                                    onOpenBin()
+                                },
+                            )
                             if (hasCrashReport) {
                                 DropdownMenuItem(
                                     text = { Text("Last crash report") },

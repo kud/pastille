@@ -259,9 +259,9 @@ private fun KeyboardGroup(settings: PastilleSettings, onOpen: (SettingsPage) -> 
         SettingsHairline()
         // Off clears what's kept at once; clips are memory only, so there is nothing else to delete.
         ToggleRow(
-            title = "Recent clipboard",
-            subtitle = "Your last 10 copies, for an hour, at the top of Snippets. Memory only, never backed up; passwords are skipped",
-            icon = Icons.Rounded.History,
+            title = "Clipboard",
+            subtitle = "Your last 10 copies, for an hour, behind the keyboard's clipboard button. Memory only, never backed up; passwords are skipped",
+            icon = Icons.Rounded.ContentPaste,
             checked = recentClipboard,
             onChange = {
                 recentClipboard = it

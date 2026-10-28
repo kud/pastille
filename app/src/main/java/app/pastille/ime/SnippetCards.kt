@@ -193,6 +193,9 @@ internal fun ModeSwitch(
     enabled: Set<KeyboardMode>,
     onChange: (KeyboardMode) -> Unit,
     compact: Boolean = false,
+    clipboard: Boolean = false,
+    clipboardOpen: Boolean = false,
+    onClipboard: () -> Unit = {},
 ) {
     Row(
         modifier = Modifier.padding(start = 8.dp).selectableGroup(),
@@ -202,9 +205,20 @@ internal fun ModeSwitch(
             ModeTab(
                 icon = modeIcon(tab),
                 label = tab.label,
-                selected = mode == tab,
-                showLabel = mode == tab && !compact,
+                selected = mode == tab && !clipboardOpen,
+                showLabel = mode == tab && !clipboardOpen && !compact,
             ) { onChange(tab) }
+        }
+        // The clipboard is its own view, like Gboard's: always icon-only, so four tabs and three
+        // actions fit at 360dp; selected, it wears the same pill as a tab (a shape, not only a colour).
+        if (clipboard) {
+            ModeTab(
+                icon = Icons.Rounded.ContentPaste,
+                label = "Clipboard",
+                selected = clipboardOpen,
+                showLabel = false,
+                onClick = onClipboard,
+            )
         }
     }
 }
@@ -254,6 +268,7 @@ internal fun FolderChipRow(
     selectedId: Long?,
     onSelect: (Long?) -> Unit,
     onReorder: ((List<Long>) -> Unit)? = null,
+    trailing: (@Composable () -> Unit)? = null,
 ) {
     val haptics = LocalHapticFeedback.current
     val rowState = rememberLazyListState()
@@ -305,6 +320,7 @@ internal fun FolderChipRow(
                 chip(Modifier)
             }
         }
+        if (trailing != null) item(key = "trailing") { trailing() }
     }
 }
 

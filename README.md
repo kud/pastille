@@ -23,7 +23,7 @@ Pastille is an open-source Android keyboard for pasting, not typing. Tap a saved
 ## Features
 
 - Your own snippets, written in the app or saved from the clipboard.
-- Recent clipboard: the last 10 things you copied while Pastille's keyboard or app was open, at the top of Snippets for an hour. Kept in memory only, never backed up; passwords and copies marked sensitive are skipped. Settings › Keyboard turns it off.
+- Clipboard: the last 10 things you copied while Pastille's keyboard or app was open, for an hour, in the keyboard's own Clipboard view (the clipboard button in its toolbar, as in Gboard). Tap to paste, long-press to save one as a snippet or remove it. Kept in memory only, never backed up; passwords and copies marked sensitive are skipped. Settings › Keyboard turns it off.
 - Folders for snippets, with an "All" view, and drag to reorder snippets and folders right in the keyboard.
 - Recent images from the folders you choose (Screenshots, Camera, Downloads and so on), inserted as images where the app accepts them and copied to the clipboard where it does not.
 - Your own stickers in their own tab, from the photo picker or the share sheet, with transparent PNG, WebP and animated GIF/WebP kept as they are. Never packs.

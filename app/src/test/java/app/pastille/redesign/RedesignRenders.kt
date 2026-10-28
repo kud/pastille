@@ -92,6 +92,7 @@ abstract class RedesignRenders(private val dark: Boolean, private val screen: St
         "settings" -> settings()
         "stickers" -> stickers()
         "keyboard" -> keyboard()
+        "clipboard" -> keyboard(clipboard = true)
         "share" -> share()
         "qr" -> qr()
         "import" -> importOne()
@@ -160,7 +161,7 @@ abstract class RedesignRenders(private val dark: Boolean, private val screen: St
         compose.setContent { PastilleTheme(darkTheme = dark) { SnippetListScreen(repository = repository, onCreate = {}, onEdit = {}, onOpenSettings = {}) } }
         settle(); settle(); capture("stickers")
     }
-    private fun keyboard() {
+    private fun keyboard(clipboard: Boolean = false) {
         val now = System.currentTimeMillis()
         val state = KeyboardUiState(
             darkTheme = dark,
@@ -182,6 +183,8 @@ abstract class RedesignRenders(private val dark: Boolean, private val screen: St
                 RecentClip(2, "alex@example.com", now - 300_000),
                 RecentClip(3, "See you at the station at 6", now - 900_000),
             ),
+            clipboardEnabled = true,
+            clipboardOpen = clipboard,
         )
         compose.setContent {
             PastilleTheme(darkTheme = dark) {
@@ -196,7 +199,12 @@ abstract class RedesignRenders(private val dark: Boolean, private val screen: St
                 }
             }
         }
-        wait("Order #48213 ships Thursday"); capture(if (compose.activity.resources.configuration.screenWidthDp >= 400) "keyboard-wide" else "keyboard")
+        val wide = if (compose.activity.resources.configuration.screenWidthDp >= 400) "-wide" else ""
+        if (clipboard) {
+            wait("Order #48213 ships Thursday"); capture("clipboard$wide")
+        } else {
+            wait("Running late"); capture("keyboard$wide")
+        }
     }
     private fun share() {
         val state = ShareUiState(
@@ -295,6 +303,8 @@ class StickersLight : RedesignRenders(false, "stickers")
 class Icon : RedesignRenders(true, "icon")
 class KeyboardDark : RedesignRenders(true, "keyboard")
 class KeyboardLight : RedesignRenders(false, "keyboard")
+class ClipboardDark : RedesignRenders(true, "clipboard")
+class ClipboardLight : RedesignRenders(false, "clipboard")
 @Config(qualifiers = "w411dp-h860dp-xxhdpi") class KeyboardWideDark : RedesignRenders(true, "keyboard")
 class ShareDark : RedesignRenders(true, "share")
 class ShareLight : RedesignRenders(false, "share")

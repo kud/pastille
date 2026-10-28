@@ -77,6 +77,7 @@ import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import sh.calvin.reorderable.rememberReorderableLazyGridState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.DragIndicator
 import androidx.compose.material.icons.rounded.SwapVert
 import androidx.compose.material.icons.rounded.Download
@@ -202,6 +203,8 @@ data class KeyboardUiState(
     val stickers: List<SnippetRecord> = emptyList(),
     val stickersEnabled: Boolean = true,
     val recentClips: List<RecentClip> = emptyList(),
+    val clipboardEnabled: Boolean = false,
+    val clipboardOpen: Boolean = false,
 ) {
     val enabledModes: Set<KeyboardMode>
         get() = buildSet {
@@ -213,6 +216,7 @@ data class KeyboardUiState(
 
 interface KeyboardActions {
     fun onModeChange(mode: KeyboardMode) {}
+    fun onOpenClipboard() {}
     fun onOpenFolder(categoryId: Long?) {}
     fun onBack() {}
     fun onOpenAdd() {}
@@ -277,7 +281,7 @@ fun KeyboardPanel(
         PanelState.Settings -> "Keyboard settings"
         PanelState.ImageFolders -> "Image folders"
         PanelState.Reorder -> "Hold and drag to reorder"
-        is PanelState.Clip -> "Recent clip"
+        is PanelState.Clip -> "Clipboard"
     }
 
     LaunchedEffect(state.strip?.key) {
@@ -347,12 +351,15 @@ private fun Toolbar(state: KeyboardUiState, actions: KeyboardActions, title: Str
                     label = "toolbarLeading",
                 ) { current ->
                     if (current == null) {
-                        if (state.enabledModes.size > 1) {
+                        if (state.enabledModes.size > 1 || state.clipboardEnabled) {
                             ModeSwitch(
                                 mode = state.mode,
                                 enabled = state.enabledModes,
                                 onChange = actions::onModeChange,
                                 compact = compactTabs,
+                                clipboard = state.clipboardEnabled,
+                                clipboardOpen = state.clipboardOpen,
+                                onClipboard = actions::onOpenClipboard,
                             )
                         }
                     } else {
@@ -381,17 +388,15 @@ private fun Toolbar(state: KeyboardUiState, actions: KeyboardActions, title: Str
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-                    when (state.mode) {
-                        KeyboardMode.Snippets ->
+                    when {
+                        state.clipboardOpen -> if (state.recentClips.isNotEmpty()) {
+                            ToolbarAction(icon = Icons.Rounded.DeleteSweep, label = "Clear clipboard", onClick = actions::onClearClips)
+                        }
+                        state.mode == KeyboardMode.Snippets ->
                             ToolbarAction(icon = Icons.Rounded.Add, label = "New snippet", onClick = actions::onOpenAdd)
-                        KeyboardMode.Stickers ->
+                        state.mode == KeyboardMode.Stickers ->
                             ToolbarAction(icon = Icons.Rounded.Add, label = "Add stickers", onClick = actions::onAddStickers)
-                        KeyboardMode.Images -> Unit
-                    }
-                }
-                Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-                    if (state.mode == KeyboardMode.Snippets) {
-                        ToolbarAction(icon = Icons.Rounded.SwapVert, label = "Reorder snippets", onClick = actions::onOpenReorder)
+                        else -> Unit
                     }
                 }
                 // A long press opens Android's keyboard picker, for any keyboard rather than the usual one.
@@ -532,7 +537,11 @@ private fun PanelContent(
         label = "panel",
     ) { panel ->
         when (panel) {
-            PanelState.Browse -> BrowseContent(state = state, actions = actions)
+            PanelState.Browse -> if (state.clipboardOpen) {
+                ClipboardContent(clips = state.recentClips, actions = actions)
+            } else {
+                BrowseContent(state = state, actions = actions)
+            }
             PanelState.Add -> AddContent(
                 sources = state.addSources,
                 categories = state.categories,
@@ -599,15 +608,17 @@ private fun FolderContent(state: KeyboardUiState, actions: KeyboardActions) {
     val folderId = state.folderId?.takeIf { id -> folders.any { it.id == id } }
     val order = listOf<Long?>(null) + folders.map { it.id }
     Column(modifier = Modifier.fillMaxSize()) {
-        if (state.recentClips.isNotEmpty()) {
-            RecentClipsRow(clips = state.recentClips, actions = actions)
-        }
-        if (folders.isNotEmpty()) {
+        // Reorder left the toolbar for the clipboard tab (four tabs and four actions don't fit at
+        // 360dp): it ends the folder row instead, like the app list's trailing + chip.
+        if (folders.isNotEmpty() || state.snippets.size > 1) {
             FolderChipRow(
                 entries = listOf(ChipEntry(null, "All", Icons.Rounded.GridView)) +
                     folders.map { ChipEntry(it.id, it.name, Icons.Rounded.Folder) },
                 selectedId = folderId,
                 onSelect = actions::onOpenFolder,
+                trailing = {
+                    FilterToggleChip(label = "Reorder", icon = Icons.Rounded.SwapVert, selected = false, onClick = actions::onOpenReorder)
+                },
             )
         }
         AnimatedContent(

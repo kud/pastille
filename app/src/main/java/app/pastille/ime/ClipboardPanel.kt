@@ -1,5 +1,7 @@
 package app.pastille.ime
 
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -51,100 +53,67 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.pastille.clipboard.RecentClip
 
-// Recent clipboard: one row at the top of Snippets, only while there are clips. A tap pastes,
-// a long press opens the clip's actions (Paste, Save as snippet, Remove); Clear empties the row.
+// The keyboard's Clipboard view (Gboard's pattern, Erwann 2026-10-28): its own panel behind the
+// toolbar's clipboard tab, not a row inside Snippets. Newest first; a tap pastes, a long press opens the
+// clip's actions (Paste, Save as snippet, Remove). Clear lives in the toolbar's action slot.
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-internal fun RecentClipsRow(clips: List<RecentClip>, actions: KeyboardActions) {
+internal fun ClipboardContent(clips: List<RecentClip>, actions: KeyboardActions) {
     val palette = LocalKeyboardPalette.current
-    LazyRow(
-        modifier = Modifier.fillMaxWidth().height(48.dp),
-        contentPadding = PaddingValues(horizontal = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    if (clips.isEmpty()) {
+        Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+            Text(
+                text = "Things you copy appear here for an hour",
+                style = MaterialTheme.typography.bodyMedium,
+                color = palette.labelSecondary,
+            )
+        }
+        return
+    }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().semantics { contentDescription = "Clipboard" },
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        item(key = "recent-heading") {
-            Icon(
-                Icons.Rounded.History,
-                contentDescription = null,
-                tint = palette.icon,
-                modifier = Modifier
-                    .size(20.dp)
-                    .semantics {
-                        contentDescription = "Recent clipboard"
-                        heading()
-                    },
-            )
-        }
         items(clips, key = { it.id }) { clip ->
-            ClipChip(
-                text = oneLine(clip.text),
-                icon = null,
-                onClick = { actions.onClipTap(clip) },
-                onClickLabel = "Paste",
-                onLongClick = { actions.onClipLongPress(clip) },
-            )
-        }
-        item(key = "recent-clear") {
-            ClipChip(
-                text = "Clear",
-                icon = Icons.Rounded.ClearAll,
-                onClick = actions::onClearClips,
-                onClickLabel = "Clear recent clipboard",
-                onLongClick = null,
-            )
+            ClipCard(clip = clip, actions = actions)
         }
     }
 }
 
-private fun oneLine(text: String): String {
-    val joined = text.lineSequence().map { it.trim() }.filter { it.isNotEmpty() }.joinToString(" ")
-    return if (joined.length > 80) joined.take(80) + "…" else joined
-}
-
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ClipChip(
-    text: String,
-    icon: ImageVector?,
-    onClick: () -> Unit,
-    onClickLabel: String,
-    onLongClick: (() -> Unit)?,
-) {
+private fun ClipCard(clip: RecentClip, actions: KeyboardActions) {
     val palette = LocalKeyboardPalette.current
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val color by animateColorAsState(
         targetValue = if (pressed) palette.keyPressed else palette.key,
-        animationSpec = tween(60),
+        animationSpec = tween(PastilleMotion.PRESS_MS),
         label = "clipColour",
     )
-    Row(
+    Box(
         modifier = Modifier
-            .minimumInteractiveComponentSize()
-            .height(32.dp)
-            .widthIn(max = 180.dp)
-            .clip(RoundedCornerShape(50))
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .clip(RoundedCornerShape(12.dp))
             .background(color)
             .combinedClickable(
                 interactionSource = interaction,
                 indication = null,
-                onClickLabel = onClickLabel,
-                onLongClickLabel = if (onLongClick != null) "More actions" else null,
-                onLongClick = onLongClick,
-                onClick = onClick,
+                onClickLabel = "Paste",
+                onLongClickLabel = "More actions",
+                onLongClick = { actions.onClipLongPress(clip) },
+                onClick = { actions.onClipTap(clip) },
             )
-            .padding(horizontal = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        contentAlignment = Alignment.CenterStart,
     ) {
-        if (icon != null) {
-            Icon(icon, contentDescription = null, tint = palette.icon, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(6.dp))
-        }
         Text(
-            text = text,
-            style = MaterialTheme.typography.labelLarge,
+            text = clip.text.trim(),
+            style = MaterialTheme.typography.bodyMedium,
             color = palette.label,
-            maxLines = 1,
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
     }
@@ -205,7 +174,7 @@ internal fun ClipActionsContent(clip: RecentClip?, actions: KeyboardActions) {
             )
         }
         Text(
-            text = "Recent clips stay on this phone for an hour, never in a backup.",
+            text = "Clipboard items stay on this phone for an hour, never in a backup.",
             style = MaterialTheme.typography.bodySmall,
             color = palette.labelSecondary,
             modifier = Modifier.padding(horizontal = 16.dp),

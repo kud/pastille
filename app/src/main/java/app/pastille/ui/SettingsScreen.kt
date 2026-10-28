@@ -1,5 +1,11 @@
 package app.pastille.ui
 
+import androidx.compose.foundation.Canvas
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.Stroke
 import android.Manifest
 import android.content.Intent
 import android.net.Uri
@@ -466,21 +472,29 @@ private fun HeightRow(
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(top = 12.dp, bottom = 4.dp).semantics { heading() },
     )
-    // Two a row at every width, so 411dp never leaves "Tall" on a line of its own.
-    FlowRow(
-        modifier = Modifier.fillMaxWidth().selectableGroup(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        maxItemsInEachRow = 2,
-    ) {
-        PanelHeight.entries.forEach { height ->
-            FolderChip(
-                label = height.label,
-                icon = Icons.Rounded.Check,
-                selected = height == selected,
-                onClick = { onSelect(height) },
-                role = Role.RadioButton,
-            )
-        }
+    // The same segment square as Show in the keyboard, one choice: each glyph is a phone with the
+    // panel's share of it filled, so the four heights differ by shape before the label is read.
+    SegmentSquare(
+        segments = PanelHeight.entries.map { height ->
+            Segment(height, height.label) { HeightGlyph(height) }
+        },
+        isOn = { it == selected },
+        onPress = onSelect,
+    )
+}
+
+@Composable
+private fun HeightGlyph(height: PanelHeight) {
+    val ink = LocalContentColor.current
+    // Spread wider than the real 272–432dp, so four steps read as four at 24dp.
+    val share = 0.3f + 0.55f * height.ordinal / (PanelHeight.entries.size - 1)
+    Canvas(Modifier.size(width = 16.dp, height = 24.dp)) {
+        val stroke = 1.5.dp.toPx()
+        val radius = CornerRadius(3.dp.toPx())
+        drawRoundRect(ink, topLeft = Offset(stroke / 2, stroke / 2), size = Size(size.width - stroke, size.height - stroke), cornerRadius = radius, style = Stroke(stroke))
+        val inset = stroke * 2
+        val panel = (size.height - inset * 2) * share
+        drawRoundRect(ink, topLeft = Offset(inset, size.height - inset - panel), size = Size(size.width - inset * 2, panel), cornerRadius = CornerRadius(1.5.dp.toPx()))
     }
 }
 
@@ -551,52 +565,23 @@ private fun ToggleRow(
     )
 }
 
-// Four choices don't fit one segmented row at 360dp with their labels, so they are chips that wrap.
-// Each carries its keyboard tab's glyph; on, the glyph gives way to a check, with the fill and a
-// heavier label, so the state is a shape as well as a colour. The last content tab refuses to go.
-@OptIn(ExperimentalLayoutApi::class)
+// Each cell carries its keyboard tab's glyph; on adds the fill, a heavier label and a check badge,
+// so the state is a shape as well as a colour. The last content tab refuses to go, with a bump.
 @Composable
 private fun ModesRow(
     enabled: Set<KeyboardMode>,
     onChange: (KeyboardMode, Boolean) -> Unit,
 ) {
-    val colors = MaterialTheme.colorScheme
-    FlowRow(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        KeyboardMode.entries.forEach { mode ->
-            val on = mode in enabled
-            FilterChip(
-                selected = on,
-                onClick = { if (!on || canSwitchOff(mode, enabled)) onChange(mode, !on) },
-                label = {
-                    Text(
-                        mode.label,
-                        maxLines = 1,
-                        fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
-                    )
-                },
-                leadingIcon = {
-                    Icon(
-                        if (on) Icons.Rounded.Check else modeIcon(mode),
-                        contentDescription = null,
-                        modifier = Modifier.size(FilterChipDefaults.IconSize),
-                    )
-                },
-                shape = CircleShape,
-                colors = FilterChipDefaults.filterChipColors(
-                    containerColor = colors.surfaceContainerHigh,
-                    labelColor = colors.onSurface,
-                    iconColor = colors.onSurfaceVariant,
-                    selectedContainerColor = colors.secondaryContainer,
-                    selectedLabelColor = colors.onSecondaryContainer,
-                    selectedLeadingIconColor = colors.onSecondaryContainer,
-                ),
-                border = null,
-            )
-        }
-    }
+    // The 2×2 segment square (Erwann, 2026-10-28): four tabs, four cells, several on.
+    SegmentSquare(
+        segments = KeyboardMode.entries.map { mode ->
+            Segment(mode, mode.label) { Icon(modeIcon(mode), contentDescription = null) }
+        },
+        isOn = { it in enabled },
+        onPress = { mode -> onChange(mode, mode !in enabled) },
+        multi = true,
+        refuse = { mode -> mode in enabled && !canSwitchOff(mode, enabled) },
+    )
 }
 
 @Composable

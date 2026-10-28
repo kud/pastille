@@ -1,5 +1,9 @@
 package app.pastille.ui
 
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.TopAppBar
+import androidx.activity.compose.BackHandler
 import android.Manifest
 import android.content.Intent
 import android.net.Uri
@@ -35,9 +39,7 @@ import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MultiChoiceSegmentedButtonRow
 import androidx.compose.material3.RadioButton
@@ -45,7 +47,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
@@ -57,7 +58,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
@@ -91,7 +91,8 @@ import androidx.compose.material.icons.rounded.Backup
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material.icons.rounded.Sync
-import androidx.compose.material.icons.rounded.SyncDisabled
+import androidx.compose.material.icons.rounded.FileOpen
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import java.io.File
@@ -101,66 +102,88 @@ import java.io.File
 fun SettingsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val settings = remember { PastilleSettings.forContext(context) }
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    // Style and Height are their own pages (Iris, 2026-10-28): the main list stays one line per
+    // setting, like Sacha's, and each page has the room for its live preview.
+    var page by rememberSaveable { mutableStateOf(SettingsPage.Main) }
+    BackHandler(enabled = page != SettingsPage.Main) { page = SettingsPage.Main }
     Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
-            LargeTopAppBar(
-                title = { Text("Settings") },
+            TopAppBar(
+                title = { Text(page.title) },
                 navigationIcon = {
-                    FilledTonalIconButton(onClick = onBack, modifier = Modifier.padding(start = 4.dp)) {
+                    IconButton(onClick = { if (page == SettingsPage.Main) onBack() else page = SettingsPage.Main }) {
                         Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
                     }
                 },
-                scrollBehavior = scrollBehavior,
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
             )
         },
     ) { padding ->
-        Column(
-            modifier = Modifier
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(top = 8.dp, bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            KeyboardGroup(settings)
-            ClipboardGroup(settings)
-            PhotosGroup(settings)
-            BackupGroup(settings)
-            AboutGroup()
+        Crossfade(targetState = page, animationSpec = tween(200), label = "settingsPage", modifier = Modifier.padding(padding)) { shown ->
+            Column(
+                modifier = Modifier
+                    .verticalScroll(rememberScrollState())
+                    .padding(top = 4.dp, bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp),
+            ) {
+                when (shown) {
+                    SettingsPage.Style -> StylePage(settings)
+                    SettingsPage.Height -> HeightPage(settings)
+                    SettingsPage.Main -> {
+                        KeyboardGroup(settings, onOpen = { page = it })
+                        ClipboardGroup(settings)
+                        PhotosGroup(settings)
+                        BackupGroup(settings)
+                        AboutGroup()
+                    }
+                }
+            }
         }
     }
 }
 
+private val TapToChooseProblems = setOf(
+    BackupProblem.Access,
+    BackupProblem.Write,
+    BackupProblem.NotKept,
+    BackupProblem.ReadOnly,
+    BackupProblem.CantOverwrite,
+)
+
+private enum class SettingsPage(val title: String) { Main("Settings"), Style("Style"), Height("Height") }
+
 @Composable
-private fun KeyboardGroup(settings: PastilleSettings) {
+private fun StylePage(settings: PastilleSettings) {
     var selectedStyle by remember { mutableStateOf(settings.keyboardStyle) }
-    var panelPortrait by remember { mutableStateOf(settings.panelHeightPortrait) }
-    var panelLandscape by remember { mutableStateOf(settings.panelHeightLandscape) }
-    var previewLandscape by remember { mutableStateOf(false) }
-    var enabledModes by remember { mutableStateOf(settings.enabledModes()) }
-    var returnAfterSnippet by remember { mutableStateOf(settings.returnAfterSnippet) }
-    var recentClipboard by remember { mutableStateOf(settings.recentClipboard) }
-    val context = LocalContext.current
-    fun chooseStyle(style: KeyboardStyle) {
-        selectedStyle = style
-        settings.keyboardStyle = style
-        settings.keyboardStyleChosen = true
-    }
-    SettingsGroup(title = "Keyboard") {
-        SettingsRow(title = "Style", subtitle = selectedStyle.label, icon = Icons.Rounded.Palette)
-        SettingsRowDetail {
+    SettingsGroup(title = null) {
+        SettingsRowDetail(modifier = Modifier.padding(top = 16.dp)) {
             Crossfade(targetState = selectedStyle, animationSpec = tween(150)) { style ->
                 KeyboardStylePreview(style = style, modifier = Modifier.fillMaxWidth())
             }
         }
-        StyleOptions(selected = selectedStyle, onSelect = ::chooseStyle)
-        SettingsHairline()
-        SettingsRow(title = "Height", subtitle = "Portrait and landscape", icon = Icons.Rounded.Height)
-        SettingsRowDetail {
+    }
+    SettingsGroup(title = "Keyboard style") {
+        StyleOptions(
+            selected = selectedStyle,
+            onSelect = { style ->
+                selectedStyle = style
+                settings.keyboardStyle = style
+                settings.keyboardStyleChosen = true
+            },
+        )
+    }
+}
+
+@Composable
+private fun HeightPage(settings: PastilleSettings) {
+    var panelPortrait by remember { mutableStateOf(settings.panelHeightPortrait) }
+    var panelLandscape by remember { mutableStateOf(settings.panelHeightLandscape) }
+    var previewLandscape by remember { mutableStateOf(false) }
+    SettingsGroup(title = null) {
+        SettingsRowDetail(modifier = Modifier.padding(top = 16.dp)) {
             KeyboardHeightPreview(
-                style = selectedStyle,
+                style = settings.keyboardStyle,
                 height = if (previewLandscape) panelLandscape else panelPortrait,
                 landscape = previewLandscape,
                 modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
@@ -184,6 +207,35 @@ private fun KeyboardGroup(settings: PastilleSettings) {
                 },
             )
         }
+    }
+}
+
+@Composable
+private fun KeyboardGroup(settings: PastilleSettings, onOpen: (SettingsPage) -> Unit) {
+    var selectedStyle by remember { mutableStateOf(settings.keyboardStyle) }
+    var panelPortrait by remember { mutableStateOf(settings.panelHeightPortrait) }
+    var panelLandscape by remember { mutableStateOf(settings.panelHeightLandscape) }
+    var enabledModes by remember { mutableStateOf(settings.enabledModes()) }
+    var returnAfterSnippet by remember { mutableStateOf(settings.returnAfterSnippet) }
+    var recentClipboard by remember { mutableStateOf(settings.recentClipboard) }
+    val context = LocalContext.current
+    SettingsGroup(title = "Keyboard") {
+        SettingsRow(
+            title = "Style",
+            subtitle = selectedStyle.label,
+            icon = Icons.Rounded.Palette,
+            modifier = Modifier.clickable(role = Role.Button, onClick = { onOpen(SettingsPage.Style) }),
+            trailing = { SettingsChevron() },
+        )
+        SettingsHairline()
+        SettingsRow(
+            title = "Height",
+            subtitle = if (panelPortrait == panelLandscape) panelPortrait.label
+            else "${panelPortrait.label} upright · ${panelLandscape.label} sideways",
+            icon = Icons.Rounded.Height,
+            modifier = Modifier.clickable(role = Role.Button, onClick = { onOpen(SettingsPage.Height) }),
+            trailing = { SettingsChevron() },
+        )
         SettingsHairline()
         SettingsRow(title = "Show in the keyboard", subtitle = "At least one stays on", icon = Icons.Rounded.Dashboard)
         SettingsRowDetail {
@@ -199,7 +251,7 @@ private fun KeyboardGroup(settings: PastilleSettings) {
         // Off clears what's kept at once; clips are memory only, so there is nothing else to delete.
         ToggleRow(
             title = "Recent clipboard",
-            subtitle = "Your last 10 copies, at the top of Snippets, for an hour. Kept in memory on this phone only; passwords and sensitive copies are skipped.",
+            subtitle = "Your last 10 copies, for an hour, at the top of Snippets. Memory only, never backed up; passwords are skipped",
             icon = Icons.Rounded.History,
             checked = recentClipboard,
             onChange = {
@@ -211,7 +263,7 @@ private fun KeyboardGroup(settings: PastilleSettings) {
         SettingsHairline()
         ToggleRow(
             title = "Return after a snippet",
-            subtitle = "Switch back to the keyboard you were using.",
+            subtitle = "Switch back to the keyboard you were using",
             icon = Icons.AutoMirrored.Rounded.KeyboardReturn,
             checked = returnAfterSnippet,
             onChange = {
@@ -230,8 +282,8 @@ private fun ClipboardGroup(settings: PastilleSettings) {
     var open by remember { mutableStateOf(false) }
     SettingsGroup(title = "Clipboard") {
         SettingsRow(
-            title = "Clear clipboard after copying",
-            subtitle = "${delay.label}. Only clears when Pastille can confirm the clipboard still holds its own copy.",
+            title = "Clear after copying",
+            subtitle = delay.label,
             icon = Icons.Rounded.ContentPaste,
             modifier = Modifier.clickable { open = true },
             trailing = { SettingsChevron() },
@@ -243,6 +295,12 @@ private fun ClipboardGroup(settings: PastilleSettings) {
             title = { Text("Clear clipboard after copying") },
             text = {
                 Column(Modifier.selectableGroup()) {
+                    Text(
+                        text = "Only clears when Pastille can confirm the clipboard still holds its own copy.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 8.dp),
+                    )
                     ClipboardClearDelay.entries.forEach { choice ->
                         StyleRow(
                             headline = choice.label,
@@ -276,7 +334,7 @@ private fun PhotosGroup(settings: PastilleSettings) {
         SettingsHairline()
         ToggleRow(
             title = "Return after an image",
-            subtitle = "Leave it off to paste several images in a row.",
+            subtitle = "Leave it off to paste several images in a row",
             icon = Icons.Rounded.Image,
             checked = returnAfterImage,
             onChange = {
@@ -357,7 +415,6 @@ private fun HeightRow(
                 selected = height == selected,
                 onClick = { onSelect(height) },
                 shape = SegmentedButtonDefaults.itemShape(index, PanelHeight.entries.size),
-                icon = {},
                 label = {
                     Text(
                         text = height.label,
@@ -434,7 +491,7 @@ private fun ToggleRow(
         subtitle = subtitle,
         icon = icon,
         modifier = Modifier.toggleable(value = checked, role = Role.Switch, onValueChange = onChange),
-        trailing = { Switch(checked = checked, onCheckedChange = null) },
+        trailing = { PastilleSwitch(checked = checked) },
     )
 }
 
@@ -547,35 +604,40 @@ private fun BackupGroup(settings: PastilleSettings) {
     val zipTypes = arrayOf(BackupArchive.MIME, "application/x-zip-compressed", "application/x-zip", "application/octet-stream")
 
     SettingsGroup(title = "Backup") {
+        // Sacha's switch, with a check on its thumb (Iris, 2026-10-28). On opens the file chooser,
+        // since there is nothing to sync until a file exists; off forgets the file and leaves it be.
+        val on = uri != null
+        val status = uri?.let { backupStatus(name, lastAt, problem, System.currentTimeMillis(), SyncDiagnosis.providerLabel(Uri.parse(it).authority)) }
+        // A problem whose message says "Tap to choose…" lives on the row that does that, never on the
+        // switch, where a tap would turn syncing off instead.
+        val actionable = on && problem in TapToChooseProblems
+        SettingsRow(
+            title = "Sync automatically",
+            subtitle = when {
+                !on -> "Off"
+                actionable -> "$name · Not syncing"
+                else -> status
+            },
+            icon = if (on && problem != null) Icons.Rounded.ErrorOutline else Icons.Rounded.Sync,
+            destructive = on && problem != null,
+            modifier = Modifier.toggleable(value = on, role = Role.Switch) { want ->
+                if (want) chooser.launch(BackupArchive.SUGGESTED_NAME) else autoBackup.stop()
+            },
+            trailing = { PastilleSwitch(checked = on) },
+        )
+        SettingsHairline()
         if (uri == null) {
-            SettingsRow(
-                title = "Sync automatically",
-                subtitle = "Keep your snippets in a file you choose, in Google Drive or on this phone. Pastille reads and updates it after every change.",
-                icon = Icons.Rounded.Backup,
-                modifier = Modifier.clickable { chooser.launch(BackupArchive.SUGGESTED_NAME) },
-                trailing = { SettingsChevron() },
-            )
-            SettingsHairline()
             SettingsRow(
                 title = "Use an existing file",
                 subtitle = "The file your other phone already syncs with",
-                icon = Icons.Rounded.Sync,
+                icon = Icons.Rounded.FileOpen,
                 modifier = Modifier.clickable { existing.launch(zipTypes) },
                 trailing = { SettingsChevron() },
             )
         } else {
             SettingsRow(
-                title = "Sync automatically",
-                subtitle = backupStatus(name, lastAt, problem, System.currentTimeMillis(), SyncDiagnosis.providerLabel(Uri.parse(uri).authority)),
-                icon = if (problem == null) Icons.Rounded.Backup else Icons.Rounded.ErrorOutline,
-                destructive = problem != null,
-                modifier = Modifier.clickable { chooser.launch(BackupArchive.SUGGESTED_NAME) },
-                trailing = { SettingsChevron() },
-            )
-            SettingsHairline()
-            SettingsRow(
                 title = "Sync now",
-                icon = Icons.Rounded.Sync,
+                icon = Icons.Rounded.Refresh,
                 enabled = !busy,
                 modifier = Modifier.clickable(enabled = !busy) {
                     scope.launch {
@@ -609,10 +671,12 @@ private fun BackupGroup(settings: PastilleSettings) {
             )
             SettingsHairline()
             SettingsRow(
-                title = "Stop syncing",
-                subtitle = "The file stays where it is",
-                icon = Icons.Rounded.SyncDisabled,
-                modifier = Modifier.clickable { autoBackup.stop() },
+                title = "Choose another file",
+                subtitle = if (actionable) status else "Start a new file, or fix access to this one",
+                icon = if (actionable) Icons.Rounded.ErrorOutline else Icons.Rounded.Backup,
+                destructive = actionable,
+                modifier = Modifier.clickable { chooser.launch(BackupArchive.SUGGESTED_NAME) },
+                trailing = { SettingsChevron() },
             )
         }
     }

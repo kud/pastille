@@ -173,6 +173,6 @@ private fun StickerSwitch(checked: Boolean, onChange: (Boolean) -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Switch(checked = checked, onCheckedChange = null)
+        PastilleSwitch(checked = checked)
     }
 }

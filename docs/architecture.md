@@ -265,7 +265,7 @@ The tile no longer switches keyboards. It is a stateless button, always `STATE_I
 
 ## 8b. Clipboard auto-clear
 
-- **Setting:** `PastilleSettings.clipboardClearDelay`: Off / 5 s / 10 s / 30 s / 1 min, default Off. Settings › Clipboard › "Clear clipboard after copying".
+- **Setting:** `PastilleSettings.clipboardClearDelay`: Off / 5 s / 10 s / 30 s / 1 min, default Off. Settings › Clipboard › "Clear after copying".
 - **Label:** `copySnippet()` labels every clip `pastille:<uuid>`. When the timer ends, `ClipboardClearer` reads `getPrimaryClipDescription().label`, never the content, so Android shows no "pasted from clipboard" notice, and clears only when the label is still ours. Null (empty, or unreadable on Android 10+ while Pastille is in the background and isn't the current keyboard) means leave it alone: it never wipes blind.
 - **Timer:** a coroutine with `delay` on an `Application`-scoped `Dispatchers.Main` scope, so it outlives the picker sheet. A new copy replaces the pending timer. A clear missed because the process died is acceptable; no WorkManager.
 - **Sensitive:** on API 33+ the clip carries `EXTRA_IS_SENSITIVE` whenever the timer is on.

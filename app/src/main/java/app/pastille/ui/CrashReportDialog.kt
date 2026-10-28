@@ -12,9 +12,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalClipboardManager
+import app.pastille.clipboard.copyOwnText
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import app.pastille.crash.CrashLog
@@ -24,14 +23,13 @@ import app.pastille.crash.CrashLog
 internal fun CrashReportDialog(onDismiss: () -> Unit) {
     val context = LocalContext.current
     val entries = remember { CrashLog.forContext(context).entries() }
-    val clipboard = LocalClipboardManager.current
     val crashText = remember(entries) { entries.joinToString("\n\n———\n\n") }
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
             TextButton(
                 onClick = {
-                    clipboard.setText(AnnotatedString(crashText))
+                    copyOwnText(context, crashText)
                     onDismiss()
                 },
                 enabled = entries.isNotEmpty(),

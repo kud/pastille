@@ -1,5 +1,17 @@
 package app.pastille.backup
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import app.pastille.R
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -146,8 +158,24 @@ fun importInBackground(context: Context, file: File, single: String? = null) {
 fun AddOneDialog(phrase: String, preview: String?, onAdd: () -> Unit, onCancel: () -> Unit) {
     AlertDialog(
         onDismissRequest = onCancel,
-        title = { Text(addOneQuestion(phrase)) },
-        text = preview?.let { { Text(it, maxLines = 6, overflow = TextOverflow.Ellipsis) } },
+        icon = { PastilleDialogMark() },
+        title = { Text(addOneQuestion(phrase), textAlign = TextAlign.Center) },
+        // The text on the list's own card, so what is being added reads as a snippet before it is one.
+        text = preview?.let {
+            {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 6,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surfaceContainerHighest, RoundedCornerShape(16.dp))
+                        .padding(16.dp),
+                )
+            }
+        },
         confirmButton = { TextButton(onClick = onAdd) { Text("Add") } },
         dismissButton = { TextButton(onClick = onCancel) { Text("Cancel") } },
     )
@@ -161,9 +189,16 @@ fun ImportConfirmDialog(
 ) {
     AlertDialog(
         onDismissRequest = onCancel,
-        title = { Text("Import this backup?") },
+        icon = { PastilleDialogMark() },
+        title = { Text("Import to Pastille?", textAlign = TextAlign.Center) },
         text = { Text(importQuestion(counts)) },
         confirmButton = { TextButton(onClick = onImport) { Text("Import") } },
         dismissButton = { TextButton(onClick = onCancel) { Text("Cancel") } },
     )
+}
+
+/** The brand mark heading Pastille's own questions, drawn in its colours like the list's wordmark. */
+@Composable
+private fun PastilleDialogMark() {
+    Image(painter = painterResource(R.drawable.ic_pastille_mark), contentDescription = null, modifier = Modifier.size(32.dp))
 }

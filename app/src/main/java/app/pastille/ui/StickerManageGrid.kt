@@ -197,26 +197,14 @@ private fun StickerTile(
 }
 
 @Composable
-private fun StickersEmpty(onAdd: () -> Unit) {
-    Column(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(
-            text = "No stickers yet",
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(16.dp))
-        FilledTonalButton(onClick = onAdd) { Text("Add stickers") }
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = "Or share images to Pastille and choose Sticker.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-        )
-    }
+private fun StickersEmpty(@Suppress("UNUSED_PARAMETER") onAdd: () -> Unit) {
+    // The shared empty state, like the list, folders, search and the bin (Iris, 2026-10-28).
+    EmptyState(
+        icon = Icons.Rounded.EmojiEmotions,
+        title = "No stickers yet",
+        // No button: "Add stickers" is already the extended FAB below, and one action is the rule.
+        body = "Add them below, or share images to Pastille and choose Sticker.",
+    )
 }
 
 /** In search results, a sticker carries this in place of the folder pill. */

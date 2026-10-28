@@ -41,6 +41,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.key
@@ -61,10 +62,11 @@ private val PillShape = RoundedCornerShape(6.dp)
 /** A row's folder, shown in "All": filled, the same colours as the selected filter pill. */
 @Composable
 fun FolderPill(name: String) {
+    // Quiet on a card: the folder is context, not a call to action (the selected chip owns the blue).
     Surface(
         shape = PillShape,
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
     ) {
         Row(
             modifier = Modifier.height(PillHeight).padding(horizontal = 6.dp),
@@ -88,7 +90,7 @@ fun FolderPill(name: String) {
 fun TagPill(label: String) {
     Surface(
         shape = PillShape,
-        color = MaterialTheme.colorScheme.surface,
+        color = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {

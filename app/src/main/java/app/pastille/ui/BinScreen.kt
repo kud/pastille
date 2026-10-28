@@ -35,7 +35,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -49,6 +48,9 @@ import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -145,17 +147,22 @@ fun BinScreen(repository: SnippetRepository, onBack: () -> Unit) {
             }
             if (binned.isEmpty()) {
                 item(key = "empty") {
-                    Text(
-                        text = "The bin is empty",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.fillMaxWidth().padding(32.dp),
+                    EmptyState(
+                        icon = Icons.Rounded.DeleteOutline,
+                        title = "The bin is empty",
+                        body = "Deleted snippets wait here for 30 days.",
                     )
                 }
             }
             itemsIndexed(binned, key = { _, snippet -> snippet.id }) { index, snippet ->
-                Column(modifier = Modifier.animateItem()) {
-                    if (index > 0) HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
+                // The list's card rows (Iris, 2026-10-28): 16dp corners on surfaceContainer, 8dp apart.
+                Column(
+                    modifier = Modifier
+                        .animateItem()
+                        .padding(horizontal = 16.dp)
+                        .padding(top = if (index > 0) 8.dp else 0.dp)
+                        .clip(RoundedCornerShape(16.dp)),
+                ) {
                     BinRow(
                         snippet = snippet,
                         folderName = snippet.categoryId?.let(folderNames::get),
@@ -295,7 +302,7 @@ private fun BinRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surface)
+                .background(MaterialTheme.colorScheme.surfaceContainer)
                 .heightIn(min = 72.dp)
                 .combinedClickable(onClick = onOpen, onLongClick = onDeleteForever)
                 .padding(start = 16.dp, end = 4.dp, top = 12.dp, bottom = 12.dp),

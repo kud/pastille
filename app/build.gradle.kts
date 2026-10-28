@@ -81,6 +81,13 @@ android {
         unitTests.isIncludeAndroidResources = true
         // CI shows only the log: print why a test failed, not just where.
         unitTests.all {
+            // Design renders (app/src/test/.../redesign) run only with PASTILLE_RENDERS=<dir>, one JVM per class:
+            // Robolectric's native canvas aborts the process (exit 134) when several renders share one.
+            if (System.getenv("PASTILLE_RENDERS") != null) {
+                it.forkEvery = 1
+                it.maxHeapSize = "2g"
+                it.outputs.upToDateWhen { false }
+            }
             it.testLogging {
                 events("failed")
                 exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL

@@ -53,6 +53,16 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.FolderOff
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.heading
+import app.pastille.R
+import app.pastille.ui.FolderChip
 import app.pastille.images.ImageThumbnail
 import app.pastille.images.ThumbnailPlaceholder
 import app.pastille.model.CategoryRecord
@@ -110,10 +120,10 @@ fun ShareSheet(
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(
-                                MaterialTheme.colorScheme.surfaceContainerHigh,
-                                RoundedCornerShape(12.dp),
+                                MaterialTheme.colorScheme.surfaceContainer,
+                                RoundedCornerShape(16.dp),
                             )
-                            .padding(12.dp),
+                            .padding(16.dp),
                     ) {
                         when (state.kind) {
                             ShareKind.TEXT -> TextPreview(state = state)
@@ -147,30 +157,27 @@ fun ShareSheet(
                 Spacer(modifier = Modifier.height(16.dp))
                 Box(modifier = Modifier.graphicsLayer { alpha = if (removed) 0.38f else 1f }) {
                     LazyRow(
+                        modifier = Modifier.selectableGroup(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         if (categories.isNotEmpty()) {
                             item {
-                                Box(
-                                    modifier = Modifier
-                                        .width(1.dp)
-                                        .height(24.dp)
-                                        .background(MaterialTheme.colorScheme.outlineVariant),
-                                )
-                            }
-                            item {
-                                ShareCategoryChip(
-                                    label = "None",
+                                FolderChip(
+                                    label = "No folder",
+                                    icon = Icons.Rounded.FolderOff,
                                     selected = state.selectedCategoryId == null,
                                     onClick = { onSelectCategory(null) },
+                                    role = Role.RadioButton,
                                 )
                             }
                             items(categories, key = { it.id }) { category ->
-                                ShareCategoryChip(
+                                FolderChip(
                                     label = category.name,
+                                    icon = Icons.Rounded.Folder,
                                     selected = state.selectedCategoryId == category.id,
                                     onClick = { onSelectCategory(category.id) },
+                                    role = Role.RadioButton,
                                 )
                             }
                         }
@@ -242,12 +249,13 @@ private fun HeaderRow(state: ShareUiState, onUndo: () -> Unit) {
         modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            modifier = Modifier
-                .size(8.dp)
-                .background(colorScheme.primary, CircleShape),
+        Icon(
+            painter = painterResource(R.drawable.ic_pastille_mark),
+            contentDescription = null,
+            tint = Color.Unspecified,
+            modifier = Modifier.size(24.dp),
         )
-        Spacer(modifier = Modifier.width(8.dp))
+        Spacer(modifier = Modifier.width(12.dp))
         Text(
             text = header,
             style = MaterialTheme.typography.titleMedium,
@@ -412,66 +420,37 @@ private fun MultiImagePreview(state: ShareUiState) {
     }
 }
 
-// "Save as: Image / Sticker", single-select, remembered for the next share.
+// "Save as: Image / Sticker", single-select, remembered for the next share. The list's two-half
+// control (§20): the selected half carries a check, so the state is a shape too.
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SaveAsRow(sticker: Boolean, enabled: Boolean, onSelect: (Boolean) -> Unit, modifier: Modifier = Modifier) {
-    Row(
-        modifier = modifier.selectableGroup(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
+    Column(modifier = modifier.fillMaxWidth()) {
         Text(
             text = "Save as",
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(bottom = 8.dp).semantics { heading() },
         )
-        FilterChip(
-            selected = !sticker,
-            onClick = { onSelect(false) },
-            enabled = enabled,
-            label = { Text("Image") },
-            leadingIcon = {
-                Icon(Icons.Rounded.Image, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize))
-            },
-            modifier = Modifier.semantics { role = Role.RadioButton },
-        )
-        FilterChip(
-            selected = sticker,
-            onClick = { onSelect(true) },
-            enabled = enabled,
-            label = { Text("Sticker") },
-            leadingIcon = {
-                Icon(Icons.Rounded.EmojiEmotions, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize))
-            },
-            modifier = Modifier.semantics { role = Role.RadioButton },
-        )
-    }
-}
-
-@Composable
-private fun ShareCategoryChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    FilterChip(
-        selected = selected,
-        onClick = onClick,
-        label = { Text(label) },
-        leadingIcon = if (selected) {
-            {
-                Icon(
-                    Icons.Rounded.Check,
-                    contentDescription = null,
-                    modifier = Modifier.size(FilterChipDefaults.IconSize),
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            listOf(false to "Image", true to "Sticker").forEachIndexed { index, (value, label) ->
+                SegmentedButton(
+                    selected = sticker == value,
+                    onClick = { onSelect(value) },
+                    enabled = enabled,
+                    shape = SegmentedButtonDefaults.itemShape(index = index, count = 2),
+                    icon = {
+                        SegmentedButtonDefaults.Icon(active = sticker == value) {
+                            Icon(
+                                if (value) Icons.Rounded.EmojiEmotions else Icons.Rounded.Image,
+                                contentDescription = null,
+                                modifier = Modifier.size(SegmentedButtonDefaults.IconSize),
+                            )
+                        }
+                    },
+                    label = { Text(label) },
                 )
             }
-        } else {
-            null
-        },
-        colors = FilterChipDefaults.filterChipColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-            labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
-            selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer,
-            selectedLeadingIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
-        ),
-        border = null,
-    )
+        }
+    }
 }

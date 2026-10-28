@@ -47,6 +47,9 @@ import org.robolectric.annotation.Config
 @Config(qualifiers = "w400dp-h800dp-mdpi")
 class SnippetListHeaderTest {
 
+    /** The cards' designed inset at mdpi: 4dp of list padding and a 3dp gap above the first card. */
+    private val LIST_TOP_GAP = 7f
+
     @get:Rule
     val compose = createAndroidComposeRule<ComponentActivity>()
 
@@ -123,9 +126,9 @@ class SnippetListHeaderTest {
                 "first=${visible.firstOrNull()} last=${visible.lastOrNull()}",
         )
         assertTrue("no row visible\n$log", visible.isNotEmpty())
-        assertTrue("void of ${visible.first().top - list.top}px above the rows\n$log", visible.first().top <= list.top + 1f)
+        assertTrue("void of ${visible.first().top - list.top}px above the rows\n$log", visible.first().top <= list.top + LIST_TOP_GAP + 1f)
         val gapBelow = list.bottom - visible.last().bottom
-        assertTrue("void of ${gapBelow}px under the rows\n$log", gapBelow <= 1f || atEnd() && gapBelow <= 88f + 1f)
+        assertTrue("void of ${gapBelow}px under the rows\n$log", gapBelow <= 1f || atEnd() && gapBelow <= 99f + 1f)
     }
 
     /**
@@ -185,14 +188,13 @@ class SnippetListHeaderTest {
     }
 
     @Test
-    fun `scrolling the list still collapses and expands the header`() {
+    fun `the compact header keeps its height while the list scrolls`() {
         showList(rows = 40)
         val expanded = bounds(TOP_BAR_TAG).height
 
         compose.onNodeWithTag(SNIPPET_LIST_TAG).performTouchInput { swipeUp() }
         compose.waitForIdle()
-        val collapsed = bounds(TOP_BAR_TAG).height
-        assertTrue("collapsed $collapsed < expanded $expanded", collapsed < expanded)
+        assertEquals("pinned while scrolled", expanded, bounds(TOP_BAR_TAG).height)
 
         repeat(6) { compose.onNodeWithTag(SNIPPET_LIST_TAG).performTouchInput { swipeDown() } }
         compose.waitForIdle()
@@ -219,7 +221,7 @@ class SnippetListHeaderTest {
 
         dragFrameByFrame("down the list", rows, step = -40f, moves = 12, log = log)
         assertTrue("left the top\n$log", !atTop(rows))
-        assertTrue("header collapsed\n$log", bounds(TOP_BAR_TAG).height < expanded)
+        assertEquals("header pinned\n$log", expanded, bounds(TOP_BAR_TAG).height)
 
         // Quick flicks back up, each one a finger's length, until the list is at its top again.
         var flicks = 0
@@ -268,7 +270,7 @@ class SnippetListHeaderTest {
         fun folderRowShown() = compose.onAllNodesWithText("All").fetchSemanticsNodes().isNotEmpty()
         // Probe: the folder row is really there to begin with, or its absence below proves nothing.
         assertTrue("folder row in Snippets", folderRowShown())
-        compose.onNodeWithContentDescription("New snippet").assertExists()
+        compose.onNodeWithText("New snippet", useUnmergedTree = true).assertExists()
 
         // A synthetic touch never reaches Material's SegmentedButton under Robolectric (the row sees it, the
         // segment's click doesn't fire), while a finger on the device works; so the switch is pressed through
@@ -276,13 +278,13 @@ class SnippetListHeaderTest {
         compose.onNodeWithText("Stickers").performSemanticsAction(SemanticsActions.OnClick)
         compose.waitForIdle()
         assertTrue("no folder row in Stickers", !folderRowShown())
-        compose.onNodeWithContentDescription("Add stickers").assertExists()
+        compose.onNodeWithText("Add stickers", useUnmergedTree = true).assertExists()
         assertTrue("Stickers mode remembered", settings.appStickersMode)
 
         compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
         compose.waitForIdle()
         assertTrue("Back returns to Snippets", folderRowShown())
-        compose.onNodeWithContentDescription("New snippet").assertExists()
+        compose.onNodeWithText("New snippet", useUnmergedTree = true).assertExists()
         assertTrue("Snippets mode remembered", !settings.appStickersMode)
     }
 }

@@ -1,5 +1,8 @@
 package app.pastille.ui
 
+import androidx.compose.material.icons.rounded.Keyboard
+import androidx.compose.material.icons.rounded.PhotoLibrary
+import androidx.compose.ui.semantics.heading
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -93,7 +96,15 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.LargeTopAppBar
+import androidx.compose.material3.TopAppBar
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FloatingActionButtonDefaults
+import androidx.compose.foundation.Image
+import androidx.compose.material.icons.rounded.Inbox
+import androidx.compose.material.icons.rounded.SearchOff
+import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.minimumInteractiveComponentSize
@@ -145,7 +156,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.lerp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.Lifecycle
@@ -554,9 +564,9 @@ fun SnippetListScreen(
                             modifier = Modifier.focusRequester(searchFocus),
                         )
                     }
-                } else LargeTopAppBar(
+                } else TopAppBar(
                     modifier = Modifier.testTag(TOP_BAR_TAG),
-                    title = { Wordmark(collapsedFraction = scrollBehavior.state.collapsedFraction) },
+                    title = { Wordmark() },
                     actions = {
                         IconButton(onClick = { searching = true }) {
                             Icon(Icons.Rounded.Search, contentDescription = "Search snippets")
@@ -647,9 +657,10 @@ fun SnippetListScreen(
                             )
                         }
                     },
-                    colors = TopAppBarDefaults.largeTopAppBarColors(
+                    colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.surface,
-                        scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                        // Flat, like Sacha's header: the cards scrolling under it are the depth.
+                        scrolledContainerColor = MaterialTheme.colorScheme.surface,
                         titleContentColor = MaterialTheme.colorScheme.onSurface,
                         actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     ),
@@ -658,13 +669,24 @@ fun SnippetListScreen(
             },
             floatingActionButton = {
                 if (!reordering && onStickers) {
-                    FloatingActionButton(onClick = ::pickStickers) {
-                        Icon(Icons.Rounded.AddPhotoAlternate, contentDescription = "Add stickers")
-                    }
+                    ExtendedFloatingActionButton(
+                        onClick = ::pickStickers,
+                        icon = { Icon(Icons.Rounded.Add, contentDescription = null) },
+                        text = { Text("Add stickers") },
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                        elevation = FloatingActionButtonDefaults.loweredElevation(),
+                    )
                 } else if (!reordering) {
-                    FloatingActionButton(onClick = { onCreate(selectedFolderId) }) {
-                        Icon(Icons.Rounded.Edit, contentDescription = "New snippet")
-                    }
+                    // Sacha: an extended "+ New snippet", light tonal fill with dark text.
+                    ExtendedFloatingActionButton(
+                        onClick = { onCreate(selectedFolderId) },
+                        icon = { Icon(Icons.Rounded.Add, contentDescription = null) },
+                        text = { Text("New snippet") },
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                        elevation = FloatingActionButtonDefaults.loweredElevation(),
+                    )
                 }
             },
             snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -726,36 +748,38 @@ fun SnippetListScreen(
                 } else LazyColumn(
                     modifier = Modifier.fillMaxSize().testTag(SNIPPET_LIST_TAG),
                     state = listState,
-                    contentPadding = PaddingValues(bottom = 88.dp),
+                    contentPadding = PaddingValues(top = 4.dp, bottom = 96.dp),
                 ) {
                     // Only when there is something to set up: a zero-height first item leaves the list
                     // claiming it can still scroll back at its top (see `rememberOnboarding`).
                     if (onboarding.needed) {
                         item(key = "onboarding") {
-                            Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                            Box(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
                                 OnboardingCard(onboarding)
                             }
                         }
                     }
                     if (shown.isEmpty()) {
                         item(key = "empty") {
-                            Column(
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 32.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                            ) {
-                                Text(
-                                    text = when {
-                                        query.isNotBlank() -> "No snippets match “$query”"
-                                        snippets.isEmpty() -> "No snippets yet"
-                                        else -> "Nothing in this folder yet"
-                                    },
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            when {
+                                query.isNotBlank() -> EmptyState(
+                                    icon = Icons.Rounded.SearchOff,
+                                    title = "No snippets match “$query”",
+                                    body = "Search looks in titles, text and #tags.",
                                 )
-                                Spacer(Modifier.height(16.dp))
-                                if (query.isBlank()) FilledTonalButton(onClick = { onCreate(selectedFolderId) }) {
-                                    Text(if (snippets.isEmpty()) "Add your first snippet" else "Add a snippet here")
-                                }
+                                snippets.isEmpty() -> EmptyState(
+                                    icon = Icons.Rounded.Inbox,
+                                    title = "No snippets yet",
+                                    body = "Save the things you type again and again, then paste them from the keyboard.",
+                                    action = "Add your first snippet",
+                                    onAction = { onCreate(selectedFolderId) },
+                                )
+                                else -> EmptyState(
+                                    icon = Icons.Rounded.FolderOpen,
+                                    title = "Nothing in this folder yet",
+                                    action = "Add a snippet here",
+                                    onAction = { onCreate(selectedFolderId) },
+                                )
                             }
                         }
                     }
@@ -788,10 +812,11 @@ fun SnippetListScreen(
                         }
                     } else {
                         itemsIndexed(shown, key = { _, snippet -> snippet.id }) { index, snippet ->
-                            Column(modifier = Modifier.animateItem().testTag(SNIPPET_ROW_TAG)) {
-                                if (index > 0) {
-                                    HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
-                                }
+                            // Sacha: separate rounded cards with small gaps, no dividers.
+                            Column(
+                                modifier = Modifier.animateItem().testTag(SNIPPET_ROW_TAG)
+                                    .padding(horizontal = 12.dp, vertical = 3.dp),
+                            ) {
                                 SnippetRow(
                                     snippet = snippet,
                                     categoryName = if (stickersMode || selectedTab == ALL_TAB) snippet.categoryId?.let { categoryNames[it] } else null,
@@ -812,21 +837,22 @@ fun SnippetListScreen(
 }
 
 @Composable
-private fun Wordmark(collapsedFraction: Float) {
+private fun Wordmark() {
+    // Sacha's lockup: the colour mark at 28dp beside a bold 26sp "Pastille". The mark is drawn, not
+    // tinted, so it keeps its blue and folded corner in both themes; the name carries the meaning.
     Row(modifier = Modifier.testTag(WORDMARK_TAG), verticalAlignment = Alignment.CenterVertically) {
-        Icon(
+        Image(
             painter = painterResource(R.drawable.ic_pastille_mark),
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.size(lerp(36.dp, 26.dp, collapsedFraction)),
+            modifier = Modifier.size(28.dp),
         )
         Spacer(modifier = Modifier.width(10.dp))
         Text(
             text = "Pastille",
-            style = MaterialTheme.typography.headlineLarge.copy(
+            style = MaterialTheme.typography.headlineSmall.copy(
                 fontWeight = FontWeight.Bold,
-                letterSpacing = (-0.5).sp,
-                fontSize = lerp(32.sp, 22.sp, collapsedFraction),
+                letterSpacing = (-0.4).sp,
+                fontSize = 26.sp,
             ),
         )
     }
@@ -882,15 +908,20 @@ private fun OnboardingCard(onboarding: Onboarding) {
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
     ) {
         Column(Modifier.padding(16.dp)) {
-            Text("Set up Pastille", style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(8.dp))
+            Text(
+                "Set up Pastille",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.semantics { heading() },
+            )
+            Spacer(Modifier.height(4.dp))
             if (!imeEnabled) {
                 SetupRow(
-                    text = "Enable Pastille in system settings",
+                    icon = Icons.Rounded.Keyboard,
+                    text = "Turn on Pastille in your keyboards",
                     button = "Enable",
                     onClick = {
                         context.startActivity(Intent(AndroidSettings.ACTION_INPUT_METHOD_SETTINGS))
@@ -899,7 +930,8 @@ private fun OnboardingCard(onboarding: Onboarding) {
             }
             if (photosNeeded) {
                 SetupRow(
-                    text = "Allow photo access so your images show in the keyboard",
+                    icon = Icons.Rounded.PhotoLibrary,
+                    text = "Allow photos, so your images show in the keyboard",
                     button = "Allow",
                     onClick = { photoLauncher.launch(photoPermission()) },
                 )
@@ -909,18 +941,23 @@ private fun OnboardingCard(onboarding: Onboarding) {
 }
 
 @Composable
-private fun SetupRow(text: String, button: String, onClick: () -> Unit) {
+private fun SetupRow(icon: ImageVector, text: String, button: String, onClick: () -> Unit) {
+    // Settings' row language (§20): a plain 24dp glyph, the text, then the one action as a tonal
+    // button, 48dp tall, so the step reads as something to do rather than a link.
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
+        Spacer(Modifier.width(16.dp))
         Text(
             text = text,
             style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.weight(1f),
         )
         Spacer(Modifier.width(8.dp))
-        TextButton(onClick = onClick) { Text(button) }
+        androidx.compose.material3.FilledTonalButton(onClick = onClick) { Text(button) }
     }
 }
 
@@ -935,7 +972,8 @@ internal fun SnippetRow(
     onSwipeStartToEnd: () -> Unit,
     folders: List<CategoryRecord> = emptyList(),
     onMove: ((Long?) -> Unit)? = null,
-    containerColor: Color = MaterialTheme.colorScheme.surface,
+    containerColor: Color = MaterialTheme.colorScheme.surfaceContainer,
+    shape: Shape = RoundedCornerShape(16.dp),
 ) {
     val context = LocalContext.current
     val rowScope = rememberCoroutineScope()
@@ -976,7 +1014,7 @@ internal fun SnippetRow(
     swipe.state = swipeState
     SwipeToDismissBox(
         state = swipeState,
-        modifier = Modifier.onSizeChanged { swipe.width = it.width.toFloat() },
+        modifier = Modifier.clip(shape).onSizeChanged { swipe.width = it.width.toFloat() },
         backgroundContent = { SwipeBackground(swipeState, swipe) },
     ) {
         Box(modifier = Modifier.fillMaxWidth().background(containerColor)) {
@@ -996,13 +1034,7 @@ internal fun SnippetRow(
                     )
                     Spacer(modifier = Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = snippet.title.ifBlank { "Image" },
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                        TitleAndTime(title = snippet.title.ifBlank { "Image" }, snippet = snippet)
                         Spacer(modifier = Modifier.height(6.dp))
                         SnippetMetaRow(snippet = snippet, categoryName = categoryName)
                     }
@@ -1023,20 +1055,17 @@ internal fun SnippetRow(
                 ) {
                 Column(modifier = Modifier.weight(1f).animateContentSize()) {
                     val title = remember(snippet.title, snippet.text) { rowTitle(snippet.title, snippet.text) }
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    TitleAndTime(title = title, snippet = snippet)
                     if (snippet.text.trim() != title) {
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             text = snippet.text,
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = if (expanded) Int.MAX_VALUE else 3,
+                            // A fixed two-line preview (Sacha): one-line texts keep the second line, so every
+                            // card with a preview is the same height and the copy buttons line up.
+                            minLines = if (expanded) 1 else 2,
+                            maxLines = if (expanded) Int.MAX_VALUE else 2,
                             overflow = TextOverflow.Ellipsis,
                             onTextLayout = { if (!expanded) overflows = it.hasVisualOverflow },
                         )
@@ -1050,8 +1079,10 @@ internal fun SnippetRow(
                                 .wrapContentHeight(Alignment.CenterVertically),
                         )
                     }
-                    Spacer(modifier = Modifier.height(6.dp))
-                    SnippetMetaRow(snippet = snippet, categoryName = categoryName)
+                    if (hasMeta(snippet, categoryName)) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        SnippetMetaRow(snippet = snippet, categoryName = categoryName)
+                    }
                 }
                 IconButton(onClick = onCopy) {
                     Icon(
@@ -1314,36 +1345,54 @@ private fun FolderRow(
 private fun SnippetMetaRow(snippet: SnippetRecord, categoryName: String?) {
     val kind = remember(snippet.isImage, snippet.text) { snippetKind(snippet.isImage, snippet.text) }
     MetaLine(tags = snippet.tags) {
-        Icon(
-            imageVector = when (kind) {
-                SnippetKind.Text -> Icons.AutoMirrored.Rounded.ShortText
-                SnippetKind.Link -> Icons.Rounded.Link
-                SnippetKind.Image -> Icons.Rounded.Image
-            },
-            contentDescription = when (kind) {
-                SnippetKind.Text -> "Text"
-                SnippetKind.Link -> "Link"
-                SnippetKind.Image -> "Image"
-            },
-            modifier = Modifier.size(14.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        // Plain text says nothing by a glyph; a link or an image does.
+        if (kind != SnippetKind.Text) {
+            Icon(
+                imageVector = if (kind == SnippetKind.Link) Icons.Rounded.Link else Icons.Rounded.Image,
+                contentDescription = if (kind == SnippetKind.Link) "Link" else "Image",
+                modifier = Modifier.size(14.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+        }
+        if (snippet.sticker) {
+            StickerPill()
+            Spacer(modifier = Modifier.width(6.dp))
+        } else if (categoryName != null) {
+            FolderPill(categoryName)
+            Spacer(modifier = Modifier.width(6.dp))
+        }
+    }
+}
+
+private fun hasMeta(snippet: SnippetRecord, categoryName: String?): Boolean =
+    snippet.tags.isNotEmpty() || snippet.sticker || categoryName != null ||
+        snippetKind(snippet.isImage, snippet.text) != SnippetKind.Text
+
+/** Sacha's card head: the title, medium weight, and the time right-aligned on the same line ("5 min"). */
+@Composable
+private fun TitleAndTime(title: String, snippet: SnippetRecord) {
+    Row(verticalAlignment = Alignment.Top) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
         )
-        Spacer(modifier = Modifier.width(6.dp))
+        Spacer(modifier = Modifier.width(8.dp))
         Text(
             text = relativeTime(
                 then = snippet.updatedAt.takeIf { it > 0 } ?: snippet.createdAt,
                 now = System.currentTimeMillis(),
-            ),
-            style = MaterialTheme.typography.labelSmall,
+            ).removeSuffix(" ago"),
+            // Tabular figures, so "5 min" and "28 h" sit on the same column edge down the list.
+            style = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum"),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            modifier = Modifier.padding(top = 2.dp, end = 4.dp),
         )
-        if (snippet.sticker) {
-            Spacer(modifier = Modifier.width(6.dp))
-            StickerPill()
-        } else if (categoryName != null) {
-            Spacer(modifier = Modifier.width(6.dp))
-            FolderPill(categoryName)
-        }
     }
 }
 
@@ -1442,7 +1491,7 @@ private fun ModeSwitch(stickers: Boolean, enabled: Boolean, onSelect: (Boolean) 
     SingleChoiceSegmentedButtonRow(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 4.dp)
+            .padding(start = 16.dp, end = 16.dp, top = 0.dp, bottom = 4.dp)
             .testTag(MODE_SWITCH_TAG),
     ) {
         listOf(false to "Snippets", true to "Stickers").forEachIndexed { index, (value, label) ->
@@ -1451,6 +1500,15 @@ private fun ModeSwitch(stickers: Boolean, enabled: Boolean, onSelect: (Boolean) 
                 onClick = { onSelect(value) },
                 enabled = enabled,
                 shape = SegmentedButtonDefaults.itemShape(index, 2),
+                colors = SegmentedButtonDefaults.colors(
+                    activeContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                    activeContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    activeBorderColor = MaterialTheme.colorScheme.outline,
+                    inactiveContainerColor = Color.Transparent,
+                    inactiveContentColor = MaterialTheme.colorScheme.onSurface,
+                    inactiveBorderColor = MaterialTheme.colorScheme.outline,
+                ),
+                modifier = Modifier.heightIn(min = 48.dp),
                 label = { Text(label, maxLines = 1) },
             )
         }
@@ -1492,13 +1550,13 @@ private fun FolderTabs(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         item(key = "all") {
-            FolderTab(label = "All", icon = Icons.Rounded.GridView, selected = selectedId == ALL_TAB, onClick = { onSelect(ALL_TAB) })
+            FolderChip(label = "All", icon = Icons.Rounded.GridView, alwaysIcon = true, selected = selectedId == ALL_TAB, onClick = { onSelect(ALL_TAB) })
         }
         items(folders, key = { it.id }) { folder ->
             ReorderableItem(reorderState, key = folder.id) { dragging ->
                 var menuOpen by remember { mutableStateOf(false) }
                 Box {
-                    FolderTab(
+                    FolderChip(
                         label = folder.name,
                         icon = Icons.Rounded.Folder,
                         selected = selectedId == folder.id || dragging,
@@ -1538,47 +1596,6 @@ private fun FolderTabs(
             item(key = "add-folder") {
                 AddFolderChip(onClick = onAdd)
             }
-        }
-    }
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun FolderTab(
-    label: String,
-    icon: ImageVector,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    onLongClick: (() -> Unit)? = null,
-) {
-    val colors = MaterialTheme.colorScheme
-    val container by animateColorAsState(
-        targetValue = if (selected) colors.secondaryContainer else colors.surfaceContainerHigh,
-        label = "tabContainer",
-    )
-    Box(
-        modifier = modifier
-            .minimumInteractiveComponentSize()
-            .height(32.dp)
-            .clip(CircleShape)
-            .background(container)
-            .semantics { this.selected = selected }
-            .combinedClickable(role = Role.Tab, onClick = onClick, onLongClick = onLongClick)
-            .padding(horizontal = 12.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        val tint = if (selected) colors.onSecondaryContainer else colors.onSurfaceVariant
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            // Selection never rests on colour alone: the selected chip trades its icon for a check.
-            Icon(if (selected) Icons.Rounded.Check else icon, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelLarge,
-                color = tint,
-                maxLines = 1,
-            )
         }
     }
 }
@@ -1671,44 +1688,27 @@ private fun SearchField(
 }
 
 /**
- * Issue #8. The large header follows the list and nothing else:
- * - M3 makes the bar itself `draggable` whenever its behaviour isn't pinned, so a drag on the empty
- *   header moved it, and a tap that wobbled past touch slop started a drag. `isPinned` is read for
- *   that one purpose only, so reporting true removes the bar's own drag and keeps the list's
- *   nested-scroll collapse untouched.
- * - `snapAnimationSpec = null`: no spring finishing a half collapse after a gesture ends, so the
- *   wordmark never resizes on its own.
+ * Issue #8, settled by the redesign: the header is a compact pinned bar (Sacha, 2026-10-28), so it
+ * never collapses, never resizes the wordmark and can't be dragged. The list scrolls under it.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun rememberListDrivenScrollBehavior(): TopAppBarScrollBehavior {
-    val listDriven = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(snapAnimationSpec = null)
-    return remember(listDriven) { ListDrivenScrollBehavior(listDriven) }
-}
+private fun rememberListDrivenScrollBehavior(): TopAppBarScrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
 
-@OptIn(ExperimentalMaterial3Api::class)
-private class ListDrivenScrollBehavior(listDriven: TopAppBarScrollBehavior) : TopAppBarScrollBehavior by listDriven {
-    override val isPinned: Boolean = true
-}
-
-/** Jotter review: the folder row ends with an outlined "+ Add" chip that creates a folder. */
+/** Sacha: the folder row ends with a round outlined "+" that creates a folder. */
 @Composable
 private fun AddFolderChip(onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     Box(
         modifier = Modifier
             .minimumInteractiveComponentSize()
-            .height(32.dp)
+            .size(36.dp)
             .clip(CircleShape)
-            .border(1.dp, colors.outlineVariant, CircleShape)
+            .border(1.dp, colors.outline, CircleShape)
             .clickable(role = Role.Button, onClickLabel = "New folder", onClick = onClick)
-            .padding(horizontal = 12.dp),
+            .semantics { contentDescription = "New folder" },
         contentAlignment = Alignment.Center,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Rounded.Add, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(4.dp))
-            Text("Add", style = MaterialTheme.typography.labelLarge, color = colors.onSurfaceVariant, maxLines = 1)
-        }
+        Icon(Icons.Rounded.Add, contentDescription = null, tint = colors.onSurface, modifier = Modifier.size(20.dp))
     }
 }

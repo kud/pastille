@@ -198,7 +198,7 @@ internal fun ModeSwitch(
     onClipboard: () -> Unit = {},
 ) {
     Row(
-        modifier = Modifier.padding(start = 8.dp).selectableGroup(),
+        modifier = Modifier.padding(end = 8.dp).selectableGroup(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         KeyboardMode.entries.filter { it in enabled }.forEach { tab ->

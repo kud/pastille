@@ -333,84 +333,96 @@ private fun Toolbar(state: KeyboardUiState, actions: KeyboardActions, title: Str
     val reduceMotion = LocalReduceMotion.current
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
         val compactTabs = maxWidth < 400.dp
-        Row(
+        AnimatedContent(
+            targetState = title,
+            transitionSpec = {
+                if (reduceMotion) {
+                    EnterTransition.None togetherWith ExitTransition.None
+                } else {
+                    fadeIn(tween(150, delayMillis = 60)) togetherWith fadeOut(tween(90))
+                }
+            },
             modifier = Modifier.fillMaxWidth().height(TOOLBAR_HEIGHT_DP.dp).background(palette.strip),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(modifier = Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.CenterStart) {
-                AnimatedContent(
-                    targetState = title,
-                    transitionSpec = {
-                        if (reduceMotion) {
-                            EnterTransition.None togetherWith ExitTransition.None
-                        } else {
-                            fadeIn(tween(150, delayMillis = 60)) togetherWith fadeOut(tween(90))
-                        }
-                    },
-                    contentAlignment = Alignment.CenterStart,
-                    label = "toolbarLeading",
-                ) { current ->
-                    if (current == null) {
-                        if (state.enabledModes.size > 1 || state.clipboardEnabled) {
-                            ModeSwitch(
-                                mode = state.mode,
-                                enabled = state.enabledModes,
-                                onChange = actions::onModeChange,
-                                compact = compactTabs,
-                                clipboard = state.clipboardEnabled,
-                                clipboardOpen = state.clipboardOpen,
-                                onClipboard = actions::onOpenClipboard,
-                            )
-                        }
-                    } else {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(onClick = actions::onBack) {
-                                Icon(
-                                    Icons.AutoMirrored.Rounded.ArrowBack,
-                                    contentDescription = "Back",
-                                    tint = palette.icon,
-                                )
-                            }
-                            Text(
-                                text = current,
-                                style = MaterialTheme.typography.titleSmall,
-                                color = palette.label,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
+            label = "toolbar",
+        ) { current ->
+            if (current == null) {
+                // Browsing: the tools at the start, the content tabs at the end, where the thumb lands.
+                Row(modifier = Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+                    Row(modifier = Modifier.padding(start = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        ToolbarAction(icon = Icons.Rounded.Settings, label = "Keyboard settings", onClick = actions::onOpenSettings)
+                        SwitchKeyboardAction(actions)
+                        ContextAction(state, actions)
+                    }
+                    Spacer(Modifier.weight(1f))
+                    if (state.enabledModes.size > 1 || state.clipboardEnabled) {
+                        ModeSwitch(
+                            mode = state.mode,
+                            enabled = state.enabledModes,
+                            onChange = actions::onModeChange,
+                            compact = compactTabs,
+                            clipboard = state.clipboardEnabled,
+                            clipboardOpen = state.clipboardOpen,
+                            onClipboard = actions::onOpenClipboard,
+                        )
                     }
                 }
-            }
-            Row(
-                modifier = Modifier.padding(end = 4.dp),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-                    when {
-                        state.clipboardOpen -> if (state.recentClips.isNotEmpty()) {
-                            ToolbarAction(icon = Icons.Rounded.DeleteSweep, label = "Clear clipboard", onClick = actions::onClearClips)
+            } else {
+                // A titled view: back and title at the start, the tools at the end.
+                Row(modifier = Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+                    Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = actions::onBack) {
+                            Icon(
+                                Icons.AutoMirrored.Rounded.ArrowBack,
+                                contentDescription = "Back",
+                                tint = palette.icon,
+                            )
                         }
-                        state.mode == KeyboardMode.Snippets ->
-                            ToolbarAction(icon = Icons.Rounded.Add, label = "New snippet", onClick = actions::onOpenAdd)
-                        state.mode == KeyboardMode.Stickers ->
-                            ToolbarAction(icon = Icons.Rounded.Add, label = "Add stickers", onClick = actions::onAddStickers)
-                        else -> Unit
+                        Text(
+                            text = current,
+                            style = MaterialTheme.typography.titleSmall,
+                            color = palette.label,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    Row(modifier = Modifier.padding(end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        ContextAction(state, actions)
+                        SwitchKeyboardAction(actions)
+                        ToolbarAction(icon = Icons.Rounded.Settings, label = "Keyboard settings", onClick = actions::onOpenSettings)
                     }
                 }
-                // A long press opens Android's keyboard picker, for any keyboard rather than the usual one.
-                ToolbarAction(
-                    icon = Icons.Rounded.Keyboard,
-                    label = "Switch keyboard",
-                    onClick = actions::onSwitchKeyboard,
-                    onLongClick = actions::onPickKeyboard,
-                    onLongClickLabel = "Choose a keyboard",
-                )
-                ToolbarAction(icon = Icons.Rounded.Settings, label = "Keyboard settings", onClick = actions::onOpenSettings)
             }
         }
     }
+}
+
+// What the shown tab adds or clears; a fixed 48dp slot, so nothing beside it moves when it empties.
+@Composable
+private fun ContextAction(state: KeyboardUiState, actions: KeyboardActions) {
+    Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+        when {
+            state.clipboardOpen -> if (state.recentClips.isNotEmpty()) {
+                ToolbarAction(icon = Icons.Rounded.DeleteSweep, label = "Clear clipboard", onClick = actions::onClearClips)
+            }
+            state.mode == KeyboardMode.Snippets ->
+                ToolbarAction(icon = Icons.Rounded.Add, label = "New snippet", onClick = actions::onOpenAdd)
+            state.mode == KeyboardMode.Stickers ->
+                ToolbarAction(icon = Icons.Rounded.Add, label = "Add stickers", onClick = actions::onAddStickers)
+            else -> Unit
+        }
+    }
+}
+
+// A long press opens Android's keyboard picker, for any keyboard rather than the usual one.
+@Composable
+private fun SwitchKeyboardAction(actions: KeyboardActions) {
+    ToolbarAction(
+        icon = Icons.Rounded.Keyboard,
+        label = "Switch keyboard",
+        onClick = actions::onSwitchKeyboard,
+        onLongClick = actions::onPickKeyboard,
+        onLongClickLabel = "Choose a keyboard",
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)

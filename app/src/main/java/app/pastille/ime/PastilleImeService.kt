@@ -563,6 +563,8 @@ class PastilleImeService :
 
     override fun onSetModeEnabled(mode: KeyboardMode, enabled: Boolean) {
         settings.setModeEnabled(mode, enabled)
+        // Off means nothing kept: clips are memory only, so clearing them is all there is to delete.
+        if (mode == KeyboardMode.Clipboard && !enabled) recentClipboard.clear()
     }
 
     // Importing needs the photo picker, which a keyboard can't host: the app opens on Stickers and launches it.
@@ -645,7 +647,7 @@ class PastilleImeService :
         val snippetsOn = remember(settingsTick) { settings.snippetsEnabled }
         val imagesOn = remember(settingsTick) { settings.imagesEnabled }
         val stickersOn = remember(settingsTick) { settings.stickersEnabled }
-        val recentOn = remember(settingsTick) { settings.recentClipboard }
+        val recentOn = remember(settingsTick) { settings.clipboardEnabled }
         val recentState by recentClipboard.state.collectAsState()
         val shownMode = effectiveMode(mode.value, remember(settingsTick) { settings.enabledModes() })
         val enabledSourceIds = remember(settingsTick) { settings.enabledImageSources }

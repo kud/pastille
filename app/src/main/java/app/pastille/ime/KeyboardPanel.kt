@@ -1351,7 +1351,7 @@ private fun SettingsContent(state: KeyboardUiState, actions: KeyboardActions) {
         SettingsHeading("Show in the keyboard")
         ChipLine {
             val enabled = state.enabledModes
-            KeyboardMode.content.forEach { mode ->
+            KeyboardMode.entries.forEach { mode ->
                 val on = mode in enabled
                 FilterToggleChip(
                     label = mode.label,

@@ -37,7 +37,7 @@ class PastilleApplication : Application() {
     val recentClipboard by lazy {
         RecentClipboard(
             scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
-            enabled = { PastilleSettings.forContext(this).recentClipboard },
+            enabled = { PastilleSettings.forContext(this).clipboardEnabled },
             maxChars = MAX_TEXT_CHARS,
         )
     }

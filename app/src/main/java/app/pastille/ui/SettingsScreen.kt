@@ -1,14 +1,12 @@
 package app.pastille.ui
 
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.TopAppBar
-import androidx.activity.compose.BackHandler
 import android.Manifest
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings as AndroidSettings
+import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
@@ -17,32 +15,45 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.KeyboardReturn
+import androidx.compose.material.icons.rounded.Backup
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ContentPaste
 import androidx.compose.material.icons.rounded.Dashboard
+import androidx.compose.material.icons.rounded.ErrorOutline
+import androidx.compose.material.icons.rounded.FileOpen
 import androidx.compose.material.icons.rounded.Height
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Keyboard
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.PhotoLibrary
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Restore
+import androidx.compose.material.icons.rounded.Sync
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MultiChoiceSegmentedButtonRow
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
@@ -50,55 +61,52 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import app.pastille.ime.LocalReduceMotion
-import app.pastille.ime.PastilleMotion
-import app.pastille.ime.ImageSourceReader
-import app.pastille.ime.KeyboardHeightPreview
-import app.pastille.ime.KeyboardStylePreview
-import app.pastille.ime.installedTypingKeyboards
-import app.pastille.ime.otherTypingKeyboards
-import app.pastille.settings.PhotoAccessAction
-import app.pastille.settings.photoAccessAction
-import app.pastille.settings.returnKeyboardChoices
-import app.pastille.settings.ClipboardClearDelay
-import app.pastille.settings.KeyboardMode
-import app.pastille.settings.KeyboardStyle
-import app.pastille.settings.canSwitchOff
-import app.pastille.settings.PanelHeight
-import app.pastille.settings.PastilleSettings
-import app.pastille.settings.BackupProblem
 import app.pastille.PastilleApplication
 import app.pastille.backup.AutoBackup
 import app.pastille.backup.BackupArchive
 import app.pastille.backup.BackupFiles
-import app.pastille.backup.SyncDiagnosis
 import app.pastille.backup.ImportConfirmDialog
+import app.pastille.backup.SyncDiagnosis
 import app.pastille.backup.importInBackground
-import android.widget.Toast
-import androidx.compose.material.icons.rounded.Backup
-import androidx.compose.material.icons.rounded.ErrorOutline
-import androidx.compose.material.icons.rounded.Restore
-import androidx.compose.material.icons.rounded.Sync
-import androidx.compose.material.icons.rounded.FileOpen
-import androidx.compose.material.icons.rounded.Refresh
-import androidx.compose.runtime.rememberCoroutineScope
-import kotlinx.coroutines.launch
+import app.pastille.ime.ImageSourceReader
+import app.pastille.ime.KeyboardHeightPreview
+import app.pastille.ime.KeyboardStylePreview
+import app.pastille.ime.LocalReduceMotion
+import app.pastille.ime.PastilleMotion
+import app.pastille.ime.installedTypingKeyboards
+import app.pastille.ime.modeIcon
+import app.pastille.ime.otherTypingKeyboards
+import app.pastille.settings.BackupProblem
+import app.pastille.settings.ClipboardClearDelay
+import app.pastille.settings.KeyboardMode
+import app.pastille.settings.KeyboardStyle
+import app.pastille.settings.PanelHeight
+import app.pastille.settings.PastilleSettings
+import app.pastille.settings.PhotoAccessAction
+import app.pastille.settings.canSwitchOff
+import app.pastille.settings.photoAccessAction
+import app.pastille.settings.returnKeyboardChoices
 import java.io.File
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -226,7 +234,6 @@ private fun KeyboardGroup(settings: PastilleSettings, onOpen: (SettingsPage) -> 
     var panelLandscape by remember { mutableStateOf(settings.panelHeightLandscape) }
     var enabledModes by remember { mutableStateOf(settings.enabledModes()) }
     var returnAfterSnippet by remember { mutableStateOf(settings.returnAfterSnippet) }
-    var recentClipboard by remember { mutableStateOf(settings.recentClipboard) }
     val context = LocalContext.current
     SettingsGroup(title = "Keyboard") {
         SettingsRow(
@@ -246,29 +253,24 @@ private fun KeyboardGroup(settings: PastilleSettings, onOpen: (SettingsPage) -> 
             trailing = { SettingsChevron() },
         )
         SettingsHairline()
-        SettingsRow(title = "Show in the keyboard", subtitle = "At least one stays on", icon = Icons.Rounded.Dashboard)
+        SettingsRow(
+            title = "Show in the keyboard",
+            subtitle = "One of Snippets, Stickers and Images stays on. Clipboard keeps 10 copies for an hour, in memory, never passwords",
+            icon = Icons.Rounded.Dashboard,
+        )
         SettingsRowDetail {
             ModesRow(
                 enabled = enabledModes,
                 onChange = { mode, on ->
                     settings.setModeEnabled(mode, on)
+                    // Off means nothing kept: clips are memory only, so clearing them is all there is to delete.
+                    if (mode == KeyboardMode.Clipboard && !on) {
+                        (context.applicationContext as? app.pastille.PastilleApplication)?.recentClipboard?.clear()
+                    }
                     enabledModes = settings.enabledModes()
                 },
             )
         }
-        SettingsHairline()
-        // Off clears what's kept at once; clips are memory only, so there is nothing else to delete.
-        ToggleRow(
-            title = "Clipboard",
-            subtitle = "Your last 10 copies, for an hour, behind the keyboard's clipboard button. Memory only, never backed up; passwords are skipped",
-            icon = Icons.Rounded.ContentPaste,
-            checked = recentClipboard,
-            onChange = {
-                recentClipboard = it
-                settings.recentClipboard = it
-                if (!it) (context.applicationContext as? app.pastille.PastilleApplication)?.recentClipboard?.clear()
-            },
-        )
         SettingsHairline()
         ToggleRow(
             title = "Return after a snippet",
@@ -504,22 +506,49 @@ private fun ToggleRow(
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+// Four choices don't fit one segmented row at 360dp with their labels, so they are chips that wrap.
+// Each carries its keyboard tab's glyph; on, the glyph gives way to a check, with the fill and a
+// heavier label, so the state is a shape as well as a colour. The last content tab refuses to go.
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ModesRow(
     enabled: Set<KeyboardMode>,
     onChange: (KeyboardMode, Boolean) -> Unit,
 ) {
-    val modes = KeyboardMode.content
-    MultiChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-        modes.forEachIndexed { index, mode ->
+    val colors = MaterialTheme.colorScheme
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        KeyboardMode.entries.forEach { mode ->
             val on = mode in enabled
-            SegmentedButton(
-                checked = on,
-                onCheckedChange = { if (it || canSwitchOff(mode, enabled)) onChange(mode, it) },
-                shape = SegmentedButtonDefaults.itemShape(index, modes.size),
-                icon = { SegmentedButtonDefaults.Icon(active = on) },
-                label = { Text(mode.label, maxLines = 1) },
+            FilterChip(
+                selected = on,
+                onClick = { if (!on || canSwitchOff(mode, enabled)) onChange(mode, !on) },
+                label = {
+                    Text(
+                        mode.label,
+                        maxLines = 1,
+                        fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
+                    )
+                },
+                leadingIcon = {
+                    Icon(
+                        if (on) Icons.Rounded.Check else modeIcon(mode),
+                        contentDescription = null,
+                        modifier = Modifier.size(FilterChipDefaults.IconSize),
+                    )
+                },
+                shape = CircleShape,
+                colors = FilterChipDefaults.filterChipColors(
+                    containerColor = colors.surfaceContainerHigh,
+                    labelColor = colors.onSurface,
+                    iconColor = colors.onSurfaceVariant,
+                    selectedContainerColor = colors.secondaryContainer,
+                    selectedLabelColor = colors.onSecondaryContainer,
+                    selectedLeadingIconColor = colors.onSecondaryContainer,
+                ),
+                border = null,
             )
         }
     }

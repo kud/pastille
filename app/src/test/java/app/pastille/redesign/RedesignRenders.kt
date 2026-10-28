@@ -31,6 +31,7 @@ import app.pastille.ime.keyboardPalette
 import app.pastille.model.CategoryRecord
 import app.pastille.qr.QrScreen
 import app.pastille.qr.SnippetQr
+import app.pastille.ime.PanelState
 import app.pastille.settings.KeyboardMode
 import app.pastille.settings.KeyboardStyle
 import app.pastille.share.ShareSheet
@@ -93,6 +94,7 @@ abstract class RedesignRenders(private val dark: Boolean, private val screen: St
         "stickers" -> stickers()
         "keyboard" -> keyboard()
         "clipboard" -> keyboard(clipboard = true)
+        "keyboard-settings" -> keyboard(settingsPanel = true)
         "share" -> share()
         "qr" -> qr()
         "import" -> importOne()
@@ -161,7 +163,7 @@ abstract class RedesignRenders(private val dark: Boolean, private val screen: St
         compose.setContent { PastilleTheme(darkTheme = dark) { SnippetListScreen(repository = repository, onCreate = {}, onEdit = {}, onOpenSettings = {}) } }
         settle(); settle(); capture("stickers")
     }
-    private fun keyboard(clipboard: Boolean = false) {
+    private fun keyboard(clipboard: Boolean = false, settingsPanel: Boolean = false) {
         val now = System.currentTimeMillis()
         val state = KeyboardUiState(
             darkTheme = dark,
@@ -185,6 +187,8 @@ abstract class RedesignRenders(private val dark: Boolean, private val screen: St
             ),
             clipboardEnabled = true,
             mode = if (clipboard) KeyboardMode.Clipboard else KeyboardMode.Snippets,
+            panelState = if (settingsPanel) PanelState.Settings else PanelState.Browse,
+            stickersEnabled = !settingsPanel,
         )
         compose.setContent {
             PastilleTheme(darkTheme = dark) {
@@ -194,13 +198,16 @@ abstract class RedesignRenders(private val dark: Boolean, private val screen: St
                     contentAlignment = androidx.compose.ui.Alignment.BottomCenter,
                 ) {
                     KeyboardTheme(palette = palette) {
-                        KeyboardPanel(state = state, actions = NoKeyboardActions, contentHeight = 300.dp)
+                        // The settings panel scrolls in 300dp; the render opens it tall to show every row at once.
+                        KeyboardPanel(state = state, actions = NoKeyboardActions, contentHeight = if (settingsPanel) 600.dp else 300.dp)
                     }
                 }
             }
         }
         val wide = if (compose.activity.resources.configuration.screenWidthDp >= 400) "-wide" else ""
-        if (clipboard) {
+        if (settingsPanel) {
+            wait("Show in the keyboard"); capture("keyboard-settings$wide")
+        } else if (clipboard) {
             wait("Order #48213 ships Thursday"); capture("clipboard$wide")
         } else {
             wait("Running late"); capture("keyboard$wide")
@@ -314,6 +321,9 @@ class KeyboardLight : RedesignRenders(false, "keyboard")
 class ClipboardDark : RedesignRenders(true, "clipboard")
 class ClipboardLight : RedesignRenders(false, "clipboard")
 @Config(qualifiers = "w411dp-h860dp-xxhdpi") class KeyboardWideDark : RedesignRenders(true, "keyboard")
+class KeyboardSettingsDark : RedesignRenders(true, "keyboard-settings")
+class KeyboardSettingsLight : RedesignRenders(false, "keyboard-settings")
+@Config(qualifiers = "w411dp-h860dp-xxhdpi") class KeyboardSettingsWideDark : RedesignRenders(true, "keyboard-settings")
 class ShareDark : RedesignRenders(true, "share")
 class ShareLight : RedesignRenders(false, "share")
 class QrLight : RedesignRenders(false, "qr")

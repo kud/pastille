@@ -9,4 +9,5 @@ sealed interface PanelState {
     data object Settings : PanelState
     data object ImageFolders : PanelState
     data object Reorder : PanelState
+    data class Clip(val clipId: Long) : PanelState
 }

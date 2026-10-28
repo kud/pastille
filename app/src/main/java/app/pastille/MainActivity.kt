@@ -84,6 +84,14 @@ class MainActivity : ComponentActivity() {
         (application as PastilleApplication).autoBackup.syncSoon()
     }
 
+    // Android 10+ lets an app read the clipboard only while it has focus, so this is the app's moment
+    // to note a recent clip (the keyboard does the same when it opens).
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (!hasFocus) return
+        (application as PastilleApplication).recentClipboard.recordCurrent(this)
+    }
+
     // Leaving the app writes the automatic backup now rather than after its debounce.
     override fun onStop() {
         super.onStop()

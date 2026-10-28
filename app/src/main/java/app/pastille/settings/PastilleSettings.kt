@@ -121,6 +121,12 @@ class PastilleSettings private constructor(private val prefs: SharedPreferences)
         get() = prefs.getString(KEY_RETURN_KEYBOARD_ID, null)
         set(value) = prefs.edit().apply { if (value == null) remove(KEY_RETURN_KEYBOARD_ID) else putString(KEY_RETURN_KEYBOARD_ID, value) }.apply()
 
+    // Settings › Keyboard › Recent clipboard. On by default: the clips stay in memory for an hour at most,
+    // are only read while Pastille's keyboard or app is in front, and skip sensitive and password-field copies.
+    var recentClipboard: Boolean
+        get() = prefs.getBoolean(KEY_RECENT_CLIPBOARD, true)
+        set(value) = prefs.edit().putBoolean(KEY_RECENT_CLIPBOARD, value).apply()
+
     var clipboardClearDelay: ClipboardClearDelay
         get() = ClipboardClearDelay.fromKey(prefs.getString(KEY_CLIPBOARD_CLEAR_DELAY, null))
         set(value) = prefs.edit().putString(KEY_CLIPBOARD_CLEAR_DELAY, value.key).apply()
@@ -209,6 +215,7 @@ class PastilleSettings private constructor(private val prefs: SharedPreferences)
         private const val KEY_SYNC_REPLACED = "sync_replaced_hash"
         private const val PREFS_NAME = "pastille_settings"
         private const val KEY_CLIPBOARD_CLEAR_DELAY = "clipboard_clear_delay"
+        private const val KEY_RECENT_CLIPBOARD = "recent_clipboard"
         private const val KEY_RETURN_KEYBOARD_ID = "return_keyboard_id"
         const val PREVIOUS_KEYBOARD = "previous"
         private const val KEY_RETURN_TO_PREVIOUS_KEYBOARD = "return_to_previous_keyboard"

@@ -31,6 +31,15 @@ class RecentClipboard(
         change { it.record(candidate, now(), sensitiveField, maxChars) }
     }
 
+    // Reads the clipboard only when the feature is on, and never the content from a password field.
+    fun recordCurrent(context: Context, sensitiveField: Boolean = false) {
+        if (!enabled()) {
+            clear()
+            return
+        }
+        record(readClipCandidate(context, state.value.lastSeenStamp, sensitiveField), sensitiveField)
+    }
+
     fun remove(id: Long) = change { it.remove(id) }
 
     fun clear() = change { it.cleared() }
@@ -59,7 +68,7 @@ private const val EXTRA_IS_SENSITIVE_KEY = "android.content.extra.IS_SENSITIVE"
 // One read of the primary clip. The description (label, sensitive flag, stamp) is checked before the
 // content, so a clip already seen, Pastille's own, or a sensitive one is never read. Only items that
 // carry text count: a URI or intent clip (an image, a file) isn't recorded.
-fun readClipCandidate(context: Context, lastSeenStamp: Long?): ClipCandidate? = try {
+fun readClipCandidate(context: Context, lastSeenStamp: Long?, sensitiveField: Boolean = false): ClipCandidate? = try {
     val clipboard = context.getSystemService(ClipboardManager::class.java)
     val description = clipboard?.primaryClipDescription
     if (description == null) {
@@ -70,7 +79,7 @@ fun readClipCandidate(context: Context, lastSeenStamp: Long?): ClipCandidate? = 
         // versions too, so it is read by name everywhere.
         val sensitive = description.extras?.getBoolean(EXTRA_IS_SENSITIVE_KEY) == true
         val own = description.label?.toString()?.startsWith(CLIP_LABEL_PREFIX) == true
-        val skipContent = sensitive || own || (stamp != 0L && stamp == lastSeenStamp)
+        val skipContent = sensitiveField || sensitive || own || (stamp != 0L && stamp == lastSeenStamp)
         val text = if (skipContent) {
             null
         } else {

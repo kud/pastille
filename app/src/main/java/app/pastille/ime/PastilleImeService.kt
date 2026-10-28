@@ -58,6 +58,7 @@ import app.pastille.images.mimeTypeForFile
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import java.io.File
+import app.pastille.clipboard.RecentClip
 import app.pastille.model.CategoryRecord
 import app.pastille.model.SnippetRecord
 import app.pastille.model.isMissingFolder
@@ -117,6 +118,7 @@ class PastilleImeService :
 
     private val clipChangedListener =
         ClipboardManager.OnPrimaryClipChangedListener {
+            if (isInputViewShown) recordRecentClip()
             if (panelState.value == PanelState.Add) {
                 val current = addSources.value
                 if (current != null) {
@@ -168,6 +170,7 @@ class PastilleImeService :
         // The keyboard opening is a good moment to pick up the other phone's changes; at most once a minute.
         (application as? app.pastille.PastilleApplication)?.autoBackup?.syncSoon(minIntervalMs = 60_000)
         openCount.intValue++
+        recordRecentClip()
         reduceMotion.value = PastilleMotion.reduceMotion()
         if (!restarting) {
             if (settings.keyboardStyleChosen) {
@@ -332,6 +335,41 @@ class PastilleImeService :
         }
     }
 
+    private val recentClipboard get() = (application as app.pastille.PastilleApplication).recentClipboard
+
+    // Android 10+ lets only the focused app or the active keyboard read the clipboard: the keyboard
+    // notes what's there when it opens and on every change while shown. Never from a password field.
+    private fun recordRecentClip() {
+        val info = currentInputEditorInfo
+        val sensitiveField = info != null && isSensitiveField(info.inputType, info.imeOptions)
+        recentClipboard.recordCurrent(this, sensitiveField)
+    }
+
+    override fun onClipTap(clip: RecentClip) {
+        if (panelState.value is PanelState.Clip) panelState.value = PanelState.Browse
+        val committed = currentInputConnection?.commitText(clip.text, 1) == true
+        if (committed) returnToPreviousKeyboardIfWanted(image = false)
+    }
+
+    override fun onClipLongPress(clip: RecentClip) {
+        panelState.value = PanelState.Clip(clip.id)
+    }
+
+    override fun onSaveClip(clip: RecentClip) {
+        saveText(clip.text, folderId.value) { recentClipboard.remove(clip.id) }
+    }
+
+    override fun onRemoveClip(clip: RecentClip) {
+        panelState.value = PanelState.Browse
+        recentClipboard.remove(clip.id)
+    }
+
+    override fun onClearClips() {
+        panelState.value = PanelState.Browse
+        recentClipboard.clear()
+        showStrip("Recent clipboard cleared")
+    }
+
     private fun showSnippet(id: Long, categoryId: Long?) {
         mode.value = KeyboardMode.Snippets
         settings.keyboardMode = KeyboardMode.Snippets
@@ -372,6 +410,11 @@ class PastilleImeService :
             showStrip("Nothing to save")
             return
         }
+        saveText(raw, categoryId)
+    }
+
+    // Saves text as a snippet, or points at the one that already holds it. `onSaved` runs on the main thread.
+    private fun saveText(raw: String, categoryId: Long?, onSaved: () -> Unit = {}) {
         serviceScope.launch {
             val repository = SnippetRepository.forContext(this@PastilleImeService)
             val duplicate = repository.findTextDuplicate(raw)
@@ -379,6 +422,7 @@ class PastilleImeService :
                 withContext(Dispatchers.Main) {
                     if (destroyed) return@withContext
                     panelState.value = PanelState.Browse
+                    onSaved()
                     showStrip(
                         message = "Already saved as \"${displayTitle(duplicate.title, duplicate.text)}\"",
                         actionLabel = "Show",
@@ -392,6 +436,7 @@ class PastilleImeService :
             withContext(Dispatchers.Main) {
                 if (destroyed) return@withContext
                 panelState.value = PanelState.Browse
+                onSaved()
                 showStrip(
                     message = "Saved \"$title\"",
                     actionLabel = "Undo",
@@ -600,6 +645,8 @@ class PastilleImeService :
         val snippetsOn = remember(settingsTick) { settings.snippetsEnabled }
         val imagesOn = remember(settingsTick) { settings.imagesEnabled }
         val stickersOn = remember(settingsTick) { settings.stickersEnabled }
+        val recentOn = remember(settingsTick) { settings.recentClipboard }
+        val recentState by recentClipboard.state.collectAsState()
         val shownMode = effectiveMode(mode.value, remember(settingsTick) { settings.enabledModes() })
         val enabledSourceIds = remember(settingsTick) { settings.enabledImageSources }
         val needsSources = shownMode == KeyboardMode.Images ||
@@ -632,6 +679,7 @@ class PastilleImeService :
             snippetsEnabled = snippetsOn,
             imagesEnabled = imagesOn,
             stickersEnabled = stickersOn,
+            recentClips = if (recentOn) recentState.clips else emptyList(),
             snippets = snippets,
             stickers = stickers,
             categories = categories,

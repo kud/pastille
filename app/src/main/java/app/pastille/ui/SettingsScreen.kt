@@ -80,6 +80,16 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.foundation.layout.height
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -127,6 +137,7 @@ fun SettingsScreen(onBack: () -> Unit) {
         topBar = {
             TopAppBar(
                 title = { Text(page.title) },
+                windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
                 navigationIcon = {
                     IconButton(onClick = { if (page == SettingsPage.Main) onBack() else page = SettingsPage.Main }) {
                         Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
@@ -140,12 +151,20 @@ fun SettingsScreen(onBack: () -> Unit) {
             targetState = page,
             transitionSpec = { PastilleMotion.screenTransition(forward = targetState != SettingsPage.Main, reduceMotion = reduceMotion) },
             label = "settingsPage",
-            modifier = Modifier.padding(padding),
+            // One owner per inset: the bar's height (status bar included) sits above the scroll, so the
+            // first group header always starts below it; the bottom inset goes inside the scroll, so
+            // the last rows scroll clear of the navigation bar instead of being cut at it.
+            modifier = Modifier.padding(
+                top = padding.calculateTopPadding(),
+                start = padding.calculateStartPadding(LocalLayoutDirection.current),
+                end = padding.calculateEndPadding(LocalLayoutDirection.current),
+            ),
         ) { shown ->
             Column(
                 modifier = Modifier
+                    .fillMaxSize()
                     .verticalScroll(rememberScrollState())
-                    .padding(top = 4.dp, bottom = 24.dp),
+                    .padding(top = 12.dp, bottom = padding.calculateBottomPadding() + 24.dp),
                 verticalArrangement = Arrangement.spacedBy(20.dp),
             ) {
                 when (shown) {
@@ -171,6 +190,8 @@ private val TapToChooseProblems = setOf(
     BackupProblem.ReadOnly,
     BackupProblem.CantOverwrite,
 )
+
+internal const val CLIPBOARD_NOTE = "Clipboard: 10 clips, 1 hour, no passwords"
 
 private enum class SettingsPage(val title: String) { Main("Settings"), Style("Style"), Height("Height") }
 
@@ -259,10 +280,10 @@ private fun KeyboardGroup(settings: PastilleSettings, onOpen: (SettingsPage) -> 
         SettingsHairline()
         SettingsRow(
             title = "Show in the keyboard",
-            subtitle = "One of Snippets, Stickers and Images stays on. Clipboard keeps 10 copies for an hour, in memory, never passwords",
+            subtitle = "One of Snippets, Stickers and Images always stays on",
             icon = Icons.Rounded.Dashboard,
         )
-        SettingsRowDetail {
+        SettingsRowDetail(atText = true) {
             ModesRow(
                 enabled = enabledModes,
                 onChange = { mode, on ->
@@ -273,6 +294,15 @@ private fun KeyboardGroup(settings: PastilleSettings, onOpen: (SettingsPage) -> 
                     }
                     enabledModes = settings.enabledModes()
                 },
+            )
+            // The note explains the Clipboard chip, so it sits on one line under the chips (Gamme spec §4).
+            Text(
+                text = CLIPBOARD_NOTE,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 4.dp),
             )
         }
         SettingsHairline()
@@ -583,11 +613,12 @@ private fun ReturnKeyboardRow(settings: PastilleSettings) {
         subtitle = "After a snippet or image goes in",
         icon = Icons.Rounded.Keyboard,
     )
-    Column(Modifier.selectableGroup()) {
+    // The radios start at the text column, under the row's title, never in its glyph column.
+    Column(Modifier.selectableGroup().padding(bottom = 6.dp)) {
         choices.forEach { choice ->
-            StyleRow(
-                headline = choice.label,
-                supporting = choice.note,
+            SettingsChoiceRow(
+                title = choice.label,
+                subtitle = choice.note,
                 selected = choice.selected,
                 enabled = choice.available,
                 onClick = {
@@ -598,7 +629,7 @@ private fun ReturnKeyboardRow(settings: PastilleSettings) {
         }
     }
     if (choices.any { !it.available }) {
-        SettingsRowDetail {
+        SettingsRowDetail(atText = true) {
             TextButton(
                 onClick = { context.startActivity(Intent(AndroidSettings.ACTION_INPUT_METHOD_SETTINGS)) },
                 modifier = Modifier.align(Alignment.End),

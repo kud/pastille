@@ -24,7 +24,10 @@ import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.ui.semantics.Role
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -159,14 +162,61 @@ fun SettingsChevron() {
     )
 }
 
-/** Content that belongs to the row above it (a preview, segmented buttons), using the card's full width. */
+/**
+ * Content that belongs to the row above it (a preview, segmented buttons). Under a row with a glyph,
+ * pass [atText] so it starts at the text column: the leading column holds the row's glyph and
+ * nothing else (Gamme spec §4). Without one, it uses the card's full width.
+ */
 @Composable
 fun SettingsRowDetail(
     modifier: Modifier = Modifier,
+    atText: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Column(
-        modifier = modifier.fillMaxWidth().padding(start = SideMargin, end = SideMargin, bottom = 12.dp),
+        modifier = modifier.fillMaxWidth().padding(start = if (atText) SettingsTextInset else SideMargin, end = SideMargin, bottom = 12.dp),
         content = content,
     )
+}
+
+/**
+ * A one-of-many choice under a row with a glyph: the radio starts at the text column, never in the
+ * glyph column (Gamme spec §4). The whole row is the target. The radio's own 2dp padding is taken
+ * back so its ring lines up with the row text and the chips above.
+ */
+@Composable
+fun SettingsChoiceRow(
+    title: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    subtitle: String? = null,
+    enabled: Boolean = true,
+) {
+    val alpha = if (enabled) 1f else 0.38f
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .selectable(selected = selected, enabled = enabled, role = Role.RadioButton, onClick = onClick)
+            .heightIn(min = 48.dp)
+            .padding(start = SettingsTextInset - 2.dp, end = SideMargin, top = 6.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        RadioButton(selected = selected, onClick = null, enabled = enabled)
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha),
+            )
+            if (subtitle != null) {
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha),
+                )
+            }
+        }
+    }
 }

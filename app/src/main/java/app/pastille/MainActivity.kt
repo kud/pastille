@@ -5,6 +5,10 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.runtime.CompositionLocalProvider
+import app.pastille.ime.LocalReduceMotion
+import app.pastille.ime.PastilleMotion
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -63,17 +67,20 @@ class MainActivity : ComponentActivity() {
         } else {
             fromKeyboard = savedInstanceState.getBoolean(EXTRA_FROM_KEYBOARD, false)
         }
+        val reduceMotion = PastilleMotion.reduceMotion()
         setContent {
             PastilleTheme {
-                PastilleApp(
-                    launchRequest = launchRequest,
-                    onLaunchRequestHandled = { launchRequest = null },
-                    fromKeyboard = fromKeyboard,
-                    onReturnToKeyboard = {
-                        fromKeyboard = false
-                        finish()
-                    },
-                )
+                CompositionLocalProvider(LocalReduceMotion provides reduceMotion) {
+                    PastilleApp(
+                        launchRequest = launchRequest,
+                        onLaunchRequestHandled = { launchRequest = null },
+                        fromKeyboard = fromKeyboard,
+                        onReturnToKeyboard = {
+                            fromKeyboard = false
+                            finish()
+                        },
+                    )
+                }
             }
         }
     }
@@ -196,35 +203,54 @@ private fun PastilleApp(
         }
     }
 
-    if (editingId != null || creating) {
-        SnippetEditorScreen(
-            snippetId = editingId,
-            repository = repository,
-            onDone = ::closeEditor,
-            onDeleted = { pendingUndo = it; closeEditor() },
-            initialCategoryId = newCategoryId,
-        )
-    } else if (showingSettings) {
-        SettingsScreen(onBack = ::closeSettings)
-    } else if (showingBin) {
-        BinScreen(repository = repository, onBack = { showingBin = false })
-    } else {
-        // Keeps the list's open folder tab and search while the editor or settings are on screen.
-        screenStates.SaveableStateProvider("list") {
-            SnippetListScreen(
+    val screen: AppScreen = when {
+        editingId != null || creating -> AppScreen.Editor(editingId, newCategoryId)
+        showingSettings -> AppScreen.Settings
+        showingBin -> AppScreen.Bin
+        else -> AppScreen.List
+    }
+    val reduceMotion = LocalReduceMotion.current
+    AnimatedContent(
+        targetState = screen,
+        transitionSpec = { PastilleMotion.screenTransition(forward = targetState.depth > initialState.depth, reduceMotion = reduceMotion) },
+        contentKey = { it::class },
+        label = "screen",
+    ) { shown ->
+        when (shown) {
+            is AppScreen.Editor -> SnippetEditorScreen(
+                snippetId = shown.id,
                 repository = repository,
-                onCreate = { categoryId ->
-                    creating = true
-                    newCategoryId = categoryId
-                },
-                onEdit = { snippet: SnippetRecord -> editingId = snippet.id },
-                onOpenSettings = { showingSettings = true },
-                onOpenBin = { showingBin = true },
-                deletedSnippet = pendingUndo,
-                onDeletedShown = { pendingUndo = null },
-                addStickersRequested = addStickersRequested,
-                onAddStickersHandled = { addStickersRequested = false },
+                onDone = ::closeEditor,
+                onDeleted = { pendingUndo = it; closeEditor() },
+                initialCategoryId = shown.categoryId,
             )
+            AppScreen.Settings -> SettingsScreen(onBack = ::closeSettings)
+            AppScreen.Bin -> BinScreen(repository = repository, onBack = { showingBin = false })
+            // Keeps the list's open folder tab and search while the editor or settings are on screen.
+            AppScreen.List -> screenStates.SaveableStateProvider("list") {
+                SnippetListScreen(
+                    repository = repository,
+                    onCreate = { categoryId ->
+                        creating = true
+                        newCategoryId = categoryId
+                    },
+                    onEdit = { snippet: SnippetRecord -> editingId = snippet.id },
+                    onOpenSettings = { showingSettings = true },
+                    onOpenBin = { showingBin = true },
+                    deletedSnippet = pendingUndo,
+                    onDeletedShown = { pendingUndo = null },
+                    addStickersRequested = addStickersRequested,
+                    onAddStickersHandled = { addStickersRequested = false },
+                )
+            }
         }
     }
+}
+
+/** The app's screens, by depth: going deeper slides forward, coming back slides back. */
+private sealed class AppScreen(val depth: Int) {
+    data object List : AppScreen(0)
+    data object Settings : AppScreen(1)
+    data object Bin : AppScreen(1)
+    data class Editor(val id: Long?, val categoryId: Long?) : AppScreen(1)
 }

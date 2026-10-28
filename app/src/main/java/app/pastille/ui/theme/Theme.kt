@@ -1,5 +1,9 @@
 package app.pastille.ui.theme
 
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
+import app.pastille.ime.LocalReduceMotion
+import app.pastille.ime.PastilleMotion
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
@@ -107,6 +111,10 @@ fun PastilleTheme(
     MaterialTheme(
         colorScheme = if (darkTheme) Dark else Light,
         typography = PastilleTypography,
-        content = content,
+        content = {
+            // Every activity reads the system's "Remove animations" once; screens fade instead of travel.
+            val reduceMotion = remember { PastilleMotion.reduceMotion() }
+            CompositionLocalProvider(LocalReduceMotion provides reduceMotion, content = content)
+        },
     )
 }

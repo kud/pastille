@@ -11,6 +11,7 @@ import android.os.Build
 import android.provider.Settings as AndroidSettings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
@@ -64,6 +65,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.pastille.ime.LocalReduceMotion
+import app.pastille.ime.PastilleMotion
 import app.pastille.ime.ImageSourceReader
 import app.pastille.ime.KeyboardHeightPreview
 import app.pastille.ime.KeyboardStylePreview
@@ -105,6 +108,7 @@ fun SettingsScreen(onBack: () -> Unit) {
     // Style and Height are their own pages (Iris, 2026-10-28): the main list stays one line per
     // setting, like Sacha's, and each page has the room for its live preview.
     var page by rememberSaveable { mutableStateOf(SettingsPage.Main) }
+    val reduceMotion = LocalReduceMotion.current
     BackHandler(enabled = page != SettingsPage.Main) { page = SettingsPage.Main }
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
@@ -120,7 +124,12 @@ fun SettingsScreen(onBack: () -> Unit) {
             )
         },
     ) { padding ->
-        Crossfade(targetState = page, animationSpec = tween(200), label = "settingsPage", modifier = Modifier.padding(padding)) { shown ->
+        AnimatedContent(
+            targetState = page,
+            transitionSpec = { PastilleMotion.screenTransition(forward = targetState != SettingsPage.Main, reduceMotion = reduceMotion) },
+            label = "settingsPage",
+            modifier = Modifier.padding(padding),
+        ) { shown ->
             Column(
                 modifier = Modifier
                     .verticalScroll(rememberScrollState())

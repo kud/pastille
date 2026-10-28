@@ -1,7 +1,7 @@
 package app.pastille.ui
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -28,6 +28,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import app.pastille.ime.LocalReduceMotion
 import app.pastille.ime.PastilleMotion
 
 /**
@@ -48,9 +49,10 @@ internal fun FolderChip(
     role: Role = Role.Tab,
 ) {
     val colors = MaterialTheme.colorScheme
+    val reduceMotion = LocalReduceMotion.current
     val container by animateColorAsState(
         targetValue = if (selected) colors.secondaryContainer else colors.surfaceContainerHigh,
-        animationSpec = tween(PastilleMotion.SHORT_MS, easing = PastilleMotion.Standard),
+        animationSpec = PastilleMotion.screenSpring(),
         label = "tabContainer",
     )
     Box(
@@ -68,9 +70,20 @@ internal fun FolderChip(
         Row(verticalAlignment = Alignment.CenterVertically) {
             // Sacha: "All" keeps its grid glyph; a folder shows its glyph only when selected, so the
             // selection is a shape and a heavier label as well as a fill, never colour alone.
-            if (alwaysIcon || selected) {
+            if (alwaysIcon) {
                 Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
+            } else {
+                AnimatedVisibility(
+                    visible = selected,
+                    enter = PastilleMotion.glyphEnter(reduceMotion),
+                    exit = PastilleMotion.glyphExit(reduceMotion),
+                ) {
+                    Row {
+                        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                    }
+                }
             }
             Text(
                 text = label,

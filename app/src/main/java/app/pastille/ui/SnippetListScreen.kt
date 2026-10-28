@@ -15,6 +15,8 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import app.pastille.ime.ImageSourceReader
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -145,6 +147,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import android.view.HapticFeedbackConstants
+import app.pastille.ime.LocalReduceMotion
 import app.pastille.ime.PastilleMotion
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -457,6 +460,7 @@ fun SnippetListScreen(
         }
     }
     val stickerGridShown = onStickers && query.isBlank()
+    val reduceMotion = LocalReduceMotion.current
     val searchFocus = remember { FocusRequester() }
     LaunchedEffect(searching) { if (searching) searchFocus.requestFocus() }
     var snippetDragOrder by remember(shown, reordering) { mutableStateOf(shown) }
@@ -702,7 +706,11 @@ fun SnippetListScreen(
                     onSelect = { stickersMode = it },
                 )
                 // Folders hold snippets only, so the row (and its "+ Add") lives in Snippets mode.
-                if (!stickersMode) {
+                AnimatedVisibility(
+                    visible = !stickersMode,
+                    enter = PastilleMotion.rowEnter(reduceMotion),
+                    exit = PastilleMotion.rowExit(reduceMotion),
+                ) {
                     FolderTabs(
                         folders = if (reordering) folderDragOrder else orderedFolders,
                         selectedId = selectedTab,
@@ -735,98 +743,105 @@ fun SnippetListScreen(
                 if (reordering) {
                     ReorderBanner(onDone = { reordering = false })
                 }
-                if (stickerGridShown) {
-                    StickerManageGrid(
-                        stickers = stickers,
-                        reordering = reordering,
-                        onOpen = ::openOrganise,
-                        onMoveToSnippets = { setSticker(it, false) },
-                        onDelete = ::deleteSnippet,
-                        onReorder = { order -> scope.launch { repository.setSnippetOrder(stickers, order) } },
-                        onAdd = ::pickStickers,
-                    )
-                } else LazyColumn(
-                    modifier = Modifier.fillMaxSize().testTag(SNIPPET_LIST_TAG),
-                    state = listState,
-                    contentPadding = PaddingValues(top = 4.dp, bottom = 96.dp),
-                ) {
-                    // Only when there is something to set up: a zero-height first item leaves the list
-                    // claiming it can still scroll back at its top (see `rememberOnboarding`).
-                    if (onboarding.needed) {
-                        item(key = "onboarding") {
-                            Box(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
-                                OnboardingCard(onboarding)
-                            }
-                        }
-                    }
-                    if (shown.isEmpty()) {
-                        item(key = "empty") {
-                            when {
-                                query.isNotBlank() -> EmptyState(
-                                    icon = Icons.Rounded.SearchOff,
-                                    title = "No snippets match “$query”",
-                                    body = "Search looks in titles, text and #tags.",
-                                )
-                                snippets.isEmpty() -> EmptyState(
-                                    icon = Icons.Rounded.Inbox,
-                                    title = "No snippets yet",
-                                    body = "Save the things you type again and again, then paste them from the keyboard.",
-                                    action = "Add your first snippet",
-                                    onAction = { onCreate(selectedFolderId) },
-                                )
-                                else -> EmptyState(
-                                    icon = Icons.Rounded.FolderOpen,
-                                    title = "Nothing in this folder yet",
-                                    action = "Add a snippet here",
-                                    onAction = { onCreate(selectedFolderId) },
-                                )
-                            }
-                        }
-                    }
-                    if (reordering) {
-                        itemsIndexed(snippetDragOrder, key = { _, snippet -> snippet.id }) { index, snippet ->
-                            ReorderableItem(snippetReorderState, key = snippet.id) { dragging ->
-                                val elevation by animateDpAsState(if (dragging) 6.dp else 0.dp, label = "dragElevation")
-                                Surface(shadowElevation = elevation, color = MaterialTheme.colorScheme.surface) {
-                                    Column {
-                                        if (index > 0) {
-                                            HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
-                                        }
-                                        ReorderRow(
-                                            snippet = snippet,
-                                            handle = Modifier.draggableHandle(
-                                                onDragStarted = {
-                                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                },
-                                                onDragStopped = {
-                                                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                                    scope.launch {
-                                                        repository.setSnippetOrder(shown, snippetDragOrder.map { it.id })
-                                                    }
-                                                },
-                                            ),
-                                        )
-                                    }
+                AnimatedContent(
+                    targetState = stickerGridShown,
+                    transitionSpec = { PastilleMotion.peerTransition(reduceMotion) },
+                    label = "listMode",
+                    modifier = Modifier.fillMaxSize(),
+                ) { showGrid ->
+                    if (showGrid) {
+                        StickerManageGrid(
+                            stickers = stickers,
+                            reordering = reordering,
+                            onOpen = ::openOrganise,
+                            onMoveToSnippets = { setSticker(it, false) },
+                            onDelete = ::deleteSnippet,
+                            onReorder = { order -> scope.launch { repository.setSnippetOrder(stickers, order) } },
+                            onAdd = ::pickStickers,
+                        )
+                    } else LazyColumn(
+                        modifier = Modifier.fillMaxSize().testTag(SNIPPET_LIST_TAG),
+                        state = listState,
+                        contentPadding = PaddingValues(top = 4.dp, bottom = 96.dp),
+                    ) {
+                        // Only when there is something to set up: a zero-height first item leaves the list
+                        // claiming it can still scroll back at its top (see `rememberOnboarding`).
+                        if (onboarding.needed) {
+                            item(key = "onboarding") {
+                                Box(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+                                    OnboardingCard(onboarding)
                                 }
                             }
                         }
-                    } else {
-                        itemsIndexed(shown, key = { _, snippet -> snippet.id }) { index, snippet ->
-                            // Sacha: separate rounded cards with small gaps, no dividers.
-                            Column(
-                                modifier = Modifier.animateItem().testTag(SNIPPET_ROW_TAG)
-                                    .padding(horizontal = 12.dp, vertical = 3.dp),
-                            ) {
-                                SnippetRow(
-                                    snippet = snippet,
-                                    categoryName = if (stickersMode || selectedTab == ALL_TAB) snippet.categoryId?.let { categoryNames[it] } else null,
-                                    onEdit = { if (snippet.sticker) openOrganise(snippet) else onEdit(snippet) },
-                                    onCopy = { copySnippet(snippet) },
-                                    onDelete = { deleteSnippet(snippet) },
-                                    onSwipeStartToEnd = { openOrganise(snippet) },
-                                    folders = orderedFolders,
-                                    onMove = if (snippet.sticker) null else ({ moveSnippet(snippet, it) }),
-                                )
+                        if (shown.isEmpty()) {
+                            item(key = "empty") {
+                                when {
+                                    query.isNotBlank() -> EmptyState(
+                                        icon = Icons.Rounded.SearchOff,
+                                        title = "No snippets match “$query”",
+                                        body = "Search looks in titles, text and #tags.",
+                                    )
+                                    snippets.isEmpty() -> EmptyState(
+                                        icon = Icons.Rounded.Inbox,
+                                        title = "No snippets yet",
+                                        body = "Save the things you type again and again, then paste them from the keyboard.",
+                                        action = "Add your first snippet",
+                                        onAction = { onCreate(selectedFolderId) },
+                                    )
+                                    else -> EmptyState(
+                                        icon = Icons.Rounded.FolderOpen,
+                                        title = "Nothing in this folder yet",
+                                        action = "Add a snippet here",
+                                        onAction = { onCreate(selectedFolderId) },
+                                    )
+                                }
+                            }
+                        }
+                        if (reordering) {
+                            itemsIndexed(snippetDragOrder, key = { _, snippet -> snippet.id }) { index, snippet ->
+                                ReorderableItem(snippetReorderState, key = snippet.id) { dragging ->
+                                    val elevation by animateDpAsState(if (dragging) 6.dp else 0.dp, label = "dragElevation")
+                                    Surface(shadowElevation = elevation, color = MaterialTheme.colorScheme.surface) {
+                                        Column {
+                                            if (index > 0) {
+                                                HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
+                                            }
+                                            ReorderRow(
+                                                snippet = snippet,
+                                                handle = Modifier.draggableHandle(
+                                                    onDragStarted = {
+                                                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                    },
+                                                    onDragStopped = {
+                                                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                        scope.launch {
+                                                            repository.setSnippetOrder(shown, snippetDragOrder.map { it.id })
+                                                        }
+                                                    },
+                                                ),
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            itemsIndexed(shown, key = { _, snippet -> snippet.id }) { index, snippet ->
+                                // Sacha: separate rounded cards with small gaps, no dividers.
+                                Column(
+                                    modifier = Modifier.animateItem().testTag(SNIPPET_ROW_TAG)
+                                        .padding(horizontal = 12.dp, vertical = 3.dp),
+                                ) {
+                                    SnippetRow(
+                                        snippet = snippet,
+                                        categoryName = if (stickersMode || selectedTab == ALL_TAB) snippet.categoryId?.let { categoryNames[it] } else null,
+                                        onEdit = { if (snippet.sticker) openOrganise(snippet) else onEdit(snippet) },
+                                        onCopy = { copySnippet(snippet) },
+                                        onDelete = { deleteSnippet(snippet) },
+                                        onSwipeStartToEnd = { openOrganise(snippet) },
+                                        folders = orderedFolders,
+                                        onMove = if (snippet.sticker) null else ({ moveSnippet(snippet, it) }),
+                                    )
+                                }
                             }
                         }
                     }

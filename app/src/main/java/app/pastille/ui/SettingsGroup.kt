@@ -113,13 +113,16 @@ fun SettingsRow(
     leading: (@Composable () -> Unit)? = null,
     destructive: Boolean = false,
     enabled: Boolean = true,
+    unavailable: String? = null,
     trailing: (@Composable RowScope.() -> Unit)? = null,
 ) {
+    // Disabled with a reason (Iris, 2026-10-28): the title and subtitle dim, the reason never does,
+    // so a row that can't be used says why at full contrast instead of just looking broken.
     val titleColor = when {
         destructive -> MaterialTheme.colorScheme.error
         else -> MaterialTheme.colorScheme.onSurface
     }
-    val alpha = if (enabled) 1f else 0.38f
+    val alpha = if (enabled && unavailable == null) 1f else 0.38f
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -145,6 +148,13 @@ fun SettingsRow(
                     text = subtitle,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha),
+                )
+            }
+            if (unavailable != null) {
+                Text(
+                    text = unavailable,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
             }
         }

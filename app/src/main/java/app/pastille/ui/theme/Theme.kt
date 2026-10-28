@@ -1,6 +1,8 @@
 package app.pastille.ui.theme
 
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.runtime.remember
 import app.pastille.ime.LocalReduceMotion
 import app.pastille.ime.PastilleMotion
@@ -123,6 +125,9 @@ fun PastilleTheme(
             CompositionLocalProvider(
                 LocalReduceMotion provides reduceMotion,
                 LocalContentColor provides colors.onSurface,
+                // The ripple everywhere, plus a 3dp focus ring inside the pressed shape, so focus
+                // from a keyboard or switch access is never only a faint tint.
+                LocalIndication provides rememberPastilleIndication(RectangleShape, ripple = true, ringInset = true),
                 content = content,
             )
         },

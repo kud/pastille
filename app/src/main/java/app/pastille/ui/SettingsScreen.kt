@@ -734,6 +734,7 @@ private fun BackupGroup(settings: PastilleSettings) {
                 title = "Sync now",
                 icon = Icons.Rounded.Refresh,
                 enabled = !busy,
+                unavailable = if (busy) "Working on it…" else null,
                 modifier = Modifier.clickable(enabled = !busy) {
                     scope.launch {
                         busy = true
@@ -749,6 +750,11 @@ private fun BackupGroup(settings: PastilleSettings) {
                 subtitle = "Adds what isn't already in Pastille",
                 icon = Icons.Rounded.Restore,
                 enabled = !busy && problem != BackupProblem.Access,
+                unavailable = when {
+                    busy -> "Working on it…"
+                    problem == BackupProblem.Access -> "Pastille lost access to this file"
+                    else -> null
+                },
                 modifier = Modifier.clickable(enabled = !busy && problem != BackupProblem.Access) {
                     scope.launch {
                         val file = runCatching { BackupFiles.copyIn(context, Uri.parse(uri)) }.getOrNull()

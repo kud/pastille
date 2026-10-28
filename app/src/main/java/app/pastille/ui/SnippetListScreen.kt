@@ -560,7 +560,20 @@ fun SnippetListScreen(
                             offset = DpOffset((-8).dp, 0.dp),
                         ) {
                             DropdownMenuItem(
-                                text = { Text("Reorder") },
+                                text = {
+                                    // Disabled with a reason: the item says what it needs, at full contrast.
+                                    val canReorder = if (stickersMode) stickers.size > 1 else snippets.size > 1 || orderedFolders.size > 1
+                                    Column {
+                                        Text("Reorder")
+                                        if (!canReorder) {
+                                            Text(
+                                                if (stickersMode) "Needs two stickers" else "Needs two snippets",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                            )
+                                        }
+                                    }
+                                },
                                 leadingIcon = { Icon(Icons.Rounded.SwapVert, contentDescription = null) },
                                 colors = itemColors,
                                 // Reorder applies to the mode on screen.

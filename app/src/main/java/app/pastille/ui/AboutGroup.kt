@@ -11,6 +11,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.Code
+import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.Gavel
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material3.Icon
@@ -48,6 +49,7 @@ internal fun AboutGroup() {
         onPauseOrDispose { }
     }
     var showCrash by remember { mutableStateOf(false) }
+    var showNotices by remember { mutableStateOf(false) }
 
     SettingsGroup(title = "About") {
         SettingsRow(
@@ -91,6 +93,14 @@ internal fun AboutGroup() {
             // Not tappable, so TalkBack reads title and value as one item.
             modifier = Modifier.semantics(mergeDescendants = true) {},
         )
+        SettingsHairline()
+        SettingsRow(
+            title = "Third-party notices",
+            subtitle = "Code from others that Pastille includes",
+            icon = Icons.Rounded.Description,
+            modifier = Modifier.clickable(onClickLabel = "Open notices") { showNotices = true },
+            trailing = { SettingsChevron() },
+        )
         if (hasCrashReport) {
             SettingsHairline()
             SettingsRow(
@@ -104,4 +114,5 @@ internal fun AboutGroup() {
     }
 
     if (showCrash) CrashReportDialog(onDismiss = { showCrash = false })
+    if (showNotices) ThirdPartyNoticesDialog(onDismiss = { showNotices = false })
 }

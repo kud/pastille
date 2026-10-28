@@ -1,5 +1,8 @@
 package app.pastille.ui
 
+import androidx.compose.material.icons.rounded.Keyboard
+import androidx.compose.material.icons.rounded.PhotoLibrary
+import androidx.compose.ui.semantics.heading
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -909,11 +912,16 @@ private fun OnboardingCard(onboarding: Onboarding) {
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
     ) {
         Column(Modifier.padding(16.dp)) {
-            Text("Set up Pastille", style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(8.dp))
+            Text(
+                "Set up Pastille",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.semantics { heading() },
+            )
+            Spacer(Modifier.height(4.dp))
             if (!imeEnabled) {
                 SetupRow(
-                    text = "Enable Pastille in system settings",
+                    icon = Icons.Rounded.Keyboard,
+                    text = "Turn on Pastille in your keyboards",
                     button = "Enable",
                     onClick = {
                         context.startActivity(Intent(AndroidSettings.ACTION_INPUT_METHOD_SETTINGS))
@@ -922,7 +930,8 @@ private fun OnboardingCard(onboarding: Onboarding) {
             }
             if (photosNeeded) {
                 SetupRow(
-                    text = "Allow photo access so your images show in the keyboard",
+                    icon = Icons.Rounded.PhotoLibrary,
+                    text = "Allow photos, so your images show in the keyboard",
                     button = "Allow",
                     onClick = { photoLauncher.launch(photoPermission()) },
                 )
@@ -932,18 +941,23 @@ private fun OnboardingCard(onboarding: Onboarding) {
 }
 
 @Composable
-private fun SetupRow(text: String, button: String, onClick: () -> Unit) {
+private fun SetupRow(icon: ImageVector, text: String, button: String, onClick: () -> Unit) {
+    // Settings' row language (§20): a plain 24dp glyph, the text, then the one action as a tonal
+    // button, 48dp tall, so the step reads as something to do rather than a link.
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
+        Spacer(Modifier.width(16.dp))
         Text(
             text = text,
             style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.weight(1f),
         )
         Spacer(Modifier.width(8.dp))
-        TextButton(onClick = onClick) { Text(button) }
+        androidx.compose.material3.FilledTonalButton(onClick = onClick) { Text(button) }
     }
 }
 
@@ -1532,13 +1546,13 @@ private fun FolderTabs(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         item(key = "all") {
-            FolderTab(label = "All", icon = Icons.Rounded.GridView, alwaysIcon = true, selected = selectedId == ALL_TAB, onClick = { onSelect(ALL_TAB) })
+            FolderChip(label = "All", icon = Icons.Rounded.GridView, alwaysIcon = true, selected = selectedId == ALL_TAB, onClick = { onSelect(ALL_TAB) })
         }
         items(folders, key = { it.id }) { folder ->
             ReorderableItem(reorderState, key = folder.id) { dragging ->
                 var menuOpen by remember { mutableStateOf(false) }
                 Box {
-                    FolderTab(
+                    FolderChip(
                         label = folder.name,
                         icon = Icons.Rounded.Folder,
                         selected = selectedId == folder.id || dragging,
@@ -1578,54 +1592,6 @@ private fun FolderTabs(
             item(key = "add-folder") {
                 AddFolderChip(onClick = onAdd)
             }
-        }
-    }
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun FolderTab(
-    label: String,
-    icon: ImageVector,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    onLongClick: (() -> Unit)? = null,
-    alwaysIcon: Boolean = false,
-) {
-    val colors = MaterialTheme.colorScheme
-    val container by animateColorAsState(
-        targetValue = if (selected) colors.secondaryContainer else colors.surfaceContainerHigh,
-        animationSpec = tween(PastilleMotion.SHORT_MS, easing = PastilleMotion.Standard),
-        label = "tabContainer",
-    )
-    Box(
-        modifier = modifier
-            .minimumInteractiveComponentSize()
-            .height(36.dp)
-            .clip(CircleShape)
-            .background(container)
-            .semantics { this.selected = selected }
-            .combinedClickable(role = Role.Tab, onClick = onClick, onLongClick = onLongClick)
-            .padding(horizontal = 14.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        val tint = if (selected) colors.onSecondaryContainer else colors.onSurface
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            // Sacha: "All" keeps its grid glyph; a folder shows its glyph only when selected, so the
-            // selection is a shape and a heavier label as well as a fill, never colour alone.
-            if (alwaysIcon || selected) {
-                Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(6.dp))
-            }
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelLarge.copy(
-                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                ),
-                color = tint,
-                maxLines = 1,
-            )
         }
     }
 }

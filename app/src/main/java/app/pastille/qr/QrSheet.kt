@@ -1,5 +1,7 @@
 package app.pastille.qr
 
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.semantics.heading
 import android.view.WindowManager
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
@@ -84,18 +86,21 @@ fun QrScreen(title: String, code: QrCode, onClose: () -> Unit) {
             modifier = Modifier.fillMaxSize().safeDrawingPadding().padding(horizontal = 24.dp, vertical = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            // The editor's page header (§20): close first, then the title as a headline. The paper and
+            // ink stay whatever the theme, since a scanner reads dark on light best.
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleLarge,
-                    color = Ink,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
                 IconButton(onClick = onClose) {
                     Icon(Icons.Rounded.Close, contentDescription = "Close", tint = Ink)
                 }
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = Ink,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f).semantics { heading() },
+                )
             }
             Column(
                 modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -107,9 +112,9 @@ fun QrScreen(title: String, code: QrCode, onClose: () -> Unit) {
                     contentDescription = "QR code for $title",
                     modifier = Modifier.widthIn(max = 480.dp).fillMaxWidth().aspectRatio(1f),
                 )
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(24.dp))
                 Text(
-                    text = "Scan it with the other phone's camera, then share the text to Pastille.",
+                    text = "Scan with the other phone's camera, then share the text to Pastille",
                     style = MaterialTheme.typography.bodyMedium,
                     color = InkSoft,
                     textAlign = TextAlign.Center,

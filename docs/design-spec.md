@@ -1251,7 +1251,11 @@ Sacha's mock-up (`docs/design/pastille-sacha-ui-2026-10-28.png`: list, editor, s
 
 **Not done yet** (open for the next pass)
 
-- [ ] The same language on the share sheet, the import dialogs, the setup card and the QR sheet: they still use their pre-redesign layouts (dialogs and sheets are Material defaults, so they read as consistent, but the header and chip treatments aren't applied).
+- [x] The same language on the share sheet, the import dialogs, the setup card and the QR sheet (Iris, 2026-10-28):
+  - **Share sheet:** the colour mark (24dp, drawn, not tinted) heads the status line in place of the dot; the preview sits on the list's card (`surfaceContainer`, 16dp corners, 16dp padding); folders are the list's own chips (`ui/FolderChip.kt`, shared, with `Role.RadioButton` here), "No folder" first with a folder-off glyph, no divider; "Save as" is a `titleSmall` heading over the two-half Image | Sticker control with a check on the selected half.
+  - **Import dialogs:** both open with the mark as the dialog icon and a centred title. The backup one reads "Import to Pastille?" (was "Import this backup?"); the single-item one keeps "Add “…” to Pastille?" and shows the text on a `surfaceContainerHighest` card, 16dp corners, six lines at most.
+  - **Setup card:** a heading for TalkBack, and each step is a Settings row: a 24dp `onSurfaceVariant` glyph (Keyboard, Photo library), the sentence in `onSurface`, the action as a `FilledTonalButton`, 56dp tall. "Turn on Pastille in your keyboards", "Allow photos, so your images show in the keyboard".
+  - **QR sheet:** the editor's page header, close first then the title as `headlineSmall` (a heading). Paper and ink stay whatever the theme, since a scanner reads dark on light best; the hint loses its full stop like every other one-line hint.
 - [ ] The keyboard's three modest wins: the active tab label at ≥400dp, two preview lines when the height allows, 48dp targets.
 - [ ] Springs ≤250ms with reduced-motion fades across the app's own transitions (the settings sub-pages crossfade at 200ms already).
 - [ ] Light theme checked on list, editor, settings and stickers renders only; contrast not measured on every role.

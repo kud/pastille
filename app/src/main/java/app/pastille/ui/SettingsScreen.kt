@@ -178,7 +178,6 @@ private fun KeyboardGroup(settings: PastilleSettings) {
                     previewLandscape = true
                 },
             )
-            TryItField(modifier = Modifier.padding(top = 16.dp))
         }
         SettingsHairline()
         SettingsRow(title = "Show in the keyboard", subtitle = "At least one stays on", icon = Icons.Rounded.Dashboard)

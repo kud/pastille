@@ -1,16 +1,20 @@
-Pastille is a keyboard you switch to only when you want to paste something. Tap a saved snippet or a recent image and it goes straight into the text field, then Pastille hands you back to your usual keyboard.
+Pastille is a keyboard you switch to only when you want to paste something. Tap a saved snippet, a sticker, a recent image or something you just copied and it goes straight into the text field, then Pastille hands you back to your usual keyboard.
 
 <b>Features</b>
 <ul>
-<li>Your own snippets, written in the app or saved from the clipboard</li>
-<li>Folders for snippets, with an "All" view, and drag to reorder snippets and folders right in the keyboard</li>
-<li>Recent images from the folders you choose (Screenshots, Camera, Downloads…), inserted as images where the app accepts them and copied to the clipboard where it doesn't</li>
-<li>Share text or an image from any app to Pastille to keep it as a snippet</li>
-<li>Choose, separately for snippets and images, whether to return to your usual keyboard after inserting, and which keyboard that is</li>
-<li>Turn snippets or images off entirely if you only need one</li>
-<li>Gboard-style dark, light and Material You themes, with a choice of panel heights</li>
-<li>Back up and restore your snippets as a JSON file</li>
+<li>Your own snippets, sorted into folders</li>
+<li>Stickers, inserted as images where the app accepts them</li>
+<li>Recent images from the folders you choose, such as Screenshots or Camera</li>
+<li>The keyboard's Clipboard view: your last copies, ready to paste or keep as a snippet</li>
+<li>Share text or an image from any app into Pastille to keep it</li>
+<li>Send a snippet or sticker with Quick Share, or with "Send to another phone"</li>
+<li>Show a snippet as a QR code for another phone's camera</li>
+<li>Sync with a file you choose, in Drive, pCloud or on the phone</li>
+<li>A Bin, so a deleted snippet can come back</li>
+<li>A Quick Settings tile</li>
+<li>Return to your usual keyboard after pasting</li>
+<li>Themes and panel heights to suit your phone</li>
 </ul>
 
 <b>Private by design</b>
-Pastille has no internet permission. Your snippets and images never leave your phone.
+Pastille has no internet permission. Your snippets, stickers and images stay on your phone unless you export, share or back them up yourself.

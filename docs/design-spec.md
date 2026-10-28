@@ -1205,7 +1205,7 @@ Only the selected pill's width change is new: `SHORT_MS` with `Standard`, snappi
 
 ## 20. Redesign after Sacha's mock-up (Iris, 2026-10-28) — overrides §8, §12 and the list rows of §6.1
 
-Sacha's mock-up (`docs/design/pastille-sacha-ui-2026-10-28.png`: list, editor, settings, the peeling-sticker mark) is a strong reference, not a pixel spec. Where Android, Material 3, accessibility or Pastille's flows need it, we deviate and say why below. Renders on invented data come from `app/src/test/java/app/pastille/redesign/RedesignRenders.kt`, run with `PASTILLE_RENDERS=<dir> ./gradlew :app:testDebugUnitTest --tests 'app.pastille.redesign.*'` (one JVM per render, since Robolectric's native canvas aborts when several share one).
+Sacha's mock-up (`docs/design/pastille-sacha-ui-2026-10-28.png`: list, editor, settings, the peeling-sticker mark) is a strong reference, not a pixel spec. Where Android, Material 3, accessibility or Pastille's flows need it, we deviate and say why below. Renders on invented data (list, editor, settings, stickers, the keyboard with its Recent row at 360dp and 411dp, the share sheet, the QR sheet and both import dialogs; dialogs and sheets are composited from their own windows) come from `app/src/test/java/app/pastille/redesign/RedesignRenders.kt`, run with `PASTILLE_RENDERS=<dir> ./gradlew :app:testDebugUnitTest --tests 'app.pastille.redesign.*'` (one JVM per render, since Robolectric's native canvas aborts when several share one).
 
 **Brand**
 
@@ -1256,7 +1256,11 @@ Sacha's mock-up (`docs/design/pastille-sacha-ui-2026-10-28.png`: list, editor, s
   - **Import dialogs:** both open with the mark as the dialog icon and a centred title. The backup one reads "Import to Pastille?" (was "Import this backup?"); the single-item one keeps "Add “…” to Pastille?" and shows the text on a `surfaceContainerHighest` card, 16dp corners, six lines at most.
   - **Setup card:** a heading for TalkBack, and each step is a Settings row: a 24dp `onSurfaceVariant` glyph (Keyboard, Photo library), the sentence in `onSurface`, the action as a `FilledTonalButton`, 56dp tall. "Turn on Pastille in your keyboards", "Allow photos, so your images show in the keyboard".
   - **QR sheet:** the editor's page header, close first then the title as `headlineSmall` (a heading). Paper and ink stay whatever the theme, since a scanner reads dark on light best; the hint loses its full stop like every other one-line hint.
-- [ ] The keyboard's three modest wins: the active tab label at ≥400dp, two preview lines when the height allows, 48dp targets.
+- [x] The keyboard's three modest wins, its look otherwise unchanged (Iris, 2026-10-28):
+  - **Active tab label at ≥400dp:** already in `ModeSwitch` (`compact` below 400dp), checked in the 411dp render; below it the selected tab stays icon-only, so three tabs and four actions fit at 360dp.
+  - **Two preview lines when the height allows:** the tile's title and preview now have fixed line heights (22sp, 20sp) and `previewLinesThatFit()` works out how many whole preview lines fit in the 88dp tile at the current font scale: two at 100%, one around 130%, none when the title needs the room. Lines are whole, never clipped mid-glyph.
+  - **48dp targets:** toolbar actions, tabs, folder chips and the Recent row's pills already had them (32dp visuals in 48dp targets); the status strip was 44dp tall and is now 48dp, so its action button isn't clipped.
+  - **The Recent row** (§21) sits above the folder chips on the same 12dp inset and 8dp rhythm, its pills the keys' own colour; it is told from the folders by the History glyph and by carrying no folder glyph.
 - [ ] Springs ≤250ms with reduced-motion fades across the app's own transitions (the settings sub-pages crossfade at 200ms already).
 - [ ] Light theme checked on list, editor, settings and stickers renders only; contrast not measured on every role.
 

@@ -310,6 +310,15 @@ internal fun FolderChipRow(
 
 internal val TileShape = RoundedCornerShape(10.dp)
 internal val TileHeight = 88.dp
+private val TitleLineHeight = 22.sp
+private val PreviewLineHeight = 20.sp
+
+/** How many 20sp preview lines fit under the title in an 88dp tile at the current font scale (0 to 2). */
+@Composable
+private fun previewLinesThatFit(): Int = with(LocalDensity.current) {
+    val room = TileHeight - 24.dp - TitleLineHeight.toDp() - 2.dp
+    (room / PreviewLineHeight.toDp()).toInt().coerceIn(0, 2)
+}
 
 // Gboard clipboard tile: one fixed size for text and folders (image tiles size themselves in ImageGrid); flat, a colour change on press.
 @OptIn(ExperimentalFoundationApi::class)
@@ -419,7 +428,10 @@ internal fun SnippetTile(
             }
         } else {
             val preview = snippet.text.trim()
-            val previewShown = preview.isNotEmpty() && preview != title
+            // Two preview lines when the tile's height allows them, one at a larger font scale, none
+            // when even the title needs the room: lines are whole, never clipped mid-glyph.
+            val previewLines = previewLinesThatFit()
+            val previewShown = preview.isNotEmpty() && preview != title && previewLines > 0
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -428,6 +440,7 @@ internal fun SnippetTile(
                 Text(
                     text = title,
                     fontSize = 16.sp,
+                    lineHeight = TitleLineHeight,
                     fontWeight = FontWeight.Medium,
                     color = palette.label,
                     maxLines = if (previewShown) 1 else 3,
@@ -438,8 +451,9 @@ internal fun SnippetTile(
                     Text(
                         text = preview,
                         fontSize = 14.sp,
+                        lineHeight = PreviewLineHeight,
                         color = palette.label.copy(alpha = 0.72f),
-                        maxLines = 2,
+                        maxLines = previewLines,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }

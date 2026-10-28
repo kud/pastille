@@ -470,7 +470,7 @@ private fun StatusStripRow(strip: StatusStrip, onDismiss: (Long) -> Unit) {
             .padding(8.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(palette.keyPressed)
-            .height(44.dp),
+            .height(48.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(

@@ -14,8 +14,29 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.unit.dp
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import app.pastille.backup.AddOneDialog
+import app.pastille.backup.BackupArchive
+import app.pastille.backup.ImportConfirmDialog
+import app.pastille.clipboard.RecentClip
+import app.pastille.ime.KeyboardPanel
+import app.pastille.ime.KeyboardTheme
+import app.pastille.ime.KeyboardUiState
+import app.pastille.ime.NoKeyboardActions
+import app.pastille.ime.keyboardPalette
+import app.pastille.model.CategoryRecord
+import app.pastille.qr.QrScreen
+import app.pastille.qr.SnippetQr
+import app.pastille.settings.KeyboardMode
+import app.pastille.settings.KeyboardStyle
+import app.pastille.share.ShareSheet
+import app.pastille.share.ShareStatus
+import app.pastille.share.ShareUiState
+import app.pastille.ui.itemPhrase
 import app.pastille.data.PastilleDatabase
 import app.pastille.data.SnippetRepository
 import app.pastille.images.ImageStore
@@ -70,6 +91,11 @@ abstract class RedesignRenders(private val dark: Boolean, private val screen: St
         "editor" -> editor()
         "settings" -> settings()
         "stickers" -> stickers()
+        "keyboard" -> keyboard()
+        "share" -> share()
+        "qr" -> qr()
+        "import" -> importOne()
+        "import-backup" -> importBackup()
         else -> icon()
     }
 
@@ -134,6 +160,112 @@ abstract class RedesignRenders(private val dark: Boolean, private val screen: St
         compose.setContent { PastilleTheme(darkTheme = dark) { SnippetListScreen(repository = repository, onCreate = {}, onEdit = {}, onOpenSettings = {}) } }
         settle(); settle(); capture("stickers")
     }
+    private fun keyboard() {
+        val now = System.currentTimeMillis()
+        val state = KeyboardUiState(
+            darkTheme = dark,
+            categories = listOf(
+                CategoryRecord(id = 1, name = "Work"),
+                CategoryRecord(id = 2, name = "Travel"),
+                CategoryRecord(id = 3, name = "Replies"),
+            ),
+            snippets = listOf(
+                SnippetRecord(id = 11, title = "Running late", text = "Sorry, running about ten minutes late, start without me.", categoryId = 1),
+                SnippetRecord(id = 12, title = "Wi-Fi at the cottage", text = "Network: Cottage-Guest · Password: blue-heron-42", categoryId = 2),
+                SnippetRecord(id = 13, title = "Meeting link", text = "https://meet.example.com/abc-defg-hij", categoryId = 1),
+                SnippetRecord(id = 14, title = "Thanks!", text = "Thank you so much, that's really kind.", categoryId = 3),
+                SnippetRecord(id = 15, title = "Home address", text = "12 Example Street, Springfield", categoryId = 2),
+                SnippetRecord(id = 16, title = "On my way", text = "On my way!", categoryId = 3),
+            ),
+            recentClips = listOf(
+                RecentClip(1, "Order #48213 ships Thursday", now - 60_000),
+                RecentClip(2, "alex@example.com", now - 300_000),
+                RecentClip(3, "See you at the station at 6", now - 900_000),
+            ),
+        )
+        compose.setContent {
+            PastilleTheme(darkTheme = dark) {
+                val palette = keyboardPalette(compose.activity, KeyboardStyle.Auto, dark)
+                androidx.compose.foundation.layout.Box(
+                    androidx.compose.ui.Modifier.fillMaxSize().background(androidx.compose.material3.MaterialTheme.colorScheme.surface),
+                    contentAlignment = androidx.compose.ui.Alignment.BottomCenter,
+                ) {
+                    KeyboardTheme(palette = palette) {
+                        KeyboardPanel(state = state, actions = NoKeyboardActions, contentHeight = 300.dp)
+                    }
+                }
+            }
+        }
+        wait("Order #48213 ships Thursday"); capture(if (compose.activity.resources.configuration.screenWidthDp >= 400) "keyboard-wide" else "keyboard")
+    }
+    private fun share() {
+        val state = ShareUiState(
+            saving = false,
+            status = ShareStatus.entries.first { it.name == "SAVED" },
+            textTitle = "Wi-Fi at the cottage",
+            textBody = "Network: Cottage-Guest · Password: blue-heron-42",
+            selectedCategoryId = 2,
+            canUndo = true,
+        )
+        val folders = listOf("Work", "Travel", "Replies").mapIndexed { i, n -> CategoryRecord(id = i + 1L, name = n) }
+        compose.setContent {
+            PastilleTheme(darkTheme = dark) {
+                androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color(0xFF7A8794)))
+                ShareSheet(state, folders, {}, {}, {}, {}, {}, {})
+            }
+        }
+        wait("Saved to Pastille"); captureWindows("share")
+    }
+    private fun qr() {
+        val code = SnippetQr.encode("Network: Cottage-Guest · Password: blue-heron-42")!!
+        compose.setContent { PastilleTheme(darkTheme = dark) { QrScreen(title = "Wi-Fi at the cottage", code = code, onClose = {}) } }
+        wait("Wi-Fi at the cottage"); capture("qr")
+    }
+    private fun importOne() {
+        compose.setContent {
+            PastilleTheme(darkTheme = dark) {
+                androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize().background(androidx.compose.material3.MaterialTheme.colorScheme.surface))
+                AddOneDialog(
+                    phrase = itemPhrase("Wi-Fi at the cottage", "", false, false),
+                    preview = "Network: Cottage-Guest · Password: blue-heron-42",
+                    onAdd = {}, onCancel = {},
+                )
+            }
+        }
+        wait("Add"); captureWindows("import")
+    }
+    private fun importBackup() {
+        compose.setContent {
+            PastilleTheme(darkTheme = dark) {
+                androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize().background(androidx.compose.material3.MaterialTheme.colorScheme.surface))
+                ImportConfirmDialog(counts = BackupArchive.Counts(24, 3, 6), onImport = {}, onCancel = {})
+            }
+        }
+        wait("Import"); captureWindows("import-backup")
+    }
+
+    /** Every window, bottom to top: dialogs and sheets live in their own, outside the activity's decor view. */
+    private fun captureWindows(name: String) {
+        val bitmap = compose.runOnUiThread {
+            val wmg = Class.forName("android.view.WindowManagerGlobal")
+            val global = wmg.getMethod("getInstance").invoke(null)
+            @Suppress("UNCHECKED_CAST")
+            val views = (wmg.getDeclaredField("mViews").apply { isAccessible = true }.get(global) as List<android.view.View>).toList()
+            val base = compose.activity.window.decorView
+            val bmp = Bitmap.createBitmap(base.width, base.height, Bitmap.Config.ARGB_8888)
+            val c = Canvas(bmp)
+            base.draw(c)
+            views.filter { it !== base && it.width > 0 && it.isShown }.forEach { v ->
+                val small = v.width < base.width || v.height < base.height
+                if (small) c.drawColor(0x99000000.toInt())
+                c.save(); c.translate(((base.width - v.width) / 2).toFloat(), ((base.height - v.height) / 2).toFloat())
+                v.draw(c); c.restore()
+            }
+            bmp
+        }
+        writePng(bitmap, File(out, "redesign-$name-$suffix.png"))
+    }
+
     private fun icon() {
         assumeTrue(dark)
         val icon = app.getDrawable(app.applicationInfo.icon) as AdaptiveIconDrawable
@@ -161,6 +293,15 @@ class SettingsLight : RedesignRenders(false, "settings")
 class StickersDark : RedesignRenders(true, "stickers")
 class StickersLight : RedesignRenders(false, "stickers")
 class Icon : RedesignRenders(true, "icon")
+class KeyboardDark : RedesignRenders(true, "keyboard")
+class KeyboardLight : RedesignRenders(false, "keyboard")
+@Config(qualifiers = "w411dp-h860dp-xxhdpi") class KeyboardWideDark : RedesignRenders(true, "keyboard")
+class ShareDark : RedesignRenders(true, "share")
+class ShareLight : RedesignRenders(false, "share")
+class QrLight : RedesignRenders(false, "qr")
+class ImportDark : RedesignRenders(true, "import")
+class ImportLight : RedesignRenders(false, "import")
+class ImportBackupLight : RedesignRenders(false, "import-backup")
 
 private fun writePng(bitmap: Bitmap, file: File) {
     val w = bitmap.width; val h = bitmap.height

@@ -1062,6 +1062,9 @@ internal fun SnippetRow(
                             text = snippet.text,
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            // A fixed two-line preview (Sacha): one-line texts keep the second line, so every
+                            // card with a preview is the same height and the copy buttons line up.
+                            minLines = if (expanded) 1 else 2,
                             maxLines = if (expanded) Int.MAX_VALUE else 2,
                             overflow = TextOverflow.Ellipsis,
                             onTextLayout = { if (!expanded) overflows = it.hasVisualOverflow },
@@ -1384,7 +1387,8 @@ private fun TitleAndTime(title: String, snippet: SnippetRecord) {
                 then = snippet.updatedAt.takeIf { it > 0 } ?: snippet.createdAt,
                 now = System.currentTimeMillis(),
             ).removeSuffix(" ago"),
-            style = MaterialTheme.typography.labelMedium,
+            // Tabular figures, so "5 min" and "28 h" sit on the same column edge down the list.
+            style = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum"),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             modifier = Modifier.padding(top = 2.dp, end = 4.dp),

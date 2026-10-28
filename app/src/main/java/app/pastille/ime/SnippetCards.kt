@@ -557,16 +557,23 @@ internal fun ThumbPlaceholder(shimmer: Boolean, content: @Composable () -> Unit 
 }
 
 @Composable
-internal fun FilterToggleChip(label: String, selected: Boolean, onClick: () -> Unit, icon: ImageVector? = null) {
+// With [checks], an on/off choice: on, the glyph gives way to a check and the label gets heavier,
+// so the state is a shape as well as the fill.
+internal fun FilterToggleChip(label: String, selected: Boolean, onClick: () -> Unit, icon: ImageVector? = null, checks: Boolean = false) {
     val palette = LocalKeyboardPalette.current
     FilterChip(
         selected = selected,
         onClick = onClick,
-        label = { Text(label) },
+        label = {
+            Text(
+                label,
+                fontWeight = if (checks && selected) androidx.compose.ui.text.font.FontWeight.SemiBold else null,
+            )
+        },
         leadingIcon = if (icon != null) {
             {
                 Icon(
-                    icon,
+                    if (checks && selected) Icons.Rounded.Check else icon,
                     contentDescription = null,
                     modifier = Modifier.size(FilterChipDefaults.IconSize),
                 )
@@ -581,6 +588,7 @@ internal fun FilterToggleChip(label: String, selected: Boolean, onClick: () -> U
             selectedContainerColor = palette.stripButton,
             selectedLabelColor = palette.onStripButton,
             selectedLeadingIconColor = palette.onStripButton,
+            iconColor = palette.icon,
         ),
         border = null,
     )

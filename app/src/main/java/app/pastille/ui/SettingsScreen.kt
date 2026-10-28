@@ -93,6 +93,7 @@ import app.pastille.ime.KeyboardStylePreview
 import app.pastille.ime.LocalReduceMotion
 import app.pastille.ime.PastilleMotion
 import app.pastille.ime.installedTypingKeyboards
+import app.pastille.ime.heightGlyph
 import app.pastille.ime.modeIcon
 import app.pastille.ime.otherTypingKeyboards
 import app.pastille.settings.BackupProblem
@@ -426,6 +427,11 @@ private fun HeightRow(
                 selected = height == selected,
                 onClick = { onSelect(height) },
                 shape = SegmentedButtonDefaults.itemShape(index, PanelHeight.entries.size),
+                icon = {
+                    SegmentedButtonDefaults.Icon(active = height == selected) {
+                        Icon(heightGlyph(height), contentDescription = null, modifier = Modifier.size(SegmentedButtonDefaults.IconSize))
+                    }
+                },
                 label = {
                     Text(
                         text = height.label,

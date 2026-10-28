@@ -84,6 +84,7 @@ import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.PhotoCamera
 import androidx.compose.material.icons.rounded.Screenshot
 import androidx.compose.material.icons.rounded.GridView
+import androidx.compose.material.icons.automirrored.rounded.KeyboardReturn
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
@@ -1343,6 +1344,7 @@ private fun SettingsContent(state: KeyboardUiState, actions: KeyboardActions) {
             PanelHeight.entries.forEach { height ->
                 FilterToggleChip(
                     label = height.label,
+                    icon = heightGlyph(height),
                     selected = height == state.heightPreset,
                     onClick = { actions.onSetHeight(height) },
                 )
@@ -1355,6 +1357,8 @@ private fun SettingsContent(state: KeyboardUiState, actions: KeyboardActions) {
                 val on = mode in enabled
                 FilterToggleChip(
                     label = mode.label,
+                    icon = modeIcon(mode),
+                    checks = true,
                     selected = on,
                     onClick = { if (canSwitchOff(mode, enabled)) actions.onSetModeEnabled(mode, !on) },
                 )
@@ -1362,11 +1366,13 @@ private fun SettingsContent(state: KeyboardUiState, actions: KeyboardActions) {
         }
         SettingsHeading("After inserting")
         SettingsSwitchRow(
+            icon = Icons.AutoMirrored.Rounded.KeyboardReturn,
             headline = "Return after a snippet",
             checked = state.returnAfterSnippet,
             onChange = { actions.onSetReturn(image = false, enabled = it) },
         )
         SettingsSwitchRow(
+            icon = Icons.Rounded.Image,
             headline = "Return after an image",
             checked = state.returnAfterImage,
             onChange = { actions.onSetReturn(image = true, enabled = it) },
@@ -1466,10 +1472,12 @@ private fun ChipLine(content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun SettingsSwitchRow(headline: String, checked: Boolean, onChange: (Boolean) -> Unit, enabled: Boolean = true) {
+private fun SettingsSwitchRow(icon: ImageVector, headline: String, checked: Boolean, onChange: (Boolean) -> Unit, enabled: Boolean = true) {
     val palette = LocalKeyboardPalette.current
     ListItem(
         headlineContent = { Text(headline, color = palette.label) },
+        // The app Settings' plain glyph: 24dp, monochrome, no tile.
+        leadingContent = { Icon(icon, contentDescription = null, tint = palette.icon) },
         trailingContent = {
             Switch(
                 checked = checked,

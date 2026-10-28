@@ -1,0 +1,29 @@
+Categories:
+  - Keyboard & IME
+  - Writing
+License: GPL-3.0-or-later
+AuthorName: Erwann Mest
+SourceCode: https://github.com/kud/pastille
+IssueTracker: https://github.com/kud/pastille/issues
+Changelog: https://github.com/kud/pastille/releases
+
+AutoName: Pastille
+
+RepoType: git
+Repo: https://github.com/kud/pastille.git
+Binaries: https://github.com/kud/pastille/releases/download/v%v/pastille-%v.apk
+
+Builds:
+  - versionName: 0.1.5
+    versionCode: 16
+    commit: 36e735fa2f6bf1982c2366dd0f6729b651362e55
+    subdir: app
+    gradle:
+      - yes
+
+AllowedAPKSigningKeys: be06fc6babfcc1d6af5b076f6f7d9038ed13c71004b6f7b40be8d98276aa6af7
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags ^v[0-9]+\.[0-9]+\.[0-9]+$
+CurrentVersion: 0.1.5
+CurrentVersionCode: 16

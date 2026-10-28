@@ -43,6 +43,9 @@ android {
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.findByName("release")
+            // Reproducible builds: F-Droid rebuilds from the tag, maybe from a checkout without .git, and
+            // compares with the GitHub APK. The commit hash in META-INF would be one more thing to differ.
+            vcsInfo.include = false
         }
     }
 

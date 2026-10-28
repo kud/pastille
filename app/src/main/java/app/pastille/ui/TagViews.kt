@@ -22,6 +22,8 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Sell
+import androidx.compose.foundation.border
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material3.FilterChip
@@ -216,15 +218,33 @@ fun TagEditor(
                             false
                         }
                     },
+                // A field, not a stray line of grey text: a tag glyph and an outline the shape of the
+                // tag chips it makes, so "Add tags" reads as something to tap (Erwann, 2026-10-28).
                 decorationBox = { inner ->
-                    if (typing.isEmpty()) {
-                        Text(
-                            text = if (tags.isEmpty()) "Add tags" else "Add",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    Row(
+                        modifier = Modifier
+                            .border(1.dp, MaterialTheme.colorScheme.outline, androidx.compose.foundation.shape.CircleShape)
+                            .padding(start = 10.dp, end = 14.dp, top = 6.dp, bottom = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            Icons.Outlined.Sell,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp),
                         )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        androidx.compose.foundation.layout.Box {
+                            if (typing.isEmpty()) {
+                                Text(
+                                    text = if (tags.isEmpty()) "Add tags" else "Add",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            inner()
+                        }
                     }
-                    inner()
                 },
             )
         }

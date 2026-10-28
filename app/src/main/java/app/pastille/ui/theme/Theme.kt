@@ -5,6 +5,7 @@ import androidx.compose.runtime.remember
 import app.pastille.ime.LocalReduceMotion
 import app.pastille.ime.PastilleMotion
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
@@ -108,13 +109,21 @@ fun PastilleTheme(
     @Suppress("UNUSED_PARAMETER") dynamicColor: Boolean = false,
     content: @Composable () -> Unit,
 ) {
+    val colors = if (darkTheme) Dark else Light
     MaterialTheme(
-        colorScheme = if (darkTheme) Dark else Light,
+        colorScheme = colors,
         typography = PastilleTypography,
         content = {
             // Every activity reads the system's "Remove animations" once; screens fade instead of travel.
             val reduceMotion = remember { PastilleMotion.reduceMotion() }
-            CompositionLocalProvider(LocalReduceMotion provides reduceMotion, content = content)
+            // MaterialTheme leaves LocalContentColor at its default, black. Only a Surface or Scaffold sets
+            // it, so an icon on a screen drawn on a plain background (the editor's header) came out black
+            // on the dark ground. onSurface is the ground's own content colour, in both themes.
+            CompositionLocalProvider(
+                LocalReduceMotion provides reduceMotion,
+                LocalContentColor provides colors.onSurface,
+                content = content,
+            )
         },
     )
 }

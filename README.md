@@ -12,9 +12,9 @@
 ![Android 9+](https://img.shields.io/badge/Android-9%2B-3DDC84)
 ![Kotlin](https://img.shields.io/badge/Kotlin-Compose-7F52FF)
 
-<img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1-snippet-list.jpg" alt="Snippet list" width="240" />
-<img src="fastlane/metadata/android/en-US/images/phoneScreenshots/2-keyboard-snippets.jpg" alt="Keyboard showing snippets" width="240" />
-<img src="fastlane/metadata/android/en-US/images/phoneScreenshots/3-keyboard-settings.jpg" alt="Keyboard settings" width="240" />
+<img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1-snippet-list.png" alt="Snippet list" width="240" />
+<img src="fastlane/metadata/android/en-US/images/phoneScreenshots/2-keyboard-snippets.png" alt="Keyboard showing snippets under a chat" width="240" />
+<img src="fastlane/metadata/android/en-US/images/phoneScreenshots/4-stickers.png" alt="Stickers" width="240" />
 
 </div>
 

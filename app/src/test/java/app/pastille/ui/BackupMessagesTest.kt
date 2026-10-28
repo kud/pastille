@@ -39,12 +39,13 @@ class BackupMessagesTest {
     @Test
     fun `backup status says when, or what to do`() {
         val now = 10L * 24 * 60 * 60 * 1000
-        assertEquals("pastille-backup.zip · Not backed up yet", backupStatus("pastille-backup.zip", null, null, now))
-        assertEquals("pastille-backup.zip · Last backed up just now", backupStatus("pastille-backup.zip", now - 5_000, null, now))
-        assertEquals("pastille-backup.zip · Last backed up 5 min ago", backupStatus("pastille-backup.zip", now - 5 * 60_000, null, now))
+        assertEquals("pastille-backup.zip · Not synced yet", backupStatus("pastille-backup.zip", null, null, now))
+        assertEquals("pastille-backup.zip · Synced just now", backupStatus("pastille-backup.zip", now - 5_000, null, now))
+        assertEquals("pastille-backup.zip · Synced 5 min ago", backupStatus("pastille-backup.zip", now - 5 * 60_000, null, now))
         val access = backupStatus("pastille-backup.zip", now, BackupProblem.Access, now)
         assertTrue(access, access.startsWith("Can't reach pastille-backup.zip") && access.endsWith("choose a file again."))
         assertTrue(backupStatus("b.zip", now, BackupProblem.Write, now).contains("failed"))
+        assertEquals("b.zip · Waiting for Drive", backupStatus("b.zip", now, BackupProblem.Read, now))
     }
 
     @Test

@@ -148,6 +148,20 @@ class PastilleSettings private constructor(private val prefs: SharedPreferences)
         get() = BackupProblem.fromKey(prefs.getString(KEY_BACKUP_PROBLEM, null))
         set(value) = prefs.edit().apply { if (value == null) remove(KEY_BACKUP_PROBLEM) else putString(KEY_BACKUP_PROBLEM, value.key) }.apply()
 
+    // Sync: what the shared file looked like when we last read or wrote it, so an unchanged file
+    // isn't read again. Size and modified time come from the provider; the hash is ours.
+    var syncRemoteSize: Long?
+        get() = if (prefs.contains(KEY_SYNC_SIZE)) prefs.getLong(KEY_SYNC_SIZE, 0) else null
+        set(value) = prefs.edit().apply { if (value == null) remove(KEY_SYNC_SIZE) else putLong(KEY_SYNC_SIZE, value) }.apply()
+
+    var syncRemoteModified: Long?
+        get() = if (prefs.contains(KEY_SYNC_MODIFIED)) prefs.getLong(KEY_SYNC_MODIFIED, 0) else null
+        set(value) = prefs.edit().apply { if (value == null) remove(KEY_SYNC_MODIFIED) else putLong(KEY_SYNC_MODIFIED, value) }.apply()
+
+    var syncRemoteHash: String?
+        get() = prefs.getString(KEY_SYNC_HASH, null)
+        set(value) = prefs.edit().apply { if (value == null) remove(KEY_SYNC_HASH) else putString(KEY_SYNC_HASH, value) }.apply()
+
     fun clearBackup() {
         prefs.edit()
             .remove(KEY_BACKUP_URI)
@@ -155,6 +169,9 @@ class PastilleSettings private constructor(private val prefs: SharedPreferences)
             .remove(KEY_BACKUP_LAST_AT)
             .remove(KEY_BACKUP_FINGERPRINT)
             .remove(KEY_BACKUP_PROBLEM)
+            .remove(KEY_SYNC_SIZE)
+            .remove(KEY_SYNC_MODIFIED)
+            .remove(KEY_SYNC_HASH)
             .apply()
     }
 
@@ -164,6 +181,9 @@ class PastilleSettings private constructor(private val prefs: SharedPreferences)
         private const val KEY_BACKUP_LAST_AT = "backup_last_at"
         private const val KEY_BACKUP_FINGERPRINT = "backup_fingerprint"
         private const val KEY_BACKUP_PROBLEM = "backup_problem"
+        private const val KEY_SYNC_SIZE = "sync_remote_size"
+        private const val KEY_SYNC_MODIFIED = "sync_remote_modified"
+        private const val KEY_SYNC_HASH = "sync_remote_hash"
         private const val PREFS_NAME = "pastille_settings"
         private const val KEY_CLIPBOARD_CLEAR_DELAY = "clipboard_clear_delay"
         private const val KEY_RETURN_KEYBOARD_ID = "return_keyboard_id"
@@ -215,6 +235,9 @@ enum class BackupProblem(val key: String) {
     Access("access"),
     // The file was there but the write or its check failed.
     Write("write"),
+    // The file couldn't be read (Drive offline, still downloading, or not a backup yet). Nothing is
+    // written until it reads, so this phone never overwrites changes it hasn't seen.
+    Read("read"),
     ;
 
     companion object {

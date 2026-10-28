@@ -512,23 +512,43 @@ private fun BackupGroup(settings: PastilleSettings) {
                 busy = true
                 val outcome = autoBackup.choose(picked)
                 busy = false
-                if (outcome == AutoBackup.Outcome.Written) say("Backed up")
+                if (outcome == AutoBackup.Outcome.Written) say("Synced")
             }
         }
     }
+    // The second phone picks the file the first one created, so both read and write the same one.
+    val existing = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { picked ->
+        if (picked != null) {
+            scope.launch {
+                busy = true
+                val outcome = autoBackup.choose(picked)
+                busy = false
+                if (outcome == AutoBackup.Outcome.Written || outcome == AutoBackup.Outcome.Unchanged) say("Synced")
+            }
+        }
+    }
+    val zipTypes = arrayOf(BackupArchive.MIME, "application/x-zip-compressed", "application/x-zip", "application/octet-stream")
 
     SettingsGroup(title = "Backup") {
         if (uri == null) {
             SettingsRow(
-                title = "Back up automatically",
-                subtitle = "Keep a copy in a file you choose, in Google Drive or on this phone. Pastille updates it after every change.",
+                title = "Sync automatically",
+                subtitle = "Keep your snippets in a file you choose, in Google Drive or on this phone. Pastille reads and updates it after every change.",
                 icon = Icons.Rounded.Backup,
                 modifier = Modifier.clickable { chooser.launch(BackupArchive.SUGGESTED_NAME) },
                 trailing = { SettingsChevron() },
             )
+            SettingsHairline()
+            SettingsRow(
+                title = "Use an existing file",
+                subtitle = "The file your other phone already syncs with",
+                icon = Icons.Rounded.Sync,
+                modifier = Modifier.clickable { existing.launch(zipTypes) },
+                trailing = { SettingsChevron() },
+            )
         } else {
             SettingsRow(
-                title = "Back up automatically",
+                title = "Sync automatically",
                 subtitle = backupStatus(name, lastAt, problem, System.currentTimeMillis()),
                 icon = if (problem == null) Icons.Rounded.Backup else Icons.Rounded.ErrorOutline,
                 destructive = problem != null,
@@ -537,15 +557,15 @@ private fun BackupGroup(settings: PastilleSettings) {
             )
             SettingsHairline()
             SettingsRow(
-                title = "Back up now",
+                title = "Sync now",
                 icon = Icons.Rounded.Sync,
                 enabled = !busy,
                 modifier = Modifier.clickable(enabled = !busy) {
                     scope.launch {
                         busy = true
-                        val outcome = autoBackup.backUp(force = true)
+                        val outcome = autoBackup.backUp(force = false)
                         busy = false
-                        if (outcome == AutoBackup.Outcome.Written) say("Backed up")
+                        if (outcome == AutoBackup.Outcome.Written || outcome == AutoBackup.Outcome.Unchanged) say("Synced")
                     }
                 },
             )
@@ -572,13 +592,19 @@ private fun BackupGroup(settings: PastilleSettings) {
             )
             SettingsHairline()
             SettingsRow(
-                title = "Stop backing up",
+                title = "Stop syncing",
                 subtitle = "The file stays where it is",
                 icon = Icons.Rounded.SyncDisabled,
                 modifier = Modifier.clickable { autoBackup.stop() },
             )
         }
     }
+    Text(
+        text = SYNC_NOTE,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 32.dp),
+    )
     Text(
         text = PRIVACY_NOTE,
         style = MaterialTheme.typography.bodySmall,

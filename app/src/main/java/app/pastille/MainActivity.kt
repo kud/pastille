@@ -78,6 +78,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // Coming back reads the synced file, so changes from the other phone show up.
+    override fun onStart() {
+        super.onStart()
+        (application as PastilleApplication).autoBackup.syncSoon()
+    }
+
     // Leaving the app writes the automatic backup now rather than after its debounce.
     override fun onStop() {
         super.onStop()

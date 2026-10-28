@@ -47,12 +47,13 @@ object BackupFiles {
     suspend fun build(
         context: Context,
         target: File = File(workDir(context), "out-${UUID.randomUUID()}.zip"),
+        withSync: Boolean = false,
     ): Pair<File, BackupArchive.Written> = withContext(Dispatchers.IO) {
         val repository = SnippetRepository.forContext(context)
         val images = ImageStore.forContext(context).imagesDir()
         try {
             target.parentFile?.mkdirs()
-            val written = target.outputStream().use { repository.exportBackup(it, images) }
+            val written = target.outputStream().use { repository.exportBackup(it, images, withSync) }
             if (BackupArchive.verify(target) == null) throw IOException("Backup didn't verify")
             target to written
         } catch (error: Exception) {
@@ -109,6 +110,28 @@ object BackupFiles {
     } catch (_: Exception) {
         null
     }
+
+    /** The provider's size and last-modified time for [uri]; either may be null when it doesn't say. */
+    fun stat(context: Context, uri: Uri): Pair<Long?, Long?> = try {
+        val columns = arrayOf(OpenableColumns.SIZE, android.provider.DocumentsContract.Document.COLUMN_LAST_MODIFIED)
+        context.contentResolver.query(uri, columns, null, null, null)?.use { cursor ->
+            if (!cursor.moveToFirst()) return@use null to null
+            val size = if (cursor.isNull(0)) null else cursor.getLong(0)
+            val modified = if (cursor.getColumnCount() < 2 || cursor.isNull(1)) null else cursor.getLong(1)
+            size to modified
+        } ?: (null to null)
+    } catch (_: Exception) {
+        null to null
+    }
+
+    /** Whether the provider still lists [uri], whatever it can serve right now. */
+    fun exists(context: Context, uri: Uri): Boolean = try {
+        context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { it.moveToFirst() } ?: false
+    } catch (_: Exception) {
+        false
+    }
+
+    fun sha256Hex(file: File): String = file.inputStream().use(::sha256).joinToString("") { "%02x".format(it) }
 
     private fun sha256(input: InputStream): ByteArray {
         val digest = MessageDigest.getInstance("SHA-256")

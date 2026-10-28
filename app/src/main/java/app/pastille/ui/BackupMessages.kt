@@ -46,8 +46,8 @@ const val IMPORT_NOT_A_BACKUP = "That file isn't a Pastille backup."
 const val SHARE_FAILED = "Couldn't prepare the backup to share."
 
 /**
- * Settings › Backup's status line: what file, and when it was last written, or what went wrong and
- * the one thing to do about it.
+ * Settings › Backup's status line: what file, and when this phone last synced with it, or what went
+ * wrong and the one thing to do about it.
  */
 fun backupStatus(
     name: String,
@@ -56,15 +56,19 @@ fun backupStatus(
     now: Long,
 ): String = when (problem) {
     app.pastille.settings.BackupProblem.Access -> "Can't reach $name. Tap to choose a file again."
-    app.pastille.settings.BackupProblem.Write -> "The last backup to $name failed. Tap to choose a file again."
+    app.pastille.settings.BackupProblem.Write -> "The last sync with $name failed. Tap to choose a file again."
+    app.pastille.settings.BackupProblem.Read -> "$name · Waiting for Drive"
     null -> if (lastAt == null) {
-        "$name · Not backed up yet"
+        "$name · Not synced yet"
     } else {
         val ago = relativeTime(lastAt, now)
         val phrase = if (ago == "Just now" || ago == "Yesterday") ago.lowercase() else ago
-        "$name · Last backed up $phrase"
+        "$name · Synced $phrase"
     }
 }
+
+const val SYNC_NOTE =
+    "To sync two phones, both choose the same file: create it on one, then use the existing file on the other."
 
 const val PRIVACY_NOTE =
     "Your snippets, stickers and images stay on your phone unless you export, share or back them up yourself."

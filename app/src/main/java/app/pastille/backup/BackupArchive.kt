@@ -80,6 +80,36 @@ object BackupArchive {
         )
     }
 
+    /**
+     * Writes the sync state (bin, tags and tombstones included when [withSync]). A snippet whose
+     * image is missing is left out, like above.
+     */
+    fun writeState(out: OutputStream, state: app.pastille.sync.SyncState, withSync: Boolean, imageFile: (String) -> File): Written {
+        val kept = state.snippets.filter { s ->
+            val name = s.imageFile ?: return@filter true
+            isImageName(name) && imageFile(name).isFile
+        }
+        val json = SnippetBackup.encodeState(state.copy(snippets = kept), withSync)
+        val shipped = if (withSync) kept else kept.filter { it.deletedAt == null }
+        ZipOutputStream(out).use { zip ->
+            zip.putNextEntry(ZipEntry(JSON_ENTRY))
+            zip.write(json.toByteArray())
+            zip.closeEntry()
+            shipped.mapNotNull { it.imageFile }.distinct().forEach { name ->
+                zip.putNextEntry(ZipEntry(IMAGES_DIR + name))
+                imageFile(name).inputStream().use { it.copyTo(zip) }
+                zip.closeEntry()
+            }
+        }
+        val live = kept.filter { it.deletedAt == null }
+        return Written(
+            snippets = live.count { it.imageFile == null },
+            images = live.count { it.imageFile != null && !it.sticker },
+            stickers = live.count { it.sticker },
+            leftOut = state.snippets.size - kept.size,
+        )
+    }
+
     data class Written(val snippets: Int, val images: Int, val stickers: Int, val leftOut: Int)
 
     /** The JSON of a backup file, zip or old bare JSON. Throws if it isn't one. */
@@ -141,7 +171,9 @@ object BackupArchive {
     fun verify(file: File): BackupContents? = try {
         val contents = SnippetBackup.decode(readJson(file))
         val ok = ZipFile(file).use { zip ->
-            contents.snippets.mapNotNull { it.record.imageFile }.all { zip.getEntry(IMAGES_DIR + it) != null }
+            val state = SnippetBackup.decodeState(readJson(file))
+            (contents.snippets.mapNotNull { it.record.imageFile } + state.snippets.mapNotNull { it.imageFile })
+                .all { zip.getEntry(IMAGES_DIR + it) != null }
         }
         if (ok) contents else null
     } catch (_: Exception) {

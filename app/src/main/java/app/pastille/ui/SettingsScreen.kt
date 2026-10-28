@@ -32,6 +32,7 @@ import androidx.compose.material.icons.automirrored.rounded.KeyboardReturn
 import androidx.compose.material.icons.rounded.ContentPaste
 import androidx.compose.material.icons.rounded.Dashboard
 import androidx.compose.material.icons.rounded.Height
+import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Keyboard
 import androidx.compose.material.icons.rounded.Palette
@@ -216,6 +217,8 @@ private fun KeyboardGroup(settings: PastilleSettings, onOpen: (SettingsPage) -> 
     var panelLandscape by remember { mutableStateOf(settings.panelHeightLandscape) }
     var enabledModes by remember { mutableStateOf(settings.enabledModes()) }
     var returnAfterSnippet by remember { mutableStateOf(settings.returnAfterSnippet) }
+    var recentClipboard by remember { mutableStateOf(settings.recentClipboard) }
+    val context = LocalContext.current
     SettingsGroup(title = "Keyboard") {
         SettingsRow(
             title = "Style",
@@ -244,6 +247,19 @@ private fun KeyboardGroup(settings: PastilleSettings, onOpen: (SettingsPage) -> 
                 },
             )
         }
+        SettingsHairline()
+        // Off clears what's kept at once; clips are memory only, so there is nothing else to delete.
+        ToggleRow(
+            title = "Recent clipboard",
+            subtitle = "Your last 10 copies, for an hour, at the top of Snippets. Memory only, never backed up; passwords are skipped",
+            icon = Icons.Rounded.History,
+            checked = recentClipboard,
+            onChange = {
+                recentClipboard = it
+                settings.recentClipboard = it
+                if (!it) (context.applicationContext as? app.pastille.PastilleApplication)?.recentClipboard?.clear()
+            },
+        )
         SettingsHairline()
         ToggleRow(
             title = "Return after a snippet",

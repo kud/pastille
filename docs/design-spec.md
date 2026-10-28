@@ -1255,3 +1255,11 @@ Sacha's mock-up (`docs/design/pastille-sacha-ui-2026-10-28.png`: list, editor, s
 - [ ] The keyboard's three modest wins: the active tab label at ≥400dp, two preview lines when the height allows, 48dp targets.
 - [ ] Springs ≤250ms with reduced-motion fades across the app's own transitions (the settings sub-pages crossfade at 200ms already).
 - [ ] Light theme checked on list, editor, settings and stickers renders only; contrast not measured on every role.
+
+## 21. Recent clipboard (2026-10-28)
+
+- **Where:** one 48dp row at the top of Snippets, above the folder chips, shown only while there are recent clips; it takes its height from the content area, which stays fixed. Not a fourth tab: four tabs don't fit the toolbar at 360dp, or at 411dp with the selected label.
+- **Row:** a 20dp `History` icon in `icon` (TalkBack: "Recent clipboard", a heading), then one `key` pill per clip, newest first: 32dp tall in a 48dp touch target, at most 180dp wide, the text on one line in `labelLarge` `label`, ellipsis. Press: `keyPressed` over 60ms, no ripple (§11.5). Last, a "Clear" pill with `ClearAll` (TalkBack: "Clear recent clipboard").
+- **Tap** pastes (TalkBack action "Paste"), then "Return after a snippet" applies. **Long-press** ("More actions") raises the Clip state, titled "Recent clip": the text (four lines, tap pastes) on `key`, then Paste, Save as snippet, Remove as the snippet Actions' buttons, and under them in `bodySmall` `labelSecondary`: "Recent clips stay on this phone for an hour, never in a backup."
+- **Settings › Keyboard › Recent clipboard:** a switch row in §20's style (History glyph, `PastilleSwitch`), on by default, after "Show in the keyboard": "Your last 10 copies, for an hour, at the top of Snippets. Memory only, never backed up; passwords are skipped". Off clears what is kept at once.
+- Nothing rests on colour: the row is told apart by its icon and position, and every pill by its text.

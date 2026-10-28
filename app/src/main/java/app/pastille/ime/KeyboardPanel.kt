@@ -161,6 +161,7 @@ import app.pastille.images.AnimatedSticker
 import app.pastille.images.ImageThumbnail
 import app.pastille.model.CategoryRecord
 import app.pastille.model.SnippetRecord
+import app.pastille.clipboard.RecentClip
 import app.pastille.settings.KeyboardMode
 import app.pastille.settings.KeyboardStyle
 import app.pastille.settings.PanelHeight
@@ -200,6 +201,7 @@ data class KeyboardUiState(
     val imagesEnabled: Boolean = true,
     val stickers: List<SnippetRecord> = emptyList(),
     val stickersEnabled: Boolean = true,
+    val recentClips: List<RecentClip> = emptyList(),
 ) {
     val enabledModes: Set<KeyboardMode>
         get() = buildSet {
@@ -245,6 +247,11 @@ interface KeyboardActions {
     fun onSetShownSources(bucketIds: Set<Long>) {}
     fun onAddStickers() {}
     fun onSetSticker(snippet: SnippetRecord, sticker: Boolean) {}
+    fun onClipTap(clip: RecentClip) {}
+    fun onClipLongPress(clip: RecentClip) {}
+    fun onSaveClip(clip: RecentClip) {}
+    fun onRemoveClip(clip: RecentClip) {}
+    fun onClearClips() {}
 }
 
 object NoKeyboardActions : KeyboardActions
@@ -270,6 +277,7 @@ fun KeyboardPanel(
         PanelState.Settings -> "Keyboard settings"
         PanelState.ImageFolders -> "Image folders"
         PanelState.Reorder -> "Hold and drag to reorder"
+        is PanelState.Clip -> "Recent clip"
     }
 
     LaunchedEffect(state.strip?.key) {
@@ -539,6 +547,10 @@ private fun PanelContent(
             PanelState.Settings -> SettingsContent(state = state, actions = actions)
             PanelState.ImageFolders -> ImageFoldersContent(state = state, actions = actions)
             PanelState.Reorder -> ReorderContent(state = state, actions = actions)
+            is PanelState.Clip -> ClipActionsContent(
+                clip = state.recentClips.find { it.id == panel.clipId },
+                actions = actions,
+            )
         }
     }
 }
@@ -585,6 +597,9 @@ private fun FolderContent(state: KeyboardUiState, actions: KeyboardActions) {
     val folderId = state.folderId?.takeIf { id -> folders.any { it.id == id } }
     val order = listOf<Long?>(null) + folders.map { it.id }
     Column(modifier = Modifier.fillMaxSize()) {
+        if (state.recentClips.isNotEmpty()) {
+            RecentClipsRow(clips = state.recentClips, actions = actions)
+        }
         if (folders.isNotEmpty()) {
             FolderChipRow(
                 entries = listOf(ChipEntry(null, "All", Icons.Rounded.GridView)) +
@@ -1117,7 +1132,7 @@ private fun StickerActionsContent(sticker: SnippetRecord, actions: KeyboardActio
 }
 
 @Composable
-private fun PanelActionButton(
+internal fun PanelActionButton(
     icon: ImageVector,
     label: String,
     onClick: () -> Unit,

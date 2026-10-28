@@ -5,11 +5,14 @@ import android.content.pm.PackageManager
 import android.os.Build
 import app.pastille.backup.AutoBackup
 import app.pastille.clipboard.ClipboardClearer
+import app.pastille.clipboard.RecentClipboard
 import app.pastille.clipboard.SystemClipboardAccess
 import app.pastille.crash.CrashLog
 import app.pastille.data.cleanUpAtStart
 import app.pastille.data.SnippetRepository
 import app.pastille.images.ImageStore
+import app.pastille.settings.PastilleSettings
+import app.pastille.share.MAX_TEXT_CHARS
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -27,6 +30,15 @@ class PastilleApplication : Application() {
         ClipboardClearer(
             scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
             access = SystemClipboardAccess(this),
+        )
+    }
+
+    // Recent clipboard: memory only, shared by the keyboard and the app; see RecentClips.kt.
+    val recentClipboard by lazy {
+        RecentClipboard(
+            scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
+            enabled = { PastilleSettings.forContext(this).recentClipboard },
+            maxChars = MAX_TEXT_CHARS,
         )
     }
 

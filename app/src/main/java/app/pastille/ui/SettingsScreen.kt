@@ -126,6 +126,7 @@ fun SettingsScreen(onBack: () -> Unit) {
             ClipboardGroup(settings)
             PhotosGroup(settings)
             BackupGroup(settings)
+            AboutGroup()
         }
     }
 }

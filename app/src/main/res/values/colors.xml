@@ -1,12 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Sacha's peeling sticker (docs/design/pastille-sacha-ui-2026-10-28.png). -->
-    <color name="ic_launcher_background">#12161D</color>
-    <!-- The sticker. -->
-    <color name="ic_launcher_back">#1A7BF2</color>
-    <!-- The folded-back corner: its paper side, then the crease's shade. -->
-    <color name="ic_launcher_front">#E8EFF9</color>
-    <color name="ic_launcher_fold">#B4C6E2</color>
-    <!-- Kept for anything that still names it; the mark no longer draws ink. -->
-    <color name="ic_launcher_ink">#12161D</color>
+    <color name="ic_launcher_background">#0B3A78</color>
+    <color name="ic_launcher_back">#2F7EF7</color>
+    <color name="ic_launcher_front">#FFF8ED</color>
+    <color name="ic_launcher_fold">#F04452</color>
+    <color name="ic_launcher_ink">#0B3A78</color>
 </resources>

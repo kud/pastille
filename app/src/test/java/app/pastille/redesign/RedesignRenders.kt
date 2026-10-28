@@ -287,6 +287,14 @@ abstract class RedesignRenders(private val dark: Boolean, private val screen: St
             c.restore()
         }
         writePng(bmp, File(out, "redesign-icon.png"))
+        // The store and README icons: the launcher's background and foreground, full bleed, no mask,
+        // the same geometry as assets/icon.svg (copy them to assets/icon.png and fastlane's icon.png).
+        listOf(1024, 512).forEach { size ->
+            val square = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+            val sc = Canvas(square)
+            listOfNotNull(icon.background, icon.foreground).forEach { it.setBounds(0, 0, size, size); it.draw(sc) }
+            writePng(square, File(out, "icon-$size.png"))
+        }
     }
 }
 

@@ -1209,7 +1209,7 @@ Sacha's mock-up (`docs/design/pastille-sacha-ui-2026-10-28.png`: list, editor, s
 
 **Brand**
 
-- [x] The mark is traced from Sacha's peeling sticker into the launcher foreground, the monochrome (themed) icon and the Quick Settings tile; his blue joins the palette. Lockup weight follows `pastille-sacha-mark-v1.png`.
+- [x] **The original mark stays** (Erwann, 2026-10-28: « Pas convaincu de l'icône pour le moment. Je préfère l'ancien. »). Sacha's peeling sticker was traced into the launcher, monochrome, tile and in-app marks in `10b10c8` and reverted: the launcher foreground and background, the monochrome layer, the Quick Settings tile (back on `ic_pastille_mark`), the list header, share sheet and import dialogs all use the pre-redesign mark and its colours (`ic_launcher_*` in `colors.xml`). `assets/icon.png` and fastlane's `icon.png` are rendered from the launcher layers by the `Icon` render (`icon-1024.png`, `icon-512.png`). The app palette in `Theme.kt` stays: it never depended on the mark. Sacha's direction is kept for a later look in `docs/design/pastille-sacha-mark-v1.png`. Still to redo: the F-Droid feature graphic draws the peeling mark.
 
 **List**
 

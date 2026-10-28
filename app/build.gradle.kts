@@ -76,6 +76,19 @@ android {
         unitTests.isIncludeAndroidResources = true
         // CI shows only the log: print why a test failed, not just where.
         unitTests.all {
+            // Store screenshots render only on request (scripts/screenshots.sh), straight into fastlane's folder.
+            if (project.hasProperty("screenshots")) {
+                it.systemProperty(
+                    "pastille.screenshots.dir",
+                    rootProject.file("fastlane/metadata/android/en-US/images/phoneScreenshots").absolutePath,
+                )
+                it.outputs.upToDateWhen { false }
+                it.maxHeapSize = "2g"
+                // One JVM per screen: Robolectric's native canvas aborts the process when several share one.
+                it.forkEvery = 1
+            } else {
+                it.exclude("app/pastille/screenshots/**")
+            }
             it.testLogging {
                 events("failed")
                 exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL

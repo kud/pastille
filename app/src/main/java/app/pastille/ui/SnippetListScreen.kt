@@ -177,6 +177,10 @@ import app.pastille.share.shareSnippet
 import app.pastille.share.sendToPhone
 import androidx.compose.material.icons.automirrored.rounded.SendToMobile
 import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.QrCode2
+import app.pastille.qr.SnippetQr
+import app.pastille.qr.SnippetQrDialog
+import app.pastille.qr.QR_TOO_LONG
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
@@ -937,6 +941,7 @@ internal fun SnippetRow(
     val rowScope = rememberCoroutineScope()
     var menuOpen by remember { mutableStateOf(false) }
     var moveMenuOpen by remember { mutableStateOf(false) }
+    var qrOpen by remember { mutableStateOf(false) }
     var expanded by rememberSaveable(snippet.id) { mutableStateOf(false) }
     var overflows by remember(snippet.id) { mutableStateOf(false) }
     var deleting by remember(snippet.id) { mutableStateOf(false) }
@@ -1080,6 +1085,32 @@ internal fun SnippetRow(
                         if (!shareSnippet(context, snippet)) toast(context, "That image is gone")
                     },
                 )
+                // Text only: a camera reads it and shares it into Pastille. Too long for the
+                // biggest code, the item says so and Send to another phone, just below, carries it.
+                if (!snippet.isImage) {
+                    val qrFits = remember(snippet.text) { SnippetQr.fits(snippet.text) }
+                    DropdownMenuItem(
+                        text = {
+                            Column {
+                                Text("Show QR code")
+                                if (!qrFits) {
+                                    Text(
+                                        text = QR_TOO_LONG,
+                                        style = MaterialTheme.typography.bodySmall,
+                                    )
+                                }
+                            }
+                        },
+                        leadingIcon = {
+                            Icon(Icons.Rounded.QrCode2, contentDescription = null)
+                        },
+                        enabled = qrFits,
+                        onClick = {
+                            menuOpen = false
+                            qrOpen = true
+                        },
+                    )
+                }
                 // A file, not text: Quick Share's "Open" on the other phone lands in "Import to
                 // Pastille", where plain text would only reach the clipboard.
                 DropdownMenuItem(
@@ -1105,6 +1136,13 @@ internal fun SnippetRow(
                         menuOpen = false
                         onDelete()
                     },
+                )
+            }
+            if (qrOpen) {
+                SnippetQrDialog(
+                    title = rowTitle(snippet.title, snippet.text).ifBlank { "Snippet" },
+                    text = snippet.text,
+                    onDismiss = { qrOpen = false },
                 )
             }
             if (onMove != null) {

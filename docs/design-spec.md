@@ -310,8 +310,8 @@ Replace the two arrows with:
 - [x] **Overflow:** `IconButton(Icons.Filled.MoreVert, "More options")`, opening a `DropdownMenu` with leading icons in `onSurfaceVariant`. **It follows the mode on screen** (Iris, 2026-10-28; Erwann: « Un nouveau folder ça dépend de sticker ou prompt, pas des settings global »): what acts on one kind shows only in that mode, then a divider, then what belongs to the whole app.
   - **Snippets:** "Reorder" (`SwapVert`).
   - **Stickers:** "Reorder" only. Stickers have no folders.
-  - `HorizontalDivider`, then in both modes: "Import backup" (`FileDownload`), "Export backup" (`FileUpload`), "Share backup" (`Share`): the backup carries snippets, stickers and images, so it belongs to the whole app (Maya, 2026-10-28; for Iris to confirm). Then "Keyboard setup" (`Keyboard`, `ACTION_INPUT_METHOD_SETTINGS`), "Settings", "Bin", always shown and "Bin (N)" once it holds something (Erwann, 2026-10-28), "Last crash report" when one exists.
-  - **Not in the menu:** "New folder" lives only at the end of the folder row ("+ Add", §14.5), beside the folders it makes; a second door in the overflow showed it on Stickers too. "Try the keyboard" lives only in Settings › Height, under the preview it tests: it helps once, while setting up, and was noise in the everyday menu.
+  - `HorizontalDivider`, then in both modes: "Import backup" (`FileDownload`), "Export backup" (`FileUpload`), "Share backup" (`Share`): the backup carries snippets, stickers and images, so it belongs to the whole app (Maya, 2026-10-28; for Iris to confirm). Then "Keyboard setup" (`Keyboard`, `ACTION_INPUT_METHOD_SETTINGS`), "Settings", "Bin", always shown and "Bin (N)" once it holds something (Erwann, 2026-10-28).
+  - **Not in the menu:** "New folder" lives only at the end of the folder row ("+ Add", §14.5), beside the folders it makes; a second door in the overflow showed it on Stickers too. "Try the keyboard" is gone from the app (Erwann, 2026-10-28: « On s'en fout de tester le clavier dans les settings »); any text field tests it. "Last crash report" lives in Settings › About (§12), beside the version a bug report needs.
 
 ### 8.4 Colour roles
 
@@ -1034,7 +1034,7 @@ The Settings screen was one long column of `ListItem`s under `primary` section h
 - [x] `LargeTopAppBar` that collapses on scroll (`exitUntilCollapsedScrollBehavior`, wired with `nestedScroll` on the `Scaffold`).
 - [x] The back arrow sits in a `FilledTonalIconButton`.
 
-**Groups**, in this order: **Keyboard**, **Clipboard**, **Photos**, then a destructive card when there is one.
+**Groups**, in this order: **Keyboard**, **Clipboard**, **Photos**, **Backup**, **About**, then a destructive card when there is one.
 
 - [x] Each group is a `surfaceContainer` card: 20dp corners, 16dp side margins, 12dp between groups.
 - [x] The group header sits above its card in `titleSmall` `onSurfaceVariant`, inset 16dp so it lines up with the card's content.
@@ -1043,9 +1043,10 @@ The Settings screen was one long column of `ListItem`s under `primary` section h
 
 | Group | Rows |
 |---|---|
-| Keyboard | Style (preview + the inline radio list), Height (preview, Portrait and Landscape segmented rows, the try-it field), Show in the keyboard (Snippets / Stickers / Images), Return after a snippet, Switch back to (an inline radio list) |
+| Keyboard | Style (preview + the inline radio list), Height (preview, Portrait and Landscape segmented rows), Show in the keyboard (Snippets / Stickers / Images), Return after a snippet, Switch back to (an inline radio list) |
 | Clipboard | Clear clipboard after copying (a dialog of radio rows: Off, 5 s, 10 s, 30 s, 1 min) |
 | Photos | Photo access, Return after an image |
+| About | Pastille (version), Source code, Licence, Last crash report (only when one exists) |
 
 **Row anatomy** (shared composables in `ui/SettingsGroup.kt`: `SettingsGroup`, `SettingsRow`, `SettingsRowDetail`, `SettingsHairline`, `SettingsChevron`)
 
@@ -1062,6 +1063,13 @@ The Settings screen was one long column of `ListItem`s under `primary` section h
 - [x] **The style radio list stays inline:** each option is a row whose 36dp leading slot holds the `RadioButton`, so its text lines up with the tiles above. No hairlines between the options; they're one choice.
 - [x] **Detail content** that belongs to a row (previews, segmented buttons) sits under it at the card's full inner width (16dp each side), so the four height options never squeeze.
 - [x] The whole row is the touch target (`selectable`, `toggleable` or `clickable` on the row), with Material's ripple.
+
+**About** (Iris, 2026-10-28; Erwann: « Dans les settings on veut le about et la version »)
+
+- [x] **Pastille:** subtitle "Version 0.1.5 (16)", from `BuildConfig` (`versionName (versionCode)`, "· debug" on the debug build, which installs beside the release one). Tapping copies "Pastille 0.1.5 (16)" (TalkBack: "Copy version"); a toast confirms below Android 13, where the system doesn't.
+- [x] **Source code:** "github.com/kud/pastille", an `ACTION_VIEW` intent to the browser (TalkBack: "Open in browser"), with a trailing `OpenInNew` rather than the chevron, since it leaves the app. Pastille has no `INTERNET` permission and doesn't need one for this.
+- [x] **Licence:** "GPL-3.0-or-later", the SPDX id as the subtitle. Not tappable.
+- [x] **Last crash report:** moved from the list's overflow (§8.3), where a diagnostic sat among everyday actions. Shown only when one exists, read again on resume; opens the same copyable dialog (`CrashReportDialog`).
 
 **Destructive** (none today)
 

@@ -3,7 +3,6 @@ package app.pastille.ui
 import android.app.Activity
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -22,19 +21,27 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.Share
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import android.widget.Toast
+import app.pastille.share.shareSnippet
+import kotlinx.coroutines.delay
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Folder
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
@@ -89,6 +96,10 @@ fun SnippetEditorScreen(
     var deleted by remember { mutableStateOf(false) }
     var folderExpanded by remember { mutableStateOf(false) }
     var showCreateCategory by remember { mutableStateOf(false) }
+    var menuOpen by remember { mutableStateOf(false) }
+    // What is on disk, as far as this screen knows: the footer says "Saved" only when it matches.
+    var savedState by remember { mutableStateOf<List<Any?>?>(null) }
+    val context = LocalContext.current
     val contentFocus = remember { FocusRequester() }
     val saveMutex = remember { Mutex() }
     val categories by remember { repository.observeCategories() }
@@ -101,6 +112,7 @@ fun SnippetEditorScreen(
             val record = repository.get(snippetId)
             if (record != null) {
                 existing = record
+                savedState = listOf(record.title, record.text, record.categoryId, record.tags)
                 if (!loaded) {
                     title = record.title
                     text = record.text
@@ -139,6 +151,7 @@ fun SnippetEditorScreen(
                     repository.upsert(current.copy(title = title, text = text, categoryId = categoryId))
                     repository.setTags(targetId, tags)
                     existing = repository.get(targetId)
+                    savedState = listOf(title, text, categoryId, tags)
                 } else {
                     val id = repository.upsert(
                         SnippetRecord(text = text, title = title, categoryId = categoryId),
@@ -146,6 +159,7 @@ fun SnippetEditorScreen(
                     repository.setTags(id, tags)
                     savedId = id
                     existing = repository.get(id)
+                    savedState = listOf(title, text, categoryId, tags)
                 }
             } else {
                 if (!ready) return
@@ -153,11 +167,13 @@ fun SnippetEditorScreen(
                 val current = repository.get(snippetId) ?: return
                 if (current.title == title && current.text == text && current.categoryId == categoryId && current.tags == tags) {
                     existing = current
+                    savedState = listOf(title, text, categoryId, tags)
                     return
                 }
                 repository.upsert(current.copy(title = title, text = text, categoryId = categoryId))
                 repository.setTags(snippetId, tags)
                 existing = repository.get(snippetId)
+                savedState = listOf(title, text, categoryId, tags)
             }
         }
     }
@@ -183,35 +199,64 @@ fun SnippetEditorScreen(
     BackHandler {
         close()
     }
+    // Sacha's footer promises "Saved", so the editor saves as you pause, not only on leaving.
+    LaunchedEffect(title, text, categoryId, tags, ready) {
+        if (!ready || deleted) return@LaunchedEffect
+        delay(700)
+        save()
+    }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
         if (activity?.isChangingConfigurations != true) {
             scope.launch(NonCancellable) { save() }
         }
     }
 
+    val isSaved = savedState == listOf(title, text, categoryId, tags)
+    val status = when {
+        isSaved -> "Saved"
+        snippetId == null && text.isBlank() -> "Not saved until it has text"
+        else -> "Saving…"
+    }
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surface),
+            .background(MaterialTheme.colorScheme.surface)
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .imePadding(),
     ) {
+        // Sacha: back on the left (it saves), delete and ⋮ on the right.
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .statusBarsPadding()
-                .padding(top = 8.dp, end = 8.dp),
-            horizontalArrangement = Arrangement.End,
+            modifier = Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(
-                onClick = ::close,
-                modifier = Modifier.size(48.dp),
-            ) {
-                Surface(
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    modifier = Modifier.size(40.dp),
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(Icons.Outlined.Close, contentDescription = "Close")
+            IconButton(onClick = ::close) {
+                Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Save and go back")
+            }
+            Spacer(modifier = Modifier.weight(1f))
+            if (snippetId != null) {
+                IconButton(onClick = ::deleteSnippet) {
+                    Icon(Icons.Outlined.Delete, contentDescription = "Delete snippet")
+                }
+            }
+            val record = existing
+            if (record != null) {
+                Box {
+                    IconButton(onClick = { menuOpen = true }) {
+                        Icon(Icons.Rounded.MoreVert, contentDescription = "More options")
+                    }
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Share") },
+                            leadingIcon = { Icon(Icons.Rounded.Share, contentDescription = null) },
+                            onClick = {
+                                menuOpen = false
+                                val current = record.copy(title = title, text = text)
+                                if (!shareSnippet(context, current)) {
+                                    Toast.makeText(context, "That image is gone", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                        )
                     }
                 }
             }
@@ -221,152 +266,133 @@ fun SnippetEditorScreen(
             onValueChange = { title = it },
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp),
+                .padding(horizontal = 4.dp),
             placeholder = {
                 Text(
                     text = if (text.isBlank()) "Title (optional)" else autoTitle(text),
-                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
+                    style = MaterialTheme.typography.headlineMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                 )
             },
             singleLine = true,
-            textStyle = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
+            textStyle = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Medium),
             colors = TextFieldDefaults.colors(
                 focusedContainerColor = Color.Transparent,
                 unfocusedContainerColor = Color.Transparent,
                 disabledContainerColor = Color.Transparent,
-                focusedIndicatorColor = MaterialTheme.colorScheme.outline,
-                unfocusedIndicatorColor = MaterialTheme.colorScheme.outlineVariant,
+                focusedIndicatorColor = MaterialTheme.colorScheme.outlineVariant,
+                unfocusedIndicatorColor = Color.Transparent,
             ),
         )
-        Spacer(modifier = Modifier.height(16.dp))
-        if (isImage) {
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
+        // Sacha: a folder dropdown chip under the title, the tags beside it.
+        Box(modifier = Modifier.padding(start = 16.dp, top = 4.dp)) {
+            Surface(
+                onClick = { folderExpanded = true },
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                modifier = Modifier.heightIn(min = 48.dp).padding(vertical = 4.dp)
+                    .semantics { stateDescription = "Folder: $selectedCategoryName" },
             ) {
-                val imageFile = existing?.imageFile
-                if (imageFile != null) {
-                    ImageThumbnail(
-                        fileName = imageFile,
-                        contentDescription = null,
-                        modifier = Modifier.fillMaxWidth().heightIn(max = 240.dp).aspectRatio(imageRatio),
-                        contentScale = ContentScale.Fit,
-                    )
+                Row(
+                    modifier = Modifier.height(40.dp).padding(start = 12.dp, end = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Outlined.Folder, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(selectedCategoryName, style = MaterialTheme.typography.labelLarge)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(20.dp))
                 }
             }
-        } else {
-            BasicTextField(
-                value = text,
-                onValueChange = { text = it },
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .focusRequester(contentFocus),
-                textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
-                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                decorationBox = { innerTextField ->
-                    Box(modifier = Modifier.fillMaxSize()) {
-                        if (text.isEmpty()) {
-                            Text(
-                                text = "Content",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        innerTextField()
-                    }
-                },
-            )
+            DropdownMenu(
+                expanded = folderExpanded,
+                onDismissRequest = { folderExpanded = false },
+            ) {
+                DropdownMenuItem(
+                    text = { Text("None (top level)") },
+                    onClick = {
+                        categoryId = null
+                        folderExpanded = false
+                    },
+                )
+                categories.sortedBy { it.position }.forEach { category ->
+                    DropdownMenuItem(
+                        text = { Text(category.name) },
+                        onClick = {
+                            categoryId = category.id
+                            folderExpanded = false
+                        },
+                    )
+                }
+                DropdownMenuItem(
+                    text = { Text("New folder…") },
+                    onClick = {
+                        folderExpanded = false
+                        showCreateCategory = true
+                    },
+                )
+            }
         }
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .imePadding(),
+        TagEditor(
+            tags = tags,
+            allTags = allTags,
+            onTagsChange = { tags = it },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        // Sacha: the body sits on its own rounded surface.
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surfaceContainer,
+            modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 12.dp),
         ) {
-            HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
-                    .padding(horizontal = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box {
-                    TextButton(
-                        onClick = { folderExpanded = true },
-                        colors = ButtonDefaults.textButtonColors(
-                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        ),
-                    ) {
-                        Icon(
-                            Icons.Outlined.Folder,
+            if (isImage) {
+                Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+                    val imageFile = existing?.imageFile
+                    if (imageFile != null) {
+                        ImageThumbnail(
+                            fileName = imageFile,
                             contentDescription = null,
-                            modifier = Modifier.size(18.dp),
+                            modifier = Modifier.fillMaxWidth().heightIn(max = 240.dp).aspectRatio(imageRatio),
+                            contentScale = ContentScale.Fit,
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(selectedCategoryName, style = MaterialTheme.typography.labelLarge)
                     }
-                    DropdownMenu(
-                        expanded = folderExpanded,
-                        onDismissRequest = { folderExpanded = false },
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("None (top level)") },
-                            onClick = {
-                                categoryId = null
-                                folderExpanded = false
-                            },
-                        )
-                        categories.sortedBy { it.position }.forEach { category ->
-                            DropdownMenuItem(
-                                text = { Text(category.name) },
-                                onClick = {
-                                    categoryId = category.id
-                                    folderExpanded = false
-                                },
-                            )
+                }
+            } else {
+                BasicTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp)
+                        .focusRequester(contentFocus),
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                    decorationBox = { innerTextField ->
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            if (text.isEmpty()) {
+                                Text(
+                                    text = "Content",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            innerTextField()
                         }
-                        DropdownMenuItem(
-                            text = { Text("New folder…") },
-                            onClick = {
-                                folderExpanded = false
-                                showCreateCategory = true
-                            },
-                        )
-                    }
-                }
-                if (snippetId != null) {
-                    IconButton(onClick = ::deleteSnippet) {
-                        Icon(
-                            Icons.Outlined.Delete,
-                            contentDescription = "Delete snippet",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.weight(1f))
-                if (!isImage) {
-                    Text(
-                        text = "Characters: ${text.length}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(end = 8.dp),
-                    )
-                }
+                    },
+                )
             }
-            TagEditor(
-                tags = tags,
-                allTags = allTags,
-                onTagsChange = { tags = it },
-                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
-            )
         }
+        // Sacha: "Saved · 52 characters". Polite live region, so TalkBack hears it settle.
+        Text(
+            text = if (isImage) status else "$status · ${text.length} ${if (text.length == 1) "character" else "characters"}",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .padding(horizontal = 24.dp, vertical = 14.dp)
+                .semantics { liveRegion = LiveRegionMode.Polite },
+        )
     }
     if (showCreateCategory) {
         CategoryNameDialog(

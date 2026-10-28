@@ -17,7 +17,23 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
@@ -102,6 +118,9 @@ abstract class RedesignRenders(private val dark: Boolean, private val screen: St
         "qr" -> qr()
         "import" -> importOne()
         "import-backup" -> importBackup()
+        "store-keyboard" -> keyboard(host = true)
+        "store-clipboard" -> keyboard(clipboard = true, host = true)
+        "store-icon" -> storeIcon()
         else -> icon()
     }
 
@@ -158,21 +177,44 @@ abstract class RedesignRenders(private val dark: Boolean, private val screen: St
     }
     private fun stickers() {
         val dir = ImageStore.forContext(app).imagesDir().apply { mkdirs() }
-        val colours = listOf(0xFF1A7BF2, 0xFFF2B33D, 0xFF3DBE8B, 0xFFE8EFF9, 0xFFB46CE0, 0xFFF06A5A)
+        // Invented die-cut stickers: a word on a coloured badge with a white edge. Written with writePng,
+        // not Bitmap.compress, to keep one native path out of a JVM that aborts easily.
+        val stickers = listOf(
+            "Thanks!" to 0xFF1A7BF2, "On it" to 0xFFF2B33D, "Yay!" to 0xFF3DBE8B,
+            "Soon" to 0xFFB46CE0, "OK!" to 0xFFF06A5A, "Brb" to 0xFF0B3A78,
+            "Nice!" to 0xFF3DBE8B, "Hi!" to 0xFFF06A5A, "Same" to 0xFF1A7BF2,
+            "Wow" to 0xFF0B3A78, "Ta!" to 0xFFB46CE0, "Lol" to 0xFFF2B33D,
+        )
         runBlocking {
-            colours.forEachIndexed { i, c ->
+            stickers.forEachIndexed { i, (word, c) ->
                 val bmp = Bitmap.createBitmap(256, 256, Bitmap.Config.ARGB_8888)
-                Canvas(bmp).drawCircle(128f, 128f, 110f, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = c.toInt() })
+                val canvas = Canvas(bmp)
+                val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+                val round = i % 2 == 0
+                fun shape(inset: Float) = if (round) canvas.drawCircle(128f, 128f, 118f - inset, paint)
+                else canvas.drawRoundRect(10f + inset, 34f + inset, 246f - inset, 222f - inset, 48f, 48f, paint)
+                paint.color = 0x33000000; canvas.save(); canvas.translate(0f, 6f); shape(0f); canvas.restore()
+                paint.color = 0xFFFFFFFF.toInt(); shape(0f)
+                paint.color = c.toInt(); shape(12f)
+                paint.color = if (c == 0xFFF2B33DL) 0xFF0B3A78.toInt() else 0xFFFFFFFF.toInt()
+                paint.textAlign = Paint.Align.CENTER
+                paint.typeface = android.graphics.Typeface.DEFAULT_BOLD
+                paint.textSize = if (word.length > 4) 50f else 64f
+                canvas.drawText(word, 128f, 128f - (paint.ascent() + paint.descent()) / 2, paint)
                 val file = "sticker-$i.png"
-                File(dir, file).outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
-                repository.setSticker(repository.insertImage("Sticker $i", file, 256, 256), true)
+                writePng(bmp, File(dir, file))
+                repository.setSticker(repository.insertImage(word, file, 256, 256), true)
             }
         }
+        // Decode once on the test thread first. The cards decode on Dispatchers.IO, and the first native
+        // decode on a worker thread aborted the JVM (exit 134, JniConstants "Class not found:
+        // java/nio/FloatBuffer"): run here, the JNI class table is set up from a thread that can load it.
+        stickers.indices.forEach { ImageStore.forContext(app).loadThumbnail("sticker-$it.png", 512) }
         PastilleSettings.forContext(app).appStickersMode = true
         compose.setContent { PastilleTheme(darkTheme = dark) { SnippetListScreen(repository = repository, onCreate = {}, onEdit = {}, onOpenSettings = {}) } }
-        settle(); settle(); capture("stickers")
+        repeat(4) { settle() }; capture("stickers")
     }
-    private fun keyboard(clipboard: Boolean = false, settingsPanel: Boolean = false) {
+    private fun keyboard(clipboard: Boolean = false, settingsPanel: Boolean = false, host: Boolean = false) {
         val now = System.currentTimeMillis()
         val state = KeyboardUiState(
             darkTheme = dark,
@@ -202,6 +244,18 @@ abstract class RedesignRenders(private val dark: Boolean, private val screen: St
         compose.setContent {
             PastilleTheme(darkTheme = dark) {
                 val palette = keyboardPalette(compose.activity, KeyboardStyle.Auto, dark)
+                if (host) {
+                    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
+                        ChatHost(
+                            field = if (clipboard) "Order #48213 ships Thursday" else "Sorry, running about ten minutes late, start without me.",
+                            modifier = Modifier.weight(1f),
+                        )
+                        KeyboardTheme(palette = palette) {
+                            KeyboardPanel(state = state, actions = NoKeyboardActions, contentHeight = 300.dp)
+                        }
+                    }
+                    return@PastilleTheme
+                }
                 androidx.compose.foundation.layout.Box(
                     androidx.compose.ui.Modifier.fillMaxSize().background(androidx.compose.material3.MaterialTheme.colorScheme.surface),
                     contentAlignment = androidx.compose.ui.Alignment.BottomCenter,
@@ -214,7 +268,9 @@ abstract class RedesignRenders(private val dark: Boolean, private val screen: St
             }
         }
         val wide = if (compose.activity.resources.configuration.screenWidthDp >= 400) "-wide" else ""
-        if (settingsPanel) {
+        if (host) {
+            wait("Sam"); capture(if (clipboard) "store-clipboard" else "store-keyboard")
+        } else if (settingsPanel) {
             wait("Show in the keyboard"); capture("keyboard-settings$wide")
         } else if (clipboard) {
             wait("Order #48213 ships Thursday"); capture("clipboard$wide")
@@ -290,6 +346,26 @@ abstract class RedesignRenders(private val dark: Boolean, private val screen: St
         writePng(bitmap, File(out, "redesign-$name-$suffix.png"))
     }
 
+    /**
+     * The listing and README icons from the adaptive launcher icon, full bleed and unmasked (the store and
+     * the launcher apply their own mask), the same geometry as assets/icon.svg: colour at 512 (fastlane)
+     * and 1024 (assets), and the monochrome layer in black on transparent at 1024.
+     */
+    private fun storeIcon() {
+        val icon = app.getDrawable(app.applicationInfo.icon) as AdaptiveIconDrawable
+        fun draw(px: Int, layers: List<android.graphics.drawable.Drawable>): Bitmap {
+            val bmp = Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888)
+            val c = Canvas(bmp)
+            layers.forEach { it.setBounds(0, 0, px, px); it.draw(c) }
+            return bmp
+        }
+        val colour = listOfNotNull(icon.background, icon.foreground)
+        writePng(draw(512, colour), File(out, "redesign-store-icon-512.png"))
+        writePng(draw(1024, colour), File(out, "redesign-store-icon-1024.png"))
+        val mono = requireNotNull(icon.monochrome).mutate().apply { setTint(0xFF000000.toInt()) }
+        writePng(draw(1024, listOf(mono)), File(out, "redesign-store-icon-monochrome-1024.png"))
+    }
+
     private fun icon() {
         assumeTrue(dark)
         val icon = app.getDrawable(app.applicationInfo.icon) as AdaptiveIconDrawable
@@ -340,6 +416,49 @@ class QrLight : RedesignRenders(false, "qr")
 class ImportDark : RedesignRenders(true, "import")
 class ImportLight : RedesignRenders(false, "import")
 class ImportBackupLight : RedesignRenders(false, "import-backup")
+// The store listing (scripts/store-images.sh): the keyboard over an invented chat, and the icons.
+class StoreKeyboard : RedesignRenders(false, "store-keyboard")
+class StoreClipboard : RedesignRenders(false, "store-clipboard")
+class StoreIcon : RedesignRenders(false, "store-icon")
+
+/** An invented messaging screen, so the keyboard reads as a keyboard. Not any real app's chrome. */
+@androidx.compose.runtime.Composable
+private fun ChatHost(field: String, modifier: Modifier = Modifier) {
+    val scheme = MaterialTheme.colorScheme
+    Column(modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(40.dp).clip(CircleShape).background(scheme.tertiaryContainer), contentAlignment = Alignment.Center) {
+                Text("S", style = MaterialTheme.typography.titleMedium, color = scheme.onTertiaryContainer)
+            }
+            Spacer(Modifier.width(12.dp))
+            Text("Sam", style = MaterialTheme.typography.titleLarge, color = scheme.onSurface)
+        }
+        Spacer(Modifier.weight(1f))
+        Bubble("Are we still on for tonight?", mine = false)
+        Bubble("Yes! Leaving now", mine = true)
+        Spacer(Modifier.height(12.dp))
+        Row(
+            Modifier.padding(horizontal = 12.dp, vertical = 8.dp).fillMaxWidth()
+                .clip(RoundedCornerShape(24.dp)).background(scheme.surfaceContainerHigh)
+                .padding(horizontal = 20.dp, vertical = 14.dp),
+        ) { Text(field, style = MaterialTheme.typography.bodyLarge, color = scheme.onSurface) }
+    }
+}
+
+@androidx.compose.runtime.Composable
+private fun Bubble(text: String, mine: Boolean) {
+    val scheme = MaterialTheme.colorScheme
+    Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), contentAlignment = if (mine) Alignment.CenterEnd else Alignment.CenterStart) {
+        Text(
+            text,
+            style = MaterialTheme.typography.bodyLarge,
+            color = if (mine) scheme.onPrimaryContainer else scheme.onSurface,
+            modifier = Modifier.clip(RoundedCornerShape(20.dp))
+                .background(if (mine) scheme.primaryContainer else scheme.surfaceContainerHighest)
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+        )
+    }
+}
 
 private fun writePng(bitmap: Bitmap, file: File) {
     val w = bitmap.width; val h = bitmap.height

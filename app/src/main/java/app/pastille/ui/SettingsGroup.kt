@@ -1,5 +1,12 @@
 package app.pastille.ui
 
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.heading
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Switch
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,10 +35,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
 private val GroupShape = RoundedCornerShape(20.dp)
-private val TileShape = RoundedCornerShape(10.dp)
 private val SideMargin = 16.dp
 private val TileSize = 36.dp
-private val TileIconSize = 20.dp
+private val TileIconSize = 24.dp
 
 /** Where row text starts inside a card: 16dp padding, the 36dp tile, a 20dp gap. Hairlines start here too. */
 val SettingsTextInset = 72.dp
@@ -47,8 +53,8 @@ fun SettingsGroup(
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = SideMargin, end = SideMargin, bottom = 8.dp),
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(start = 4.dp, end = SideMargin, bottom = 8.dp).semantics { heading() },
             )
         }
         Surface(
@@ -61,23 +67,32 @@ fun SettingsGroup(
     }
 }
 
+/** Sacha's rows read as connected cards: a 2dp gap of the ground between them, not a hairline. */
 @Composable
 fun SettingsHairline() {
-    HorizontalDivider(
-        thickness = 1.dp,
-        color = MaterialTheme.colorScheme.outlineVariant,
-        modifier = Modifier.padding(start = SettingsTextInset),
+    Spacer(Modifier.fillMaxWidth().height(2.dp).background(MaterialTheme.colorScheme.surface))
+}
+
+/** Sacha's switch: the thumb carries a check when on, so the state is a shape as well as a colour. */
+@Composable
+fun PastilleSwitch(checked: Boolean, enabled: Boolean = true) {
+    Switch(
+        checked = checked,
+        onCheckedChange = null,
+        enabled = enabled,
+        thumbContent = if (checked) {
+            { Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(SwitchDefaults.IconSize)) }
+        } else {
+            null
+        },
     )
 }
 
 @Composable
 fun SettingsIconTile(icon: ImageVector, destructive: Boolean = false) {
-    val container = if (destructive) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondaryContainer
-    val content = if (destructive) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSecondaryContainer
-    Box(
-        modifier = Modifier.size(TileSize).clip(TileShape).background(container),
-        contentAlignment = Alignment.Center,
-    ) {
+    // Sacha: a plain monochrome glyph, no filled tile.
+    val content = if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+    Box(modifier = Modifier.size(TileSize), contentAlignment = Alignment.Center) {
         Icon(icon, contentDescription = null, tint = content, modifier = Modifier.size(TileIconSize))
     }
 }
@@ -120,7 +135,6 @@ fun SettingsRow(
             Text(
                 text = title,
                 style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Medium,
                 color = titleColor.copy(alpha = alpha),
             )
             if (subtitle != null) {

@@ -1,5 +1,9 @@
 package app.pastille.ui
 
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.TopAppBar
+import androidx.activity.compose.BackHandler
 import android.Manifest
 import android.content.Intent
 import android.net.Uri
@@ -100,64 +104,80 @@ import java.io.File
 fun SettingsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val settings = remember { PastilleSettings.forContext(context) }
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    // Style and Height are their own pages (Iris, 2026-10-28): the main list stays one line per
+    // setting, like Sacha's, and each page has the room for its live preview.
+    var page by rememberSaveable { mutableStateOf(SettingsPage.Main) }
+    BackHandler(enabled = page != SettingsPage.Main) { page = SettingsPage.Main }
     Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
-            LargeTopAppBar(
-                title = { Text("Settings") },
+            TopAppBar(
+                title = { Text(page.title) },
                 navigationIcon = {
-                    FilledTonalIconButton(onClick = onBack, modifier = Modifier.padding(start = 4.dp)) {
+                    IconButton(onClick = { if (page == SettingsPage.Main) onBack() else page = SettingsPage.Main }) {
                         Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
                     }
                 },
-                scrollBehavior = scrollBehavior,
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
             )
         },
     ) { padding ->
-        Column(
-            modifier = Modifier
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(top = 8.dp, bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            KeyboardGroup(settings)
-            ClipboardGroup(settings)
-            PhotosGroup(settings)
-            BackupGroup(settings)
-            AboutGroup()
+        Crossfade(targetState = page, animationSpec = tween(200), label = "settingsPage", modifier = Modifier.padding(padding)) { shown ->
+            Column(
+                modifier = Modifier
+                    .verticalScroll(rememberScrollState())
+                    .padding(top = 4.dp, bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp),
+            ) {
+                when (shown) {
+                    SettingsPage.Style -> StylePage(settings)
+                    SettingsPage.Height -> HeightPage(settings)
+                    SettingsPage.Main -> {
+                        KeyboardGroup(settings, onOpen = { page = it })
+                        ClipboardGroup(settings)
+                        PhotosGroup(settings)
+                        BackupGroup(settings)
+                        AboutGroup()
+                    }
+                }
+            }
         }
     }
 }
 
+private enum class SettingsPage(val title: String) { Main("Settings"), Style("Style"), Height("Height") }
+
 @Composable
-private fun KeyboardGroup(settings: PastilleSettings) {
+private fun StylePage(settings: PastilleSettings) {
     var selectedStyle by remember { mutableStateOf(settings.keyboardStyle) }
-    var panelPortrait by remember { mutableStateOf(settings.panelHeightPortrait) }
-    var panelLandscape by remember { mutableStateOf(settings.panelHeightLandscape) }
-    var previewLandscape by remember { mutableStateOf(false) }
-    var enabledModes by remember { mutableStateOf(settings.enabledModes()) }
-    var returnAfterSnippet by remember { mutableStateOf(settings.returnAfterSnippet) }
-    fun chooseStyle(style: KeyboardStyle) {
-        selectedStyle = style
-        settings.keyboardStyle = style
-        settings.keyboardStyleChosen = true
-    }
-    SettingsGroup(title = "Keyboard") {
-        SettingsRow(title = "Style", subtitle = selectedStyle.label, icon = Icons.Rounded.Palette)
-        SettingsRowDetail {
+    SettingsGroup(title = null) {
+        SettingsRowDetail(modifier = Modifier.padding(top = 16.dp)) {
             Crossfade(targetState = selectedStyle, animationSpec = tween(150)) { style ->
                 KeyboardStylePreview(style = style, modifier = Modifier.fillMaxWidth())
             }
         }
-        StyleOptions(selected = selectedStyle, onSelect = ::chooseStyle)
-        SettingsHairline()
-        SettingsRow(title = "Height", subtitle = "Portrait and landscape", icon = Icons.Rounded.Height)
-        SettingsRowDetail {
+    }
+    SettingsGroup(title = "Keyboard style") {
+        StyleOptions(
+            selected = selectedStyle,
+            onSelect = { style ->
+                selectedStyle = style
+                settings.keyboardStyle = style
+                settings.keyboardStyleChosen = true
+            },
+        )
+    }
+}
+
+@Composable
+private fun HeightPage(settings: PastilleSettings) {
+    var panelPortrait by remember { mutableStateOf(settings.panelHeightPortrait) }
+    var panelLandscape by remember { mutableStateOf(settings.panelHeightLandscape) }
+    var previewLandscape by remember { mutableStateOf(false) }
+    SettingsGroup(title = null) {
+        SettingsRowDetail(modifier = Modifier.padding(top = 16.dp)) {
             KeyboardHeightPreview(
-                style = selectedStyle,
+                style = settings.keyboardStyle,
                 height = if (previewLandscape) panelLandscape else panelPortrait,
                 landscape = previewLandscape,
                 modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
@@ -181,6 +201,33 @@ private fun KeyboardGroup(settings: PastilleSettings) {
                 },
             )
         }
+    }
+}
+
+@Composable
+private fun KeyboardGroup(settings: PastilleSettings, onOpen: (SettingsPage) -> Unit) {
+    var selectedStyle by remember { mutableStateOf(settings.keyboardStyle) }
+    var panelPortrait by remember { mutableStateOf(settings.panelHeightPortrait) }
+    var panelLandscape by remember { mutableStateOf(settings.panelHeightLandscape) }
+    var enabledModes by remember { mutableStateOf(settings.enabledModes()) }
+    var returnAfterSnippet by remember { mutableStateOf(settings.returnAfterSnippet) }
+    SettingsGroup(title = "Keyboard") {
+        SettingsRow(
+            title = "Style",
+            subtitle = selectedStyle.label,
+            icon = Icons.Rounded.Palette,
+            modifier = Modifier.clickable(role = Role.Button, onClick = { onOpen(SettingsPage.Style) }),
+            trailing = { SettingsChevron() },
+        )
+        SettingsHairline()
+        SettingsRow(
+            title = "Height",
+            subtitle = if (panelPortrait == panelLandscape) panelPortrait.label
+            else "${panelPortrait.label} upright · ${panelLandscape.label} sideways",
+            icon = Icons.Rounded.Height,
+            modifier = Modifier.clickable(role = Role.Button, onClick = { onOpen(SettingsPage.Height) }),
+            trailing = { SettingsChevron() },
+        )
         SettingsHairline()
         SettingsRow(title = "Show in the keyboard", subtitle = "At least one stays on", icon = Icons.Rounded.Dashboard)
         SettingsRowDetail {
@@ -341,7 +388,6 @@ private fun HeightRow(
                 selected = height == selected,
                 onClick = { onSelect(height) },
                 shape = SegmentedButtonDefaults.itemShape(index, PanelHeight.entries.size),
-                icon = {},
                 label = {
                     Text(
                         text = height.label,
@@ -418,7 +464,7 @@ private fun ToggleRow(
         subtitle = subtitle,
         icon = icon,
         modifier = Modifier.toggleable(value = checked, role = Role.Switch, onValueChange = onChange),
-        trailing = { Switch(checked = checked, onCheckedChange = null) },
+        trailing = { PastilleSwitch(checked = checked) },
     )
 }
 

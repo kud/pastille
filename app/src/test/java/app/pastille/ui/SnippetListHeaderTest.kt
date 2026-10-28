@@ -270,7 +270,7 @@ class SnippetListHeaderTest {
         fun folderRowShown() = compose.onAllNodesWithText("All").fetchSemanticsNodes().isNotEmpty()
         // Probe: the folder row is really there to begin with, or its absence below proves nothing.
         assertTrue("folder row in Snippets", folderRowShown())
-        compose.onNodeWithText("New snippet").assertExists()
+        compose.onNodeWithText("New snippet", useUnmergedTree = true).assertExists()
 
         // A synthetic touch never reaches Material's SegmentedButton under Robolectric (the row sees it, the
         // segment's click doesn't fire), while a finger on the device works; so the switch is pressed through
@@ -278,13 +278,13 @@ class SnippetListHeaderTest {
         compose.onNodeWithText("Stickers").performSemanticsAction(SemanticsActions.OnClick)
         compose.waitForIdle()
         assertTrue("no folder row in Stickers", !folderRowShown())
-        compose.onNodeWithText("Add stickers").assertExists()
+        compose.onNodeWithText("Add stickers", useUnmergedTree = true).assertExists()
         assertTrue("Stickers mode remembered", settings.appStickersMode)
 
         compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
         compose.waitForIdle()
         assertTrue("Back returns to Snippets", folderRowShown())
-        compose.onNodeWithText("New snippet").assertExists()
+        compose.onNodeWithText("New snippet", useUnmergedTree = true).assertExists()
         assertTrue("Snippets mode remembered", !settings.appStickersMode)
     }
 }

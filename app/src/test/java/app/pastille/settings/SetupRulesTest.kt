@@ -31,10 +31,10 @@ class SetupRulesTest {
     private val samsung = KeyboardEntry("com.samsung/.Ime", "Samsung Keyboard")
 
     @Test
-    fun `the list matches the system picker, languages under their keyboard, voice included`() {
+    fun `previous keyboard first, typing keyboards alphabetically, voice last, languages under their keyboard`() {
         val choices = returnKeyboardChoices(null, null, listOf(voice, gboard, swift), listOf(voice, gboard, swift))
         assertEquals(
-            listOf("Google Voice Typing", "Gboard", "Français (France)", "English (UK)", "SwiftKey", "Previous keyboard"),
+            listOf("Previous keyboard", "Gboard", "Français (France)", "English (UK)", "SwiftKey", "Google Voice Typing"),
             choices.map { it.label },
         )
         assertEquals(listOf(null, null, 101, 202, null, null), choices.map { it.subtype })
@@ -67,7 +67,7 @@ class SetupRulesTest {
     @Test
     fun `previous keyboard is a real choice`() {
         val choices = returnKeyboardChoices(PastilleSettings.PREVIOUS_KEYBOARD, null, listOf(swift), listOf(swift))
-        assertEquals(listOf(false, true), choices.map { it.selected })
+        assertEquals(listOf(true, false), choices.map { it.selected })
     }
 
     @Test

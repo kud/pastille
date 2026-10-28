@@ -3,6 +3,7 @@ package app.pastille.ui
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,7 +41,7 @@ class Segment<T>(val value: T, val label: String, val glyph: @Composable () -> U
 /**
  * « Un carré de segments » (Erwann, 2026-10-28): four choices as one connected, rounded block of
  * four equal cells, two by two, each a glyph over its label. Only the block's outer corners round;
- * the cells meet across a 2dp seam in the surface colour, so it reads as one control, not four chips.
+ * the cells share 1dp borders in the outline colour, so it reads as one control, not four chips.
  *
  * On is never colour alone: a chosen cell takes the fill, a heavier label and a check badge in its
  * top-end corner. [multi] makes the cells checkboxes (several on), otherwise radios (exactly one).
@@ -63,6 +64,11 @@ fun <T> SegmentSquare(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(outer))
+            // Cells touch (Erwann, 2026-10-28: « des segments 2×2 collés »): the hairline between them is
+            // the block's own outline colour showing through a 1dp seam, so the borders are shared.
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(outer))
+            .background(MaterialTheme.colorScheme.outlineVariant)
+            .padding(1.dp)
             .then(if (multi) Modifier else Modifier.selectableGroup()),
         verticalArrangement = Arrangement.spacedBy(SEAM),
     ) {
@@ -124,4 +130,4 @@ private fun <T> SegmentCell(segment: Segment<T>, on: Boolean, modifier: Modifier
     }
 }
 
-private val SEAM = 2.dp
+private val SEAM = 1.dp

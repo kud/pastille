@@ -37,9 +37,9 @@ data class ReturnChoice(
 
 /**
  * The same set and grouping as Android's keyboard picker: every enabled input method but Pastille,
- * voice input included, in the system's order; under a keyboard with two or more languages, one row
- * for "whichever language it used last" and one per language. Then "Previous keyboard", then the
- * installed ones Android won't switch to until they're enabled.
+ * voice input included. "Previous keyboard" first, then typing keyboards alphabetically, voice input
+ * last; under a keyboard with two or more languages, one row for "whichever language it used last"
+ * and one per language. Then the installed ones Android won't switch to until they're enabled.
  *
  * The selection shows what the keyboard will actually do ([returnKeyboardTarget]): no choice yet, or a
  * keyboard since disabled, selects the first typing keyboard's own row; a language since removed
@@ -54,8 +54,21 @@ fun returnKeyboardChoices(
 ): List<ReturnChoice> {
     val target = returnKeyboardTarget(chosen, chosenSubtype, enabled)
     val enabledIds = enabled.map { it.id }.toSet()
+    // Not the system's order (Erwann, 2026-10-28: « pourquoi Magic est en premier ? »): typing
+    // keyboards alphabetically, voice input last; each keyboard's languages stay under it.
+    val ordered = enabled.sortedWith(compareBy<KeyboardEntry>({ !it.typing }, { it.label.lowercase() }))
     return buildList {
-        enabled.forEach { keyboard ->
+        // The smart default leads (Erwann, 2026-10-28).
+        add(
+            ReturnChoice(
+                value = PastilleSettings.PREVIOUS_KEYBOARD,
+                label = "Previous keyboard",
+                note = "Whichever you used before Pastille",
+                available = true,
+                selected = target == null,
+            ),
+        )
+        ordered.forEach { keyboard ->
             val languages = keyboard.subtypes
             val shownSubtype = target?.subtype?.takeIf { target.id == keyboard.id && languages.size > 1 }
             add(
@@ -86,15 +99,6 @@ fun returnKeyboardChoices(
                 }
             }
         }
-        add(
-            ReturnChoice(
-                value = PastilleSettings.PREVIOUS_KEYBOARD,
-                label = "Previous keyboard",
-                note = "Whichever you used before Pastille",
-                available = true,
-                selected = target == null,
-            ),
-        )
         installed.filter { it.id !in enabledIds }.distinctBy { it.id }.forEach { keyboard ->
             add(ReturnChoice(value = keyboard.id, label = keyboard.label, note = "Not enabled", available = false, selected = false))
         }

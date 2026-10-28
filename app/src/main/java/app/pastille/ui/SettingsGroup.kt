@@ -216,9 +216,12 @@ fun SettingsChoiceRow(
         modifier = modifier
             .fillMaxWidth()
             .selectable(selected = selected, enabled = enabled, role = Role.RadioButton, onClick = onClick)
+            // Even rows, each radio on its label's first line (Erwann, 2026-10-28: « pas ordonné et
+            // aligné »): top-aligned with equal padding, so a one-line row is 48dp and a radio never
+            // centres between a title and its note.
             .heightIn(min = 48.dp)
-            .padding(start = start, end = SideMargin, top = 6.dp, bottom = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .padding(start = start, end = SideMargin, top = 12.dp, bottom = 12.dp),
+        verticalAlignment = Alignment.Top,
         horizontalArrangement = Arrangement.spacedBy(ChoiceGap),
     ) {
         RadioButton(selected = selected, onClick = null, enabled = enabled)

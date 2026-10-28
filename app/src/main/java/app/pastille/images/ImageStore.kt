@@ -121,9 +121,9 @@ class ImageStore(private val appContext: Context) : ImageImporter {
         }
         runCatching {
             val shared = File(appContext.cacheDir, "shared")
-            val files = shared.listFiles()?.filter { it.isFile }?.map { it.name to it.lastModified() }
-                ?: emptyList()
-            staleShared(files, now).forEach { File(shared, it).delete() }
+            // Files, and the send-<uuid>/ folders "Send to another phone" builds its archive in.
+            val files = shared.listFiles()?.map { it.name to it.lastModified() } ?: emptyList()
+            staleShared(files, now).forEach { File(shared, it).deleteRecursively() }
         }
     }
 

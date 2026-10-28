@@ -39,6 +39,14 @@ fun shareBackup(context: Context, file: File) {
     shareFile(context, fileProviderUri(context, file), BackupArchive.MIME, file.name)
 }
 
+/**
+ * Opens the share sheet for a one-item archive ([app.pastille.backup.BackupFiles.buildToSend]):
+ * Quick Share delivers it as a file, and its "Open" on the other phone lands in "Import to Pastille".
+ */
+fun sendToPhone(context: Context, file: File) {
+    shareFile(context, fileProviderUri(context, file), BackupArchive.MIME, file.name)
+}
+
 private fun shareFile(context: Context, uri: Uri, mime: String, title: String) {
     val send = Intent(Intent.ACTION_SEND).apply {
         type = mime

@@ -40,6 +40,26 @@ fun importMessage(imported: BackupArchive.Counts): String =
 fun importQuestion(contents: BackupArchive.Counts): String =
     "This backup holds ${contentsPhrase(contents)}. Anything already in Pastille is skipped."
 
+/**
+ * How one received item is named in a sentence: its title or first line in quotes, cut at 40
+ * characters, or "this sticker" / "this image" when an image has no title.
+ */
+fun itemPhrase(title: String, text: String, isImage: Boolean, sticker: Boolean): String {
+    val name = title.ifBlank { if (isImage) "" else text }.lineSequence().map { it.trim() }.firstOrNull { it.isNotEmpty() }.orEmpty()
+    if (name.isEmpty()) return if (sticker) "this sticker" else if (isImage) "this image" else "this snippet"
+    val cut = if (name.length > 40) name.take(39).trimEnd() + "…" else name
+    return "“$cut”"
+}
+
+/** The one-item confirmation's title: Add “Wi-Fi at the cottage” to Pastille? */
+fun addOneQuestion(phrase: String): String = "Add $phrase to Pastille?"
+
+/** After a one-item import: “Wi-Fi at the cottage” added, or already here. */
+fun addOneMessage(phrase: String, added: Boolean): String =
+    if (added) "Added ${phrase.replaceFirstChar { it.uppercase() }}" else "${phrase.replaceFirstChar { it.uppercase() }} is already in Pastille"
+
+const val SEND_FAILED = "Couldn't prepare it to send."
+
 const val EXPORT_FAILED = "Couldn't save the backup. Try another place."
 const val IMPORT_UNREADABLE = "Couldn't open that file."
 const val IMPORT_NOT_A_BACKUP = "That file isn't a Pastille backup."

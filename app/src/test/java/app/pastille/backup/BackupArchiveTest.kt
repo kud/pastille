@@ -124,4 +124,31 @@ class BackupArchiveTest {
         assertEquals(base, SnippetBackup.fingerprint(records.map { it.copy(lastUsedAt = 999) }, categories))
         assertFalse(base == SnippetBackup.fingerprint(records.map { it.copy(title = it.title + "!") }, categories))
     }
+
+    @Test
+    fun `only keeps the chosen live snippets and their folders`() {
+        val state = app.pastille.sync.SyncState(
+            snippets = listOf(
+                app.pastille.sync.SyncSnippet(uid = "a", text = "a", categoryUid = "home"),
+                app.pastille.sync.SyncSnippet(uid = "b", text = "b", categoryUid = "work"),
+                app.pastille.sync.SyncSnippet(uid = "c", text = "c", deletedAt = 5),
+            ),
+            categories = listOf(app.pastille.sync.SyncCategory("home", "Home"), app.pastille.sync.SyncCategory("work", "Work")),
+            tags = listOf(app.pastille.sync.SyncTag("t", "travel")),
+            tombstones = listOf(app.pastille.sync.SyncTombstone("z", "snippet", 1)),
+        )
+        val sent = BackupArchive.only(state, setOf("a", "c"))
+        assertEquals(listOf("a"), sent.snippets.map { it.uid })
+        assertEquals(listOf("Home"), sent.categories.map { it.name })
+        assertTrue(sent.tags.isEmpty() && sent.tombstones.isEmpty())
+    }
+
+    @Test
+    fun `send names are safe file names`() {
+        assertEquals("Pastille - Wi-Fi at the cottage.zip", BackupArchive.sendName("Wi-Fi at the cottage"))
+        assertEquals("Pastille - Café a b.zip", BackupArchive.sendName("Café a/b\nsecond line"))
+        assertEquals("Pastille - x y.zip", BackupArchive.sendName("  x:*?  y... "))
+        assertEquals("Pastille.zip", BackupArchive.sendName("  "))
+        assertTrue(BackupArchive.sendName("a".repeat(200)).length <= "Pastille - .zip".length + 48)
+    }
 }

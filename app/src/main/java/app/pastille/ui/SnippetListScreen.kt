@@ -182,6 +182,8 @@ import app.pastille.backup.BackupArchive
 import app.pastille.backup.BackupFiles
 import app.pastille.share.shareBackup
 import app.pastille.share.shareSnippet
+import app.pastille.share.sendToPhone
+import androidx.compose.material.icons.automirrored.rounded.SendToMobile
 import androidx.compose.material.icons.rounded.Share
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -999,6 +1001,7 @@ internal fun SnippetRow(
     containerColor: Color = MaterialTheme.colorScheme.surface,
 ) {
     val context = LocalContext.current
+    val rowScope = rememberCoroutineScope()
     var menuOpen by remember { mutableStateOf(false) }
     var moveMenuOpen by remember { mutableStateOf(false) }
     var expanded by rememberSaveable(snippet.id) { mutableStateOf(false) }
@@ -1142,6 +1145,22 @@ internal fun SnippetRow(
                     onClick = {
                         menuOpen = false
                         if (!shareSnippet(context, snippet)) toast(context, "That image is gone")
+                    },
+                )
+                // A file, not text: Quick Share's "Open" on the other phone lands in "Import to
+                // Pastille", where plain text would only reach the clipboard.
+                DropdownMenuItem(
+                    text = { Text("Send to another phone") },
+                    leadingIcon = {
+                        Icon(Icons.AutoMirrored.Rounded.SendToMobile, contentDescription = null)
+                    },
+                    onClick = {
+                        menuOpen = false
+                        rowScope.launch {
+                            runCatching { BackupFiles.buildToSend(context, snippet) }
+                                .onSuccess { sendToPhone(context, it) }
+                                .onFailure { toast(context, SEND_FAILED) }
+                        }
                     },
                 )
                 DropdownMenuItem(

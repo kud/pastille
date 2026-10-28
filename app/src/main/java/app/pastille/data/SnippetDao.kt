@@ -19,6 +19,10 @@ interface SnippetDao {
     @Query("SELECT * FROM snippets WHERE id = :id")
     suspend fun getById(id: Long): SnippetEntity?
 
+    // Any row, the bin included: uids are unique across the table, and upsert replaces on conflict.
+    @Query("SELECT * FROM snippets WHERE uid = :uid LIMIT 1")
+    suspend fun findByUid(uid: String): SnippetEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(entity: SnippetEntity): Long
 

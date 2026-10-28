@@ -262,6 +262,7 @@ object SnippetBackup {
                         imageWidth = it.imageWidth,
                         imageHeight = it.imageHeight,
                         sticker = it.sticker && it.image != null,
+                        uid = it.uid,
                     ),
                     category = it.category,
                 )

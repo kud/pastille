@@ -88,6 +88,33 @@ object BackupFiles {
         return build(context, target)
     }
 
+    /**
+     * Builds the one-item archive "Send to another phone" shares, in cache/shared/ under a name the
+     * other phone shows ("Pastille - Wi-Fi at the cottage.zip"), and checks it reads back. Throws
+     * when the item is gone or its image is missing.
+     */
+    suspend fun buildToSend(context: Context, snippet: app.pastille.model.SnippetRecord): File = withContext(Dispatchers.IO) {
+        val dir = File(File(context.cacheDir, "shared"), "send-${UUID.randomUUID()}").apply { mkdirs() }
+        val name = snippet.title.ifBlank { if (snippet.imageFile == null) snippet.text else "" }
+        val target = File(dir, BackupArchive.sendName(name))
+        try {
+            val repository = SnippetRepository.forContext(context)
+            val images = ImageStore.forContext(context).imagesDir()
+            val written = target.outputStream().use { repository.exportItems(it, images, listOf(snippet.id)) }
+            if (written.snippets + written.images + written.stickers != 1) throw IOException("Nothing to send")
+            if (BackupArchive.verify(target) == null) throw IOException("Archive didn't verify")
+            target
+        } catch (error: Exception) {
+            dir.deleteRecursively()
+            throw error
+        }
+    }
+
+    /** What a cached file holds, entries and all; throws when it isn't a Pastille backup. */
+    suspend fun read(file: File): BackupContents = withContext(Dispatchers.IO) {
+        SnippetBackup.decode(BackupArchive.readJson(file))
+    }
+
     /** Imports a cached copy and removes it. */
     suspend fun importFile(context: Context, file: File): BackupArchive.Counts = withContext(Dispatchers.IO) {
         try {

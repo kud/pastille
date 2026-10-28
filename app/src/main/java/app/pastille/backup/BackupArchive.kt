@@ -112,6 +112,33 @@ object BackupArchive {
 
     data class Written(val snippets: Int, val images: Int, val stickers: Int, val leftOut: Int)
 
+    /**
+     * The slice of [state] that "Send to another phone" ships: the live snippets with these [uids],
+     * the folders they sit in, nothing else (no bin, no tags list, no tombstones). The uids stay as
+     * they are, so the copy on the other phone is the same item to sync.
+     */
+    fun only(state: app.pastille.sync.SyncState, uids: Set<String>): app.pastille.sync.SyncState {
+        val snippets = state.snippets.filter { it.uid in uids && it.deletedAt == null }
+        val folders = snippets.mapNotNull { it.categoryUid }.toSet()
+        return app.pastille.sync.SyncState(
+            snippets = snippets,
+            categories = state.categories.filter { it.uid in folders },
+        )
+    }
+
+    /**
+     * The file name the other phone sees: "Pastille - Wi-Fi at the cottage.zip". Characters a file
+     * system or Quick Share might refuse are dropped; letters of any script stay.
+     */
+    fun sendName(title: String): String {
+        val clean = title.lineSequence().firstOrNull().orEmpty()
+            .replace(Regex("[\\\\/:*?\"<>|\\p{Cntrl}]"), " ")
+            .replace(Regex("\\s+"), " ")
+            .trim().trimEnd('.')
+            .take(48).trim()
+        return if (clean.isEmpty()) "Pastille.zip" else "Pastille - $clean.zip"
+    }
+
     /** The JSON of a backup file, zip or old bare JSON. Throws if it isn't one. */
     fun readJson(file: File): String =
         if (isZip(file)) {
@@ -191,4 +218,7 @@ object BackupArchive {
     }
 
     data class Counts(val snippets: Int, val images: Int, val stickers: Int)
+
+    /** The one item of a sent archive, for "Add "…" to Pastille?"; null when it holds more or less. */
+    fun single(contents: BackupContents): BackupEntry? = contents.snippets.singleOrNull()
 }

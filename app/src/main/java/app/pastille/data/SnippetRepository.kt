@@ -387,6 +387,34 @@ class SnippetRepository private constructor(
     suspend fun exportBackup(out: OutputStream, imagesDir: File, withSync: Boolean = false): BackupArchive.Written =
         BackupArchive.writeState(out, syncState(), withSync) { File(imagesDir, it) }
 
+    /**
+     * "Send to another phone": an archive of just these snippets or stickers (by local id), in the
+     * same format and with the same uids as a backup, so the other phone imports it like one and a
+     * later sync sees one item, not two.
+     */
+    suspend fun exportItems(out: OutputStream, imagesDir: File, ids: Collection<Long>): BackupArchive.Written {
+        val uids = dao.uidsFor(ids.toList()).filter { it.isNotEmpty() }.toSet()
+        return BackupArchive.writeState(out, BackupArchive.only(syncState(), uids), withSync = false) { File(imagesDir, it) }
+    }
+
+    /**
+     * Whether a received item is already here, by the rules import skips on: the same uid among
+     * live rows, the same text, or the same image file.
+     */
+    suspend fun holds(record: SnippetRecord): Boolean {
+        if (liveUid(record.uid)) return true
+        val image = record.imageFile
+        return if (image != null) dao.findByImageFile(image) != null else dao.findTextDuplicate(record.text) != null
+    }
+
+    // The sender's uid when nothing here uses it, bin included (upsert would replace that row);
+    // otherwise a fresh one.
+    private suspend fun liveUid(uid: String): Boolean =
+        uid.isNotEmpty() && dao.findByUid(uid)?.let { it.deletedAt == null } == true
+
+    private suspend fun incomingUid(uid: String): String =
+        if (uid.isNotEmpty() && dao.findByUid(uid) == null) uid else newUid()
+
     /** Everything sync compares, read in one transaction: every row, the bin included. */
     suspend fun syncState(): SyncState = db.withTransaction {
         val categories = categoryDao.getAll()
@@ -523,8 +551,10 @@ class SnippetRepository private constructor(
 
     /**
      * Imports a backup file: the zip archive, or an old JSON export (versions 1–3). Whatever is
-     * already here is skipped, so importing the same file twice adds nothing: text by exact text,
-     * images and stickers by their content-addressed file. Image files are copied in before the
+     * already here is skipped, so importing the same file twice adds nothing: the same uid, text by
+     * exact text, images and stickers by their content-addressed file. Rows keep the file's uids
+     * (folders too) unless one is taken here, so a later sync pairs them with the sender's.
+     * Image files are copied in before the
      * rows; if the rows then fail, the start-up orphan sweep removes the files.
      */
     suspend fun importBackup(
@@ -538,16 +568,20 @@ class SnippetRepository private constructor(
             .filter { zip && BackupArchive.extractImage(file, it, imagesDir) }
             .toSet()
         return db.withTransaction {
-            val nameToId = categoryDao.getAll()
+            val existingCategories = categoryDao.getAll()
+            val categoryUids = existingCategories.map { it.uid }.toMutableSet()
+            val nameToId = existingCategories
                 .associate { it.name.lowercase() to it.id }
                 .toMutableMap()
             var position = (categoryDao.maxPosition() ?: -1) + 1
             contents.categories.sortedBy { it.position }.forEach { backupCategory ->
                 val key = backupCategory.name.lowercase()
                 if (!nameToId.containsKey(key)) {
+                    val uid = backupCategory.uid.takeIf { it.isNotEmpty() && it !in categoryUids } ?: newUid()
                     val id = categoryDao.insert(
-                        CategoryEntity(name = backupCategory.name, position = position++, createdAt = now),
+                        CategoryEntity(name = backupCategory.name, position = position++, createdAt = now, uid = uid),
                     )
+                    categoryUids += uid
                     nameToId[key] = id
                 }
             }
@@ -560,6 +594,7 @@ class SnippetRepository private constructor(
             ordered.forEachIndexed { index, entry ->
                 val record = entry.record
                 val image = record.imageFile
+                if (liveUid(record.uid)) return@forEachIndexed
                 if (image != null) {
                     if (image !in available || dao.findByImageFile(image) != null) return@forEachIndexed
                 } else if (dao.findTextDuplicate(record.text) != null) {
@@ -568,6 +603,7 @@ class SnippetRepository private constructor(
                 val categoryId = entry.category?.let { nameToId[it.lowercase()] }
                 val newId = dao.upsert(
                     SnippetEntity(
+                        uid = incomingUid(record.uid),
                         title = resolveTitle(record.copy(id = 0, categoryId = categoryId)),
                         text = if (image != null) "" else record.text,
                         pinned = record.pinned,
@@ -587,9 +623,10 @@ class SnippetRepository private constructor(
             stickerEntries.sortedBy { it.record.position }.forEach { entry ->
                 val record = entry.record
                 val image = record.imageFile ?: return@forEach
-                if (image !in available || dao.findByImageFile(image) != null) return@forEach
+                if (image !in available || dao.findByImageFile(image) != null || liveUid(record.uid)) return@forEach
                 val newId = dao.upsert(
                     SnippetEntity(
+                        uid = incomingUid(record.uid),
                         title = resolveTitle(record.copy(id = 0, categoryId = null)),
                         text = "",
                         pinned = record.pinned,

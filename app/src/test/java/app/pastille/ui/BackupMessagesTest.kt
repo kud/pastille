@@ -54,4 +54,16 @@ class BackupMessagesTest {
             assertFalse(it, it.contains("Exception") || it.contains(":"))
         }
     }
+
+    @Test
+    fun `one item is named by its title, first line or kind`() {
+        assertEquals("“Wi-Fi at the cottage”", itemPhrase("Wi-Fi at the cottage", "pw", isImage = false, sticker = false))
+        assertEquals("“first line”", itemPhrase("", "\n first line \nsecond", isImage = false, sticker = false))
+        assertEquals("this sticker", itemPhrase("", "", isImage = true, sticker = true))
+        assertEquals("this image", itemPhrase(" ", "", isImage = true, sticker = false))
+        assertEquals("“${"a".repeat(39)}…”", itemPhrase("a".repeat(60), "", isImage = false, sticker = false))
+        assertEquals("Add “Door” to Pastille?", addOneQuestion("“Door”"))
+        assertEquals("Added “Door”", addOneMessage("“Door”", added = true))
+        assertEquals("This sticker is already in Pastille", addOneMessage("this sticker", added = false))
+    }
 }

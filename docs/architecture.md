@@ -41,7 +41,7 @@ Sections 2 and below record the v1 → v2 design as it was decided. The database
 - No CHECK constraint (`ALTER` can't add one without rebuilding the table) and no index. "A sticker must be an image" is enforced by `SnippetRepository.setSticker`, which refuses a row with no `imageFile`, clears `categoryId` and appends to the sticker order; turning it off puts the row back at the top level.
 - Stickers keep `categoryId = null` in v1. Sticker folders, if they come, reuse `categoryId` with no migration.
 - One import path, `SnippetRepository.importImages(uris, categoryId, sticker, importer, titleFor)`, for the share sheet and the app's photo picker: at most 20, content-addressed. Into Stickers, an image that is already an image snippet is flipped to a sticker (`converted`, kept as it was so Undo restores its folder); anything already a sticker, or any duplicate saved as an image, is left alone (`alreadyThere`).
-- Backup: no change. Image snippets aren't exported, so stickers aren't either; the format stays at version 3.
+- Backup: stickers travel in the v4 archive with the other images (§2.5), and come back as stickers.
 
 ### 2.2 Tags (v5)
 
@@ -305,3 +305,34 @@ Version bumps and the release go through `/k-release`, not hand-edited `versionC
 - Image export in JSON (§2).
 - Per-category direct-share shortcuts (design spec §9.6 "later").
 - DataStore, Coil/Glide, SQLite foreign keys.
+
+
+## 2.5 Backup archive, sharing and automatic backup (2026-10-28)
+
+Pastille keeps no `INTERNET` permission and no Play-services dependency: everything below goes through Android's own components (the Storage Access Framework, the share sheet, the FileProvider).
+
+**Format: backup v4, a plain ZIP** (`backup/BackupArchive.kt`).
+
+```
+pastille.json    SnippetBackup JSON, "version": 4
+images/<name>    one entry per image snippet or sticker, named as in filesDir/images/
+```
+
+- A ZIP, not a custom extension or MIME type: Android, file managers and Drive all know `application/zip` and `.zip`, while custom extensions are unreliable. Whether a zip is a Pastille backup is decided by its contents (`pastille.json`), never its name. The JSON stays readable.
+- v4 adds, per snippet: `image` (the file name), `imageWidth`, `imageHeight`, `sticker`. Every v1–v3 field is unchanged. Old bare-JSON exports (v1–v3) still import: `BackupArchive.isZip` tells them apart by the first four bytes.
+- Image names must match the content-addressed pattern (`^[0-9a-f]{8,64}\.(png|jpg|jpeg|webp|gif)$`); anything else in an archive is ignored, so a crafted zip can't write outside `images/`. A record whose image file is missing on export is left out rather than named without its bytes.
+- Manual Export, Import, Share backup and the automatic backup all use this one format.
+
+**Import** (`SnippetRepository.importBackup`): image entries are copied into `filesDir/images/` first (temp name, then rename; an existing file with the same name is the same image), then one transaction adds the rows. Duplicates are skipped as before: text by exact text, images and stickers by their file. Stickers append to the sticker order; the bin is never exported. If the transaction fails, the start-up orphan sweep removes the copied files.
+
+**Quick Share** (`share/ShareOut.kt`): a snippet shares as `text/plain`; an image or sticker as its `FileProvider` URI (`files-path images/`) with a read grant on the intent and its `ClipData`; the whole collection is built into `cache/shared/pastille-backup-<date>.zip` (swept after 24 h) and shared as `application/zip`. Pastille's own targets are excluded from the chooser. Receiving: `backup/ImportBackupActivity` (label "Import to Pastille") takes `VIEW` and `SEND` for `application/zip`, `application/x-zip-compressed` and `application/x-zip`. Quick Share saves a received file and its "Open" fires `VIEW`. The activity copies the file to the cache, reads it, asks once ("Import this backup?"), and imports on the application scope. Text and images keep going to `ShareActivity`.
+
+**Automatic backup** (`backup/AutoBackup.kt`, Settings › Backup):
+
+- `ACTION_CREATE_DOCUMENT` for a single file, not `OPEN_DOCUMENT_TREE`: Google Drive offers no folder picker, but it creates a file whose grant can be made persistable. The URI, its display name, the last write time, a content fingerprint and the last problem live in `PastilleSettings`.
+- Triggers, all in the app process, no WorkManager: a Room `InvalidationTracker` observer on `snippets`, `categories`, `tags`, `snippet_tags` (the app, the keyboard and the share sheet are one process), debounced 5 s; `MainActivity.onStop`; and every process start, which catches a change whose debounce the process didn't outlive.
+- Nothing is written when the fingerprint (the v4 JSON with `lastUsedAt` and `updatedAt` zeroed) matches the last write, so using a snippet from the keyboard doesn't rewrite a file in Drive.
+- Data safety: the archive is built in `cache/backup/`, re-opened and verified (JSON decodes, every named image is present), and only then copied over the user's file with mode `"wt"` (then `"rwt"`; never plain `"w"`, which doesn't truncate on some versions). The file is read back and its SHA-256 compared. A failure leaves the state at `Access` (permission gone, file missing) or `Write`, which Settings shows with one tap to choose a file again. A SAF document can't be renamed atomically over Drive, so the copy itself is the one unprotected window; the read-back check catches it and the next change rewrites it.
+- Restore is the same import, pointed at that file, behind the same confirmation.
+
+**Not yet: two-way sync.** The archive is a one-way copy. Two phones pointing at one file would overwrite each other. Sync needs stable ids across devices (today's ids are local autoincrements), per-item `updatedAt` on folders and tags, and deletion tombstones, which means a Room migration; see the open items in the build report.

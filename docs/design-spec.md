@@ -308,9 +308,9 @@ Replace the two arrows with:
 
 - [ ] **Search:** `IconButton(Icons.Outlined.Search, "Search snippets")`. It opens an M3 `SearchBar` in expanded mode (full-screen, `inputField` focused, IME open by intent). Results show the 6.1 row style across all categories. The in-content `OutlinedTextField` search is **removed**, which also fixes the IME covering the FAB on launch (section 4): nothing focuses a text field until the user asks.
 - [x] **Overflow:** `IconButton(Icons.Filled.MoreVert, "More options")`, opening a `DropdownMenu` with leading icons in `onSurfaceVariant`. **It follows the mode on screen** (Iris, 2026-10-28; Erwann: « Un nouveau folder ça dépend de sticker ou prompt, pas des settings global »): what acts on one kind shows only in that mode, then a divider, then what belongs to the whole app.
-  - **Snippets:** "Import snippets" (`FileDownload`), "Export snippets" (`FileUpload`), "Reorder" (`SwapVert`).
-  - **Stickers:** "Reorder" only. Stickers have no folders, and the export skips images, so neither belongs here.
-  - `HorizontalDivider`, then in both modes: "Keyboard setup" (`Keyboard`, `ACTION_INPUT_METHOD_SETTINGS`), "Settings", "Bin", always shown and "Bin (N)" once it holds something (Erwann, 2026-10-28), "Last crash report" when one exists.
+  - **Snippets:** "Reorder" (`SwapVert`).
+  - **Stickers:** "Reorder" only. Stickers have no folders.
+  - `HorizontalDivider`, then in both modes: "Import backup" (`FileDownload`), "Export backup" (`FileUpload`), "Share backup" (`Share`): the backup carries snippets, stickers and images, so it belongs to the whole app (Maya, 2026-10-28; for Iris to confirm). Then "Keyboard setup" (`Keyboard`, `ACTION_INPUT_METHOD_SETTINGS`), "Settings", "Bin", always shown and "Bin (N)" once it holds something (Erwann, 2026-10-28), "Last crash report" when one exists.
   - **Not in the menu:** "New folder" lives only at the end of the folder row ("+ Add", §14.5), beside the folders it makes; a second door in the overflow showed it on Stickers too. "Try the keyboard" lives only in Settings › Height, under the preview it tests: it helps once, while setting up, and was noise in the everyday menu.
 
 ### 8.4 Colour roles
@@ -1181,3 +1181,14 @@ GIF search, network sticker search, packs, stores, Emoji Kitchen, AI stickers or
 ### 15.4 Motion
 
 Only the selected pill's width change is new: `SHORT_MS` with `Standard`, snapping under reduced motion. Everything else uses existing tokens: the X slide between tabs, `animateItem` on cells, and the Actions state rising (§10.6.3).
+
+
+## 15. Share and backup (2026-10-28)
+
+- **Share:** a snippet row's long-press menu and the sticker grid's long-press menu gain "Share" (`Icons.Rounded.Share`), above Delete. It opens the system share sheet, where Quick Share appears by itself.
+- **Settings › Backup**, the last group, in the existing `SettingsGroup` / `SettingsRow` style:
+  - Off: one row, "Back up automatically", subtitle "Keep a copy in a file you choose, in Google Drive or on this phone. Pastille updates it after every change.", chevron; opens the system "create file" picker.
+  - On: "Back up automatically" with "pastille-backup.zip · Last backed up 5 min ago" (tap: choose another file), then "Back up now", "Restore from this file" ("Adds what isn't already in Pastille", one confirmation), "Stop backing up" ("The file stays where it is").
+  - Problem: the first row turns destructive (error tile, error title) and reads "Can't reach pastille-backup.zip. Tap to choose a file again." or "The last backup to pastille-backup.zip failed. Tap to choose a file again."
+  - Under the group, `bodySmall` in `onSurfaceVariant`: "Your snippets, stickers and images stay on your phone unless you export, share or back them up yourself."
+- **Receiving a backup:** a plain `AlertDialog` over a translucent activity: "Import this backup?", "This backup holds 12 snippets and 3 stickers. Anything already in Pastille is skipped.", Import / Cancel; the result is a toast.

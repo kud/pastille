@@ -488,7 +488,9 @@ private fun StatusStripRow(strip: StatusStrip, onDismiss: (Long) -> Unit) {
                     onDismiss(strip.key)
                 },
             ) {
-                Text(strip.actionLabel, color = palette.accent)
+                // The label colour, not the accent: blue on the pressed-key grey measured 3.5:1 in light
+                // and about 2:1 in dark. The button's weight and place still mark it as the action.
+                Text(strip.actionLabel, color = palette.label, fontWeight = FontWeight.SemiBold)
             }
         }
     }

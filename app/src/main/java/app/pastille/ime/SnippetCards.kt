@@ -452,7 +452,7 @@ internal fun SnippetTile(
                         text = preview,
                         fontSize = 14.sp,
                         lineHeight = PreviewLineHeight,
-                        color = palette.label.copy(alpha = 0.72f),
+                        color = palette.label.copy(alpha = 0.76f), // 4.5:1 on the dark key; 0.72 was 4.49
                         maxLines = previewLines,
                         overflow = TextOverflow.Ellipsis,
                     )

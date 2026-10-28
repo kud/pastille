@@ -1262,7 +1262,10 @@ Sacha's mock-up (`docs/design/pastille-sacha-ui-2026-10-28.png`: list, editor, s
   - **48dp targets:** toolbar actions, tabs, folder chips and the Recent row's pills already had them (32dp visuals in 48dp targets); the status strip was 44dp tall and is now 48dp, so its action button isn't clipped.
   - **The Recent row** (§21) sits above the folder chips on the same 12dp inset and 8dp rhythm, its pills the keys' own colour; it is told from the folders by the History glyph and by carrying no folder glyph.
 - [ ] Springs ≤250ms with reduced-motion fades across the app's own transitions (the settings sub-pages crossfade at 200ms already).
-- [ ] Light theme checked on list, editor, settings and stickers renders only; contrast not measured on every role.
+- [x] Contrast measured on every colour role the app and the keyboard use, against WCAG AA (4.5:1 text, 3:1 for a component's state or boundary), light and dark (Iris, 2026-10-28):
+  - **App, light:** `onSurface` 13.3–17.3:1 on every surface and container; `onSurfaceVariant` 6.0–7.8; `primary` 4.5–5.9 (lowest on `surfaceContainerHighest`, where no primary text sits); `error` 5.0–6.5; `onSecondaryContainer` on `secondaryContainer` 10.2; `onPrimary` on `primary` 5.9. Switch track and segmented borders (`outline`) 3.9–4.2 against their ground, the checked track (`primary`) 5.9. **Dark:** every pair 6.1:1 or more for text, `outline` 3.6–4.0. All pass; nothing changed.
+  - **Where the fill alone would fail, it is never alone:** a selected chip's `secondaryContainer` is only 1.3–1.4:1 against the ground in light, so selection also carries the glyph and the heavier label (chips) or the check (switches, two-half controls). Cards (`surfaceContainer` on `surface`, 1.1:1) are grouping, not controls, and need no boundary.
+  - **Keyboard:** labels on keys 6.9–16:1, icons on the strip and tray 5.0–6.1, `labelSecondary` on the tray 5.3–5.4, the selected tab 9.1–11.7. Two failures, fixed: the status strip's action in `accent` on `keyPressed` (3.5:1 light, about 2:1 dark) now uses `label` at semi-bold; the tile preview at 72% of `label` measured 4.49:1 on the dark key and is now 76%. The Material You palette's tones come from the wallpaper and can't be measured ahead.
 
 ## 21. Recent clipboard (2026-10-28)
 

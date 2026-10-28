@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 500" width="1024" height="500">
+<defs>
+  <clipPath id="phoneclip"><rect x="541" y="24" width="432" height="464" rx="39"/></clipPath>
+  <marker id="arrow" markerWidth="5" markerHeight="5" refX="4" refY="2.5" orient="auto"><path d="M0.5,0.5 L4.5,2.5 L0.5,4.5" fill="none" stroke="#147DFF" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></marker>
+</defs>
+<rect width="1024" height="500" fill="#F7FAFE"/>
+<path d="M495 56 C547 1 622 16 675 65 C748 130 775 284 697 405 C640 491 527 522 465 499 L485 446 C533 379 509 298 479 238 C451 183 459 99 495 56Z" fill="#EAF3FE"/>
+<circle cx="122" cy="233" r="62" fill="#147DFF"/>
+<path d="M142 173 C158 181 174 198 181 216 L181 228 C161 228 147 223 140 212 C136 205 137 186 142 173Z" fill="#D7EAFF"/>
+<path d="M142 173 C137 190 136 204 140 212 C147 223 161 228 181 228" fill="none" stroke="#6AAFF7" stroke-width="2"/>
+<text x="217" y="257" font-family="Inter, Inter Display, Arial, sans-serif" font-weight="800" font-size="67" fill="#111823" letter-spacing="-2.5">Pastille</text>
+<g clip-path="url(#phoneclip)">
+<rect x="541" y="24" width="432" height="477" rx="39" fill="#0B121A"/>
+<rect x="553" y="35" width="408" height="453" rx="31" fill="#101820"/>
+<rect x="581" y="65" width="354" height="111" rx="20" fill="#1B2731" stroke="#314553" stroke-width="1.7"/>
+<text x="602" y="107" font-family="Inter, Inter Display, Arial, sans-serif" font-size="20" font-weight="500" fill="#F4F8FC">Network: Cottage-Guest ·</text>
+<text x="602" y="138" font-family="Inter, Inter Display, Arial, sans-serif" font-size="20" font-weight="500" fill="#F4F8FC">Password: blue-heron-42</text>
+<rect x="829" y="142" width="2.5" height="17" rx="1.2" fill="#58ACFF"/>
+<path d="M590 208 H930" stroke="#263440" stroke-width="1.5"/>
+<rect x="573" y="238" width="382" height="226" rx="24" fill="#161F28"/>
+<rect x="588" y="254" width="201" height="77" rx="14" fill="#DEEDFF" stroke="#7EB9FA" stroke-width="2"/>
+<text x="604" y="286" font-family="Inter, Inter Display, Arial, sans-serif" font-size="16.5" font-weight="650" fill="#142437">Wi-Fi at the cottage</text>
+<rect x="605" y="301" width="144" height="4" rx="2" fill="#AAC6E2"/>
+<rect x="605" y="311" width="98" height="4" rx="2" fill="#AAC6E2"/>
+<rect x="803" y="254" width="135" height="77" rx="14" fill="#232E39"/>
+<text x="816" y="285" font-family="Inter, Inter Display, Arial, sans-serif" font-size="15" font-weight="600" fill="#F0F4F7">Running late</text>
+<rect x="818" y="303" width="101" height="4" rx="2" fill="#485965"/>
+<rect x="818" y="314" width="72" height="4" rx="2" fill="#485965"/>
+<rect x="588" y="342" width="183" height="85" rx="14" fill="#232E39"/>
+<text x="602" y="372" font-family="Inter, Inter Display, Arial, sans-serif" font-size="16" font-weight="600" fill="#F0F4F7">Meeting link</text>
+<rect x="603" y="392" width="130" height="4" rx="2" fill="#485965"/>
+<rect x="603" y="405" width="96" height="4" rx="2" fill="#485965"/>
+<rect x="782" y="342" width="76" height="85" rx="14" fill="#232E39"/>
+<rect x="869" y="342" width="69" height="85" rx="14" fill="#232E39"/>
+<path d="M821 359 L829 376 L847 379 L834 392 L837 410 L821 402 L805 410 L808 392 L795 379 L813 376Z" fill="#55A9FF"/>
+<path d="M903 412 C889 403 882 394 882 385 C882 375 894 370 903 381 C912 370 924 375 924 385 C924 394 918 403 903 412Z" fill="#55A9FF"/>
+</g>
+<path d="M752 245 C803 219 818 198 817 182" fill="none" stroke="#147DFF" stroke-width="7" stroke-linecap="round" marker-end="url(#arrow)"/>
+<circle cx="753" cy="261" r="15" fill="#147DFF" fill-opacity="0.14"/>
+<circle cx="753" cy="261" r="7" fill="none" stroke="#147DFF" stroke-width="2.5"/>
+<rect x="541" y="24" width="432" height="464" rx="39" fill="none" stroke="#2B3945" stroke-width="4"/>
+</svg>

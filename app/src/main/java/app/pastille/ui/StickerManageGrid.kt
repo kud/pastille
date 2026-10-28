@@ -45,9 +45,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
@@ -81,7 +79,7 @@ internal fun StickerManageGrid(
         StickersEmpty(onAdd = onAdd)
         return
     }
-    val haptics = LocalHapticFeedback.current
+    val haptics = app.pastille.ui.rememberHaptics()
     val context = LocalContext.current
     val density = LocalDensity.current
     val gridState = rememberLazyGridState()
@@ -113,9 +111,9 @@ internal fun StickerManageGrid(
                             modifier = Modifier
                                 .graphicsLayer { scaleX = scale; scaleY = scale }
                                 .longPressDraggableHandle(
-                                    onDragStarted = { haptics.performHapticFeedback(HapticFeedbackType.LongPress) },
+                                    onDragStarted = { haptics.pickUp() },
                                     onDragStopped = {
-                                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        haptics.drop()
                                         onReorder(order.map { it.id })
                                     },
                                 ),
@@ -129,7 +127,7 @@ internal fun StickerManageGrid(
                             targetPx = targetPx,
                             onClick = { onOpen(sticker) },
                             onLongClick = {
-                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                haptics.pickUp()
                                 menuOpen = true
                             },
                         )

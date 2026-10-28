@@ -53,8 +53,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.material.icons.rounded.DragHandle
 import androidx.compose.material.icons.rounded.SwapVert
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -97,7 +95,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Card
@@ -257,6 +254,7 @@ fun SnippetListScreen(
         .collectAsStateWithLifecycle(initialValue = emptyList())
     val organising = organisingId?.let { id -> snippets.firstOrNull { it.id == id } ?: stickers.firstOrNull { it.id == id } }
 
+    val feel = rememberHaptics()
     fun copySnippet(snippet: SnippetRecord) {
         val content = app.pastille.clipboard.clipContentFor(context, snippet)
         if (content == null) {
@@ -264,6 +262,7 @@ fun SnippetListScreen(
             return
         }
         val copied = app.pastille.clipboard.copySnippet(context, content) ?: return
+        feel.confirm()
         val clearAfter = copied.clearAfterSeconds
         if (clearAfter != null) {
             scope.launch {
@@ -322,6 +321,7 @@ fun SnippetListScreen(
     }
 
     fun deleteSnippet(snippet: SnippetRecord) {
+        feel.bump()
         scope.launch {
             repository.delete(snippet.id)
             showDeletedSnackbar(snippet)
@@ -394,7 +394,6 @@ fun SnippetListScreen(
     val visible = remember(snippets, query, selectedTags) {
         filterByTags(snippets.filter { matchesQuery(it, query) }, selectedTags.toSet())
     }
-    val haptics = LocalHapticFeedback.current
     var selectedTab by rememberSaveable { mutableLongStateOf(ALL_TAB) }
     var reordering by rememberSaveable { mutableStateOf(false) }
     var renamingFolder by remember { mutableStateOf<CategoryRecord?>(null) }
@@ -643,11 +642,17 @@ fun SnippetListScreen(
                     .padding(padding),
             ) {
                 Box(Modifier.settleIn(Entrance.MODES)) {
-                    ModeSwitch(
-                        stickers = stickersMode,
-                        enabled = !reordering,
-                        onSelect = { stickersMode = it },
-                    )
+                    // A disabled switch read as broken (pale on pale): while reordering, the switch gives
+                    // way to a line that says what is being reordered and why the other side is shut.
+                    if (reordering) {
+                        ReorderingLine(stickers = stickersMode)
+                    } else {
+                        ModeSwitch(
+                            stickers = stickersMode,
+                            enabled = true,
+                            onSelect = { stickersMode = it },
+                        )
+                    }
                 }
                 // Folders hold snippets only, so the row (and its "+ Add") lives in Snippets mode.
                 AnimatedVisibility(
@@ -750,19 +755,19 @@ fun SnippetListScreen(
                             itemsIndexed(snippetDragOrder, key = { _, snippet -> snippet.id }) { index, snippet ->
                                 ReorderableItem(snippetReorderState, key = snippet.id) { dragging ->
                                     val elevation by animateDpAsState(if (dragging) 6.dp else 0.dp, label = "dragElevation")
-                                    Surface(shadowElevation = elevation, color = MaterialTheme.colorScheme.surface) {
-                                        Column {
-                                            if (index > 0) {
-                                                HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
-                                            }
+                                    // The same card as the list, lifted while it moves.
+                                    Box(Modifier.padding(horizontal = 12.dp, vertical = 3.dp)) {
+                                        Surface(
+                                            shape = RoundedCornerShape(16.dp),
+                                            color = MaterialTheme.colorScheme.surfaceContainer,
+                                            shadowElevation = elevation,
+                                        ) {
                                             ReorderRow(
                                                 snippet = snippet,
                                                 handle = Modifier.draggableHandle(
-                                                    onDragStarted = {
-                                                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                    },
+                                                    onDragStarted = { feel.pickUp() },
                                                     onDragStopped = {
-                                                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                        feel.drop()
                                                         scope.launch {
                                                             repository.setSnippetOrder(shown, snippetDragOrder.map { it.id })
                                                         }
@@ -1516,7 +1521,7 @@ private fun FolderTabs(
     onDelete: (CategoryRecord) -> Unit,
     onAdd: () -> Unit,
 ) {
-    val haptics = LocalHapticFeedback.current
+    val feel = rememberHaptics()
     val rowState = rememberLazyListState()
     val reorderState = rememberReorderableLazyListState(rowState) { from, to ->
         val fromId = from.key as? Long ?: return@rememberReorderableLazyListState
@@ -1552,8 +1557,8 @@ private fun FolderTabs(
                         onLongClick = if (reordering) null else ({ menuOpen = true }),
                         modifier = if (reordering) {
                             Modifier.longPressDraggableHandle(
-                                onDragStarted = { haptics.performHapticFeedback(HapticFeedbackType.LongPress) },
-                                onDragStopped = { onDropped() },
+                                onDragStarted = { feel.pickUp() },
+                                onDragStopped = { feel.drop(); onDropped() },
                             )
                         } else {
                             Modifier
@@ -1610,16 +1615,27 @@ private fun ReorderBanner(onDone: () -> Unit) {
 @Composable
 private fun ReorderRow(snippet: SnippetRecord, handle: Modifier) {
     Row(
-        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(start = 16.dp),
+        modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = rowTitle(snippet.title, snippet.text).ifBlank { "Image" },
-            style = MaterialTheme.typography.titleMedium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = rowTitle(snippet.title, snippet.text).ifBlank { "Image" },
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (snippet.title.isNotBlank() && snippet.text.isNotBlank()) {
+                Text(
+                    text = snippet.text.replace('\n', ' '),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        // The handle on the trailing axis, a 48dp target, where the thumb already is.
         Box(
             modifier = handle.size(48.dp),
             contentAlignment = Alignment.Center,
@@ -1630,6 +1646,34 @@ private fun ReorderRow(snippet: SnippetRecord, handle: Modifier) {
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
+}
+
+/** Stands in for Snippets | Stickers while reordering: what is moving, and why the switch is shut. */
+@Composable
+private fun ReorderingLine(stickers: Boolean) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .padding(start = 16.dp, end = 16.dp, bottom = 4.dp)
+            .testTag(MODE_SWITCH_TAG),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            modeIcon(if (stickers) KeyboardMode.Stickers else KeyboardMode.Snippets),
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.size(20.dp),
+        )
+        Text(
+            text = if (stickers) "Reordering stickers · snippets after Done" else "Reordering snippets · stickers after Done",
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(start = 12.dp),
+        )
     }
 }
 

@@ -147,11 +147,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -1523,7 +1521,7 @@ private fun ChevronIcon() {
 
 @Composable
 private fun ReorderContent(state: KeyboardUiState, actions: KeyboardActions) {
-    val haptics = LocalHapticFeedback.current
+    val haptics = app.pastille.ui.rememberHaptics()
     val folderId = state.folderId?.takeIf { id -> state.categories.any { it.id == id } }
     val shown = if (folderId == null) state.snippets else state.snippets.filter { it.categoryId == folderId }
     var order by remember(shown) { mutableStateOf(shown) }
@@ -1565,9 +1563,9 @@ private fun ReorderContent(state: KeyboardUiState, actions: KeyboardActions) {
                         modifier = Modifier
                             .graphicsLayer { scaleX = scale; scaleY = scale }
                             .longPressDraggableHandle(
-                                onDragStarted = { haptics.performHapticFeedback(HapticFeedbackType.LongPress) },
+                                onDragStarted = { haptics.pickUp() },
                                 onDragStopped = {
-                                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    haptics.drop()
                                     actions.onReorderSnippets(shown, order.map { it.id })
                                 },
                             ),

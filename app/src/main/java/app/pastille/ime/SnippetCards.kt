@@ -144,11 +144,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -260,7 +258,7 @@ internal fun FolderChipRow(
     onReorder: ((List<Long>) -> Unit)? = null,
     trailing: (@Composable () -> Unit)? = null,
 ) {
-    val haptics = LocalHapticFeedback.current
+    val haptics = app.pastille.ui.rememberHaptics()
     val rowState = rememberLazyListState()
     var order by remember(entries) { mutableStateOf(entries) }
     val reorderState = rememberReorderableLazyListState(rowState) { from, to ->
@@ -301,7 +299,7 @@ internal fun FolderChipRow(
                         Modifier
                             .graphicsLayer { scaleX = scale; scaleY = scale }
                             .draggableHandle(
-                                onDragStarted = { haptics.performHapticFeedback(HapticFeedbackType.LongPress) },
+                                onDragStarted = { haptics.pickUp() },
                                 onDragStopped = { onReorder(order.mapNotNull { it.id }) },
                             ),
                     )
@@ -625,7 +623,7 @@ internal fun SnippetGrid(
     highlightedSnippetId: Long? = null,
     tapVerb: String = "Insert",
 ) {
-    val haptics = LocalHapticFeedback.current
+    val haptics = app.pastille.ui.rememberHaptics()
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         LazyVerticalGrid(
             columns = GridCells.Fixed(tileColumns(maxWidth.value.toInt())),
@@ -641,7 +639,7 @@ internal fun SnippetGrid(
                     highlighted = snippet.id == highlightedSnippetId,
                     onTap = { actions.onSnippetTap(snippet) },
                     onLongPress = {
-                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        haptics.pickUp()
                         actions.onSnippetLongPress(snippet)
                     },
                     actions = actions,
@@ -661,7 +659,7 @@ internal fun ImageGrid(
     modifier: Modifier = Modifier,
     tapVerb: String = "Insert",
 ) {
-    val haptics = LocalHapticFeedback.current
+    val haptics = app.pastille.ui.rememberHaptics()
     BoxWithConstraints(modifier = modifier) {
         val columns = tileColumns(maxWidth.value.toInt())
         val columnWidth = (maxWidth - 12.dp - 8.dp * (columns - 1)) / columns
@@ -691,7 +689,7 @@ internal fun ImageGrid(
                     height = tileHeight,
                     onTap = { actions.onImageTap(image) },
                     onLongPress = {
-                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        haptics.pickUp()
                         actions.onImageLongPress(image)
                     },
                     tapVerb = tapVerb,
@@ -710,7 +708,7 @@ internal fun StickerGrid(
     modifier: Modifier = Modifier,
     tapVerb: String = "Insert",
 ) {
-    val haptics = LocalHapticFeedback.current
+    val haptics = app.pastille.ui.rememberHaptics()
     val density = LocalDensity.current
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val widthDp = maxWidth.value.toInt()
@@ -731,7 +729,7 @@ internal fun StickerGrid(
                     tapVerb = tapVerb,
                     onTap = { actions.onSnippetTap(sticker) },
                     onLongPress = {
-                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        haptics.pickUp()
                         actions.onSnippetLongPress(sticker)
                     },
                     actions = actions,

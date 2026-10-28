@@ -116,6 +116,7 @@ abstract class RedesignRenders(private val dark: Boolean, private val screen: St
         "list" -> list()
         "list-wide" -> list()
         "list-menu" -> listMenu()
+        "reorder" -> reorder()
         "editor" -> editor()
         "settings" -> settings()
         "settings-wide" -> settings(name = "settings-wide")
@@ -182,6 +183,14 @@ abstract class RedesignRenders(private val dark: Boolean, private val screen: St
         wait("Running late")
         compose.onNodeWithContentDescription("More options").performClick()
         wait("Reorder"); captureWindows("list-menu")
+    }
+    private fun reorder() {
+        seed(); PastilleSettings.forContext(app).appStickersMode = false
+        compose.setContent { PastilleTheme(darkTheme = dark) { SnippetListScreen(repository = repository, onCreate = {}, onEdit = {}, onOpenSettings = {}) } }
+        wait("Running late")
+        compose.onNodeWithContentDescription("More options").performClick()
+        wait("Reorder"); compose.onNodeWithText("Reorder").performClick()
+        wait("Done"); capture("reorder")
     }
     private fun editor() {
         val ids = seed()
@@ -420,6 +429,8 @@ class ListDark : RedesignRenders(true, "list")
 class ListLight : RedesignRenders(false, "list")
 class ListMenuLight : RedesignRenders(false, "list-menu")
 class ListMenuDark : RedesignRenders(true, "list-menu")
+class ReorderDark : RedesignRenders(true, "reorder")
+class ReorderLight : RedesignRenders(false, "reorder")
 @Config(qualifiers = "w411dp-h860dp-xxhdpi") class ListWideDark : RedesignRenders(true, "list-wide")
 class EditorDark : RedesignRenders(true, "editor")
 class EditorLight : RedesignRenders(false, "editor")

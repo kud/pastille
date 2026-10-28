@@ -247,6 +247,8 @@ fun SnippetListScreen(
         .collectAsStateWithLifecycle(initialValue = null as List<CategoryRecord>?)
     val categories = loadedCategories.orEmpty()
     val loaded = loadedSnippets != null && loadedStickers != null && loadedCategories != null
+    val entrance = LocalEntrance.current
+    LaunchedEffect(loaded) { if (loaded) entrance?.listReady = true }
     var showCreateFolder by remember { mutableStateOf(false) }
     var organisingId by rememberSaveable { mutableStateOf<Long?>(null) }
     // The folder the snippet had when the sheet opened, for the snackbar's Undo.
@@ -535,7 +537,7 @@ fun SnippetListScreen(
                         )
                     }
                 } else TopAppBar(
-                    modifier = Modifier.testTag(TOP_BAR_TAG),
+                    modifier = Modifier.testTag(TOP_BAR_TAG).settleIn(Entrance.HEADER),
                     title = { Wordmark() },
                     actions = {
                         IconButton(onClick = { searching = true }) {
@@ -640,14 +642,17 @@ fun SnippetListScreen(
                     .fillMaxSize()
                     .padding(padding),
             ) {
-                ModeSwitch(
-                    stickers = stickersMode,
-                    enabled = !reordering,
-                    onSelect = { stickersMode = it },
-                )
+                Box(Modifier.settleIn(Entrance.MODES)) {
+                    ModeSwitch(
+                        stickers = stickersMode,
+                        enabled = !reordering,
+                        onSelect = { stickersMode = it },
+                    )
+                }
                 // Folders hold snippets only, so the row (and its "+ Add") lives in Snippets mode.
                 AnimatedVisibility(
                     visible = !stickersMode,
+                    modifier = Modifier.settleIn(Entrance.FOLDERS),
                     enter = PastilleMotion.rowEnter(reduceMotion),
                     exit = PastilleMotion.rowExit(reduceMotion),
                 ) {
@@ -672,6 +677,7 @@ fun SnippetListScreen(
                     )
                 }
                 if (loaded && tagsInUse.isNotEmpty() && !reordering && !onStickers) {
+                    Box(Modifier.settleIn(Entrance.TAGS)) {
                     TagFilterRow(
                         tags = tagsInUse,
                         selected = selectedTags.toSet(),
@@ -679,6 +685,7 @@ fun SnippetListScreen(
                             selectedTags = if (tag in selectedTags) selectedTags - tag else selectedTags + tag
                         },
                     )
+                    }
                 }
                 if (reordering) {
                     ReorderBanner(onDone = { reordering = false })
@@ -710,7 +717,7 @@ fun SnippetListScreen(
                         // claiming it can still scroll back at its top (see `rememberOnboarding`).
                         if (onboarding.needed) {
                             item(key = "onboarding") {
-                                Box(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+                                Box(modifier = Modifier.settleIn(Entrance.CARDS).padding(horizontal = 12.dp, vertical = 4.dp)) {
                                     OnboardingCard(onboarding)
                                 }
                             }
@@ -771,6 +778,7 @@ fun SnippetListScreen(
                                 // Sacha: separate rounded cards with small gaps, no dividers.
                                 Column(
                                     modifier = Modifier.animateItem().testTag(SNIPPET_ROW_TAG)
+                                        .settleIn(Entrance.CARDS + index)
                                         .padding(horizontal = 12.dp, vertical = 3.dp),
                                 ) {
                                     SnippetRow(

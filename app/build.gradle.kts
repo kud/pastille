@@ -114,6 +114,7 @@ dependencies {
     implementation(libs.compose.material.icons.extended)
     implementation(libs.activity.compose)
     implementation(libs.core.ktx)
+    implementation(libs.core.splashscreen)
     implementation(libs.exifinterface)
     implementation(libs.lifecycle.runtime.ktx)
     implementation(libs.lifecycle.runtime.compose)

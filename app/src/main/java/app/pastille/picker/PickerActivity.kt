@@ -26,6 +26,7 @@ import app.pastille.ime.KeyboardActions
 import app.pastille.ime.KeyboardTheme
 import app.pastille.ime.LocalReduceMotion
 import app.pastille.ime.PastilleMotion
+import app.pastille.ime.rememberReducedMotion
 import app.pastille.ime.displayTitle
 import app.pastille.ime.keyboardPalette
 import app.pastille.images.copyToSharedCache
@@ -59,8 +60,9 @@ class PickerActivity : ComponentActivity(), KeyboardActions {
         mode.value = settings.keyboardMode
         folderId.value = settings.keyboardCategoryId
         sourceId.value = settings.imageSourceBucketId
-        val reduceMotion = PastilleMotion.reduceMotion()
         setContent {
+            // Followed live, like the app's own screens.
+            val reduceMotion = rememberReducedMotion()
             val context = LocalContext.current
             val configuration = LocalConfiguration.current
             val dark = configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES

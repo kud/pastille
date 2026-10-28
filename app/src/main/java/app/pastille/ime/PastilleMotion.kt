@@ -1,5 +1,17 @@
 package app.pastille.ime
 
+import android.database.ContentObserver
+import android.os.Handler
+import android.os.Looper
+import android.provider.Settings
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+
 import android.animation.ValueAnimator
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.EnterTransition
@@ -41,6 +53,7 @@ object PastilleMotion {
     const val FADE_IN_DELAY_MS = 60
 
     // "Remove animations" sets the animator scale to 0; Compose's own clock already follows other scales.
+    // A one-off read, for code outside composition; screens follow it live through rememberReducedMotion().
     fun reduceMotion(): Boolean = !ValueAnimator.areAnimatorsEnabled()
 
     // ---- The app's own screens (design spec §20). The keyboard panel keeps the tweens above. ----
@@ -92,3 +105,26 @@ object PastilleMotion {
 }
 
 val LocalReduceMotion = staticCompositionLocalOf { false }
+
+/**
+ * True while the system's "Remove animations" is on, followed live through a [ContentObserver] on
+ * the animator scale (tutti's ReducedMotion.kt): flipping it in Settings while Pastille is open
+ * takes effect on the next frame, without reopening the app.
+ */
+@Composable
+fun rememberReducedMotion(): Boolean {
+    val resolver = LocalContext.current.contentResolver
+    fun read() = Settings.Global.getFloat(resolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
+    var reduced by remember(resolver) { mutableStateOf(read()) }
+    DisposableEffect(resolver) {
+        val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) {
+                reduced = read()
+            }
+        }
+        resolver.registerContentObserver(Settings.Global.getUriFor(Settings.Global.ANIMATOR_DURATION_SCALE), false, observer)
+        reduced = read()
+        onDispose { resolver.unregisterContentObserver(observer) }
+    }
+    return reduced
+}

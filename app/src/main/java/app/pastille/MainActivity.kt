@@ -1,5 +1,12 @@
 package app.pastille
 
+import android.os.Build
+import android.view.animation.PathInterpolator
+import androidx.core.splashscreen.SplashScreen
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import app.pastille.ui.Entrance
+import app.pastille.ui.LocalEntrance
+
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -59,6 +66,7 @@ class MainActivity : ComponentActivity() {
     private var fromKeyboard by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        val splash = installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         if (savedInstanceState == null) {
@@ -67,10 +75,13 @@ class MainActivity : ComponentActivity() {
         } else {
             fromKeyboard = savedInstanceState.getBoolean(EXTRA_FROM_KEYBOARD, false)
         }
-        val reduceMotion = PastilleMotion.reduceMotion()
+        // The list settles in as the splash leaves; not after a rotation, nor when the launch opens
+        // the editor or Settings straight away.
+        val entrance = Entrance(armed = savedInstanceState == null && launchRequest == null)
+        holdSplash(splash, entrance)
         setContent {
             PastilleTheme {
-                CompositionLocalProvider(LocalReduceMotion provides reduceMotion) {
+                CompositionLocalProvider(LocalEntrance provides entrance) {
                     PastilleApp(
                         launchRequest = launchRequest,
                         onLaunchRequestHandled = { launchRequest = null },
@@ -83,6 +94,38 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    /**
+     * Keeps the system splash up until the mark has assembled ([SPLASH_MARK_MS], Android 12+ with
+     * animations on) and the list has its data, so the hand-over never shows an empty list; never
+     * past [SPLASH_CAP_MS]. Then a short exit: the mark shrinks a little and fades, the ground fades
+     * a beat later onto the list's own ground, and the list's entrance starts underneath. Reduced
+     * motion: the splash just fades.
+     */
+    private fun holdSplash(splash: SplashScreen, entrance: Entrance) {
+        val animatedMark = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !PastilleMotion.reduceMotion()
+        val markMs = if (animatedMark) SPLASH_MARK_MS else 0L
+        splash.setKeepOnScreenCondition {
+            val age = entrance.ageMs()
+            age < SPLASH_CAP_MS && (age < markMs || (entrance.armed && !entrance.listReady))
+        }
+        splash.setOnExitAnimationListener { provider ->
+            entrance.start()
+            val ground = provider.view
+            if (PastilleMotion.reduceMotion()) {
+                ground.animate().alpha(0f).setDuration(PastilleMotion.EXIT_MS.toLong())
+                    .withEndAction { provider.remove() }.start()
+                return@setOnExitAnimationListener
+            }
+            val accelerate = PathInterpolator(0.3f, 0f, 0.8f, 0.15f)
+            provider.iconView.animate().scaleX(SPLASH_EXIT_SCALE).scaleY(SPLASH_EXIT_SCALE).alpha(0f)
+                .setDuration(SPLASH_EXIT_MS).setInterpolator(accelerate).start()
+            ground.animate().alpha(0f).setStartDelay(SPLASH_EXIT_DELAY_MS).setDuration(SPLASH_EXIT_MS)
+                .setInterpolator(accelerate).withEndAction { provider.remove() }.start()
+        }
+        // A safety net: should the exit listener never run, the list must not stay invisible.
+        window.decorView.postDelayed({ entrance.start() }, SPLASH_CAP_MS + 400)
     }
 
     // Coming back reads the synced file, so changes from the other phone show up.
@@ -118,6 +161,12 @@ class MainActivity : ComponentActivity() {
     }
 
     companion object {
+        /** How long the Android 12+ mark takes to assemble (drawable-v31/splash_icon.xml). */
+        private const val SPLASH_MARK_MS = 520L
+        private const val SPLASH_CAP_MS = 1_000L
+        private const val SPLASH_EXIT_MS = 180L
+        private const val SPLASH_EXIT_DELAY_MS = 60L
+        private const val SPLASH_EXIT_SCALE = 0.85f
         const val EXTRA_EDIT_SNIPPET_ID = "app.pastille.EXTRA_EDIT_SNIPPET_ID"
         const val EXTRA_NEW_SNIPPET = "app.pastille.EXTRA_NEW_SNIPPET"
         const val EXTRA_CATEGORY_ID = "app.pastille.EXTRA_CATEGORY_ID"

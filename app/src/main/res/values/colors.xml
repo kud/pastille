@@ -5,4 +5,6 @@
     <color name="ic_launcher_front">#FFF8ED</color>
     <color name="ic_launcher_fold">#F04452</color>
     <color name="ic_launcher_ink">#0B3A78</color>
+    <!-- The list's ground (Theme.kt background), so the splash fades into the first screen. -->
+    <color name="splash_background">#F2F5F9</color>
 </resources>

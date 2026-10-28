@@ -18,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import app.pastille.images.AnimatedSticker
+import app.pastille.ime.LocalReduceMotion
 import app.pastille.ime.PastilleMotion
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -123,7 +124,7 @@ private fun StickerOrganise(
 ) {
     val imageFile = snippet.imageFile ?: return
     val density = LocalDensity.current
-    val reduceMotion = remember { PastilleMotion.reduceMotion() }
+    val reduceMotion = LocalReduceMotion.current
     var description by remember(snippet.id) { mutableStateOf(snippet.title) }
     val latest by rememberUpdatedState(description)
     DisposableEffect(snippet.id) {

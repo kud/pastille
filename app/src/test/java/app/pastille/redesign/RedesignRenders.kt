@@ -1,5 +1,7 @@
 package app.pastille.redesign
 
+import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.performTouchInput
 import android.app.Application
 import android.content.Context
 import android.graphics.Bitmap
@@ -89,6 +91,7 @@ abstract class RedesignRenders(private val dark: Boolean, private val screen: St
     }
     @Test fun render() = when (screen) {
         "list" -> list()
+        "list-wide" -> list()
         "editor" -> editor()
         "settings" -> settings()
         "stickers" -> stickers()
@@ -135,7 +138,13 @@ abstract class RedesignRenders(private val dark: Boolean, private val screen: St
     private fun list() {
         seed(); PastilleSettings.forContext(app).appStickersMode = false
         compose.setContent { PastilleTheme(darkTheme = dark) { SnippetListScreen(repository = repository, onCreate = {}, onEdit = {}, onOpenSettings = {}) } }
-        wait("Running late"); capture("list")
+        val wide = compose.activity.resources.configuration.screenWidthDp >= 400
+        wait("Running late"); capture(if (wide) "list-wide" else "list")
+        if (wide) {
+            // The folder row's end, where the new-folder chip sits beside the folders.
+            compose.onAllNodesWithText("Replies")[0].performTouchInput { swipeLeft() }
+            settle(); capture("list-wide-end")
+        }
     }
     private fun editor() {
         val ids = seed()
@@ -309,6 +318,7 @@ abstract class RedesignRenders(private val dark: Boolean, private val screen: St
 // Robolectric's native canvas aborts the process when several renders share one.
 class ListDark : RedesignRenders(true, "list")
 class ListLight : RedesignRenders(false, "list")
+@Config(qualifiers = "w411dp-h860dp-xxhdpi") class ListWideDark : RedesignRenders(true, "list-wide")
 class EditorDark : RedesignRenders(true, "editor")
 class EditorLight : RedesignRenders(false, "editor")
 class SettingsDark : RedesignRenders(true, "settings")

@@ -28,14 +28,20 @@ enum class PanelHeight(val key: String, val label: String, val portraitDp: Int, 
     }
 }
 
-// Declared in tab-bar order: Snippets, Stickers, Images.
+// Declared in tab-bar order: Clipboard, Snippets, Stickers, Images. The clipboard is a tab like the
+// others, remembered like them, but it holds no content of its own: the rest are the content tabs.
 enum class KeyboardMode(val key: String, val label: String) {
+    Clipboard("clipboard", "Clipboard"),
     Snippets("snippets", "Snippets"),
     Stickers("stickers", "Stickers"),
     Images("images", "Images"),
     ;
 
+    val isContent: Boolean get() = this != Clipboard
+
     companion object {
+        val content: List<KeyboardMode> get() = entries.filter { it.isContent }
+
         fun fromKey(key: String?): KeyboardMode = entries.firstOrNull { it.key == key } ?: Snippets
     }
 }
@@ -68,14 +74,16 @@ fun imageTileHeightDp(columnWidthDp: Int, gridHeightDp: Int): Int {
 // the legible part, so the crop keeps the top. Anything else, photos included, crops round the middle.
 fun cropKeepsTop(widthPx: Int, heightPx: Int): Boolean = widthPx > 0 && heightPx * 10 >= widthPx * 19
 
-// A switched-off mode gives way to the first enabled one in bar order.
+// The keyboard reopens on the tab last used. A switched-off one gives way to the first enabled content
+// tab in bar order, never to the clipboard: it is opened on purpose, not landed on.
 fun effectiveMode(saved: KeyboardMode, enabled: Set<KeyboardMode>): KeyboardMode = when {
     saved in enabled -> saved
-    else -> KeyboardMode.entries.firstOrNull { it in enabled } ?: KeyboardMode.Snippets
+    else -> KeyboardMode.content.firstOrNull { it in enabled } ?: KeyboardMode.Snippets
 }
 
 // Square sticker cells about 72dp wide: columns follow the width, rows the panel height.
 fun stickerColumns(widthDp: Int): Int = ((widthDp - 12) / 72).coerceIn(4, 10)
 
-// The last enabled mode can't be switched off.
-fun canSwitchOff(mode: KeyboardMode, enabled: Set<KeyboardMode>): Boolean = mode !in enabled || enabled.size > 1
+// At least one content tab stays on; the clipboard can always go, so it is never the last one left.
+fun canSwitchOff(mode: KeyboardMode, enabled: Set<KeyboardMode>): Boolean =
+    !mode.isContent || mode !in enabled || enabled.count { it.isContent } > 1

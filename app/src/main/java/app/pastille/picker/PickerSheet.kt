@@ -152,7 +152,8 @@ fun PickerSheet(
     val stickers by remember { repository.observeStickers() }.collectAsStateWithLifecycle(initialValue = emptyList())
     val categories by remember { repository.observeCategories() }
         .collectAsStateWithLifecycle(initialValue = emptyList<CategoryRecord>())
-    val enabledModes = remember { settings.enabledModes() }
+    // The picker has no clipboard view: only the content tabs.
+    val enabledModes = remember { settings.enabledModes() - KeyboardMode.Clipboard }
     val enabledSourceIds = remember { settings.enabledImageSources }
     val mode = effectiveMode(state.mode, enabledModes)
 
@@ -204,7 +205,7 @@ fun PickerSheet(
                             query = query,
                             onQueryChange = { query = it },
                             placeholder = when (mode) {
-                                KeyboardMode.Snippets -> "Search snippets"
+                                KeyboardMode.Clipboard, KeyboardMode.Snippets -> "Search snippets"
                                 KeyboardMode.Stickers -> "Search stickers"
                                 KeyboardMode.Images -> "Search images"
                             },
@@ -216,11 +217,12 @@ fun PickerSheet(
                                     enabled = enabledModes,
                                     onChange = actions::onModeChange,
                                     compact = maxWidth < 400.dp,
+                                    modifier = Modifier.padding(start = 8.dp),
                                 )
                             }
                         }
                         when (mode) {
-                            KeyboardMode.Snippets -> SnippetsBrowse(
+                            KeyboardMode.Clipboard, KeyboardMode.Snippets -> SnippetsBrowse(
                                 snippets = snippets,
                                 categories = categories,
                                 folderId = state.folderId,

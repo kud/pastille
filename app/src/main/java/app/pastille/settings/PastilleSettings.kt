@@ -75,6 +75,7 @@ class PastilleSettings private constructor(private val prefs: SharedPreferences)
         set(value) = prefs.edit().putBoolean(KEY_STICKERS_ENABLED, value).apply()
 
     fun enabledModes(): Set<KeyboardMode> = buildSet {
+        if (recentClipboard) add(KeyboardMode.Clipboard)
         if (snippetsEnabled) add(KeyboardMode.Snippets)
         if (stickersEnabled) add(KeyboardMode.Stickers)
         if (imagesEnabled) add(KeyboardMode.Images)
@@ -82,6 +83,7 @@ class PastilleSettings private constructor(private val prefs: SharedPreferences)
 
     fun setModeEnabled(mode: KeyboardMode, enabled: Boolean) {
         when (mode) {
+            KeyboardMode.Clipboard -> recentClipboard = enabled
             KeyboardMode.Snippets -> snippetsEnabled = enabled
             KeyboardMode.Stickers -> stickersEnabled = enabled
             KeyboardMode.Images -> imagesEnabled = enabled

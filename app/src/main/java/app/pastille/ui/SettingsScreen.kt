@@ -510,7 +510,7 @@ private fun ModesRow(
     enabled: Set<KeyboardMode>,
     onChange: (KeyboardMode, Boolean) -> Unit,
 ) {
-    val modes = KeyboardMode.entries
+    val modes = KeyboardMode.content
     MultiChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
         modes.forEachIndexed { index, mode ->
             val on = mode in enabled

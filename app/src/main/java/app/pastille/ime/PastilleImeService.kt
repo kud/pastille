@@ -107,7 +107,6 @@ class PastilleImeService :
 
     private val panelState = mutableStateOf<PanelState>(PanelState.Browse)
     private val mode = mutableStateOf(KeyboardMode.Snippets)
-    private val clipboardOpen = mutableStateOf(false)
     private val folderId = mutableStateOf<Long?>(null)
     private val sourceId = mutableStateOf<Long?>(null)
     private val pickerStyle = mutableStateOf(KeyboardStyle.Auto)
@@ -205,10 +204,6 @@ class PastilleImeService :
                 }
                 panelState.value != PanelState.Browse -> {
                     panelState.value = PanelState.Browse
-                    return true
-                }
-                clipboardOpen.value -> {
-                    clipboardOpen.value = false
                     return true
                 }
                 shownMode() == KeyboardMode.Snippets && folderId.value != null -> {
@@ -376,19 +371,13 @@ class PastilleImeService :
     }
 
     private fun showSnippet(id: Long, categoryId: Long?) {
-        clipboardOpen.value = false
         mode.value = KeyboardMode.Snippets
         settings.keyboardMode = KeyboardMode.Snippets
         onOpenFolder(categoryId)
         highlightedSnippetId.value = id
     }
 
-    override fun onOpenClipboard() {
-        clipboardOpen.value = !clipboardOpen.value
-    }
-
     override fun onModeChange(mode: KeyboardMode) {
-        clipboardOpen.value = false
         this.mode.value = mode
         settings.keyboardMode = mode
     }
@@ -692,7 +681,6 @@ class PastilleImeService :
             stickersEnabled = stickersOn,
             recentClips = if (recentOn) recentState.clips else emptyList(),
             clipboardEnabled = recentOn,
-            clipboardOpen = recentOn && clipboardOpen.value,
             snippets = snippets,
             stickers = stickers,
             categories = categories,

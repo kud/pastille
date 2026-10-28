@@ -204,10 +204,10 @@ data class KeyboardUiState(
     val stickersEnabled: Boolean = true,
     val recentClips: List<RecentClip> = emptyList(),
     val clipboardEnabled: Boolean = false,
-    val clipboardOpen: Boolean = false,
 ) {
     val enabledModes: Set<KeyboardMode>
         get() = buildSet {
+            if (clipboardEnabled) add(KeyboardMode.Clipboard)
             if (snippetsEnabled) add(KeyboardMode.Snippets)
             if (stickersEnabled) add(KeyboardMode.Stickers)
             if (imagesEnabled) add(KeyboardMode.Images)
@@ -216,7 +216,6 @@ data class KeyboardUiState(
 
 interface KeyboardActions {
     fun onModeChange(mode: KeyboardMode) {}
-    fun onOpenClipboard() {}
     fun onOpenFolder(categoryId: Long?) {}
     fun onBack() {}
     fun onOpenAdd() {}
@@ -354,15 +353,13 @@ private fun Toolbar(state: KeyboardUiState, actions: KeyboardActions, title: Str
                         ContextAction(state, actions)
                     }
                     Spacer(Modifier.weight(1f))
-                    if (state.enabledModes.size > 1 || state.clipboardEnabled) {
+                    if (state.enabledModes.size > 1) {
                         ModeSwitch(
                             mode = state.mode,
                             enabled = state.enabledModes,
                             onChange = actions::onModeChange,
                             compact = compactTabs,
-                            clipboard = state.clipboardEnabled,
-                            clipboardOpen = state.clipboardOpen,
-                            onClipboard = actions::onOpenClipboard,
+                            modifier = Modifier.padding(end = 8.dp),
                         )
                     }
                 }
@@ -400,15 +397,15 @@ private fun Toolbar(state: KeyboardUiState, actions: KeyboardActions, title: Str
 @Composable
 private fun ContextAction(state: KeyboardUiState, actions: KeyboardActions) {
     Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-        when {
-            state.clipboardOpen -> if (state.recentClips.isNotEmpty()) {
+        when (state.mode) {
+            KeyboardMode.Clipboard -> if (state.recentClips.isNotEmpty()) {
                 ToolbarAction(icon = Icons.Rounded.DeleteSweep, label = "Clear clipboard", onClick = actions::onClearClips)
             }
-            state.mode == KeyboardMode.Snippets ->
+            KeyboardMode.Snippets ->
                 ToolbarAction(icon = Icons.Rounded.Add, label = "New snippet", onClick = actions::onOpenAdd)
-            state.mode == KeyboardMode.Stickers ->
+            KeyboardMode.Stickers ->
                 ToolbarAction(icon = Icons.Rounded.Add, label = "Add stickers", onClick = actions::onAddStickers)
-            else -> Unit
+            KeyboardMode.Images -> Unit
         }
     }
 }
@@ -549,11 +546,7 @@ private fun PanelContent(
         label = "panel",
     ) { panel ->
         when (panel) {
-            PanelState.Browse -> if (state.clipboardOpen) {
-                ClipboardContent(clips = state.recentClips, actions = actions)
-            } else {
-                BrowseContent(state = state, actions = actions)
-            }
+            PanelState.Browse -> BrowseContent(state = state, actions = actions)
             PanelState.Add -> AddContent(
                 sources = state.addSources,
                 categories = state.categories,
@@ -605,6 +598,7 @@ private fun BrowseContent(state: KeyboardUiState, actions: KeyboardActions) {
         label = "mode",
     ) { mode ->
         when (mode) {
+            KeyboardMode.Clipboard -> ClipboardContent(clips = state.recentClips, actions = actions)
             KeyboardMode.Snippets -> FolderContent(state = state, actions = actions)
             KeyboardMode.Stickers -> StickersContent(state = state, actions = actions)
             KeyboardMode.Images -> ImagesContent(state = state, actions = actions)
@@ -1357,7 +1351,7 @@ private fun SettingsContent(state: KeyboardUiState, actions: KeyboardActions) {
         SettingsHeading("Show in the keyboard")
         ChipLine {
             val enabled = state.enabledModes
-            KeyboardMode.entries.forEach { mode ->
+            KeyboardMode.content.forEach { mode ->
                 val on = mode in enabled
                 FilterToggleChip(
                     label = mode.label,

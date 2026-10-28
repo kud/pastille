@@ -184,7 +184,7 @@ abstract class RedesignRenders(private val dark: Boolean, private val screen: St
                 RecentClip(3, "See you at the station at 6", now - 900_000),
             ),
             clipboardEnabled = true,
-            clipboardOpen = clipboard,
+            mode = if (clipboard) KeyboardMode.Clipboard else KeyboardMode.Snippets,
         )
         compose.setContent {
             PastilleTheme(darkTheme = dark) {

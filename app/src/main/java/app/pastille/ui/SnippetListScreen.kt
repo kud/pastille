@@ -145,6 +145,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
@@ -794,12 +795,14 @@ fun SnippetListScreen(
 
 @Composable
 private fun Wordmark() {
-    // Sacha's lockup: the colour mark at 28dp beside a bold 26sp "Pastille". The mark is drawn, not
-    // tinted, so it keeps its blue and folded corner in both themes; the name carries the meaning.
+    // Sacha's lockup: the mark at 28dp beside a bold 26sp "Pastille". The mark is a one-colour
+    // drawing (white, for the launcher), so it takes the title's ink: drawn as is it was white on the
+    // light theme's pale bar (Erwann, 2026-10-28). Same shape, the wordmark's colour in both themes.
     Row(modifier = Modifier.testTag(WORDMARK_TAG), verticalAlignment = Alignment.CenterVertically) {
         Image(
             painter = painterResource(R.drawable.ic_pastille_mark),
             contentDescription = null,
+            colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onSurface),
             modifier = Modifier.size(28.dp),
         )
         Spacer(modifier = Modifier.width(10.dp))

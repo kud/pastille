@@ -88,6 +88,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.layout.height
 import androidx.compose.ui.unit.dp
@@ -105,9 +106,9 @@ import app.pastille.ime.KeyboardHeightPreview
 import app.pastille.ime.KeyboardStylePreview
 import app.pastille.ime.LocalReduceMotion
 import app.pastille.ime.PastilleMotion
-import app.pastille.ime.installedTypingKeyboards
+import app.pastille.ime.installedKeyboards
 import app.pastille.ime.modeIcon
-import app.pastille.ime.otherTypingKeyboards
+import app.pastille.ime.otherKeyboards
 import app.pastille.settings.BackupProblem
 import app.pastille.settings.ClipboardClearDelay
 import app.pastille.settings.KeyboardMode
@@ -601,18 +602,16 @@ private fun ModesRow(
 @Composable
 private fun ReturnKeyboardRow(settings: PastilleSettings) {
     val context = LocalContext.current
-    fun labelled(list: List<android.view.inputmethod.InputMethodInfo>) =
-        list.map { it.id to it.loadLabel(context.packageManager).toString() }
     // Read again on resume: the way back from Android's keyboard settings is the usual reason it changed.
-    var enabled by remember { mutableStateOf(labelled(otherTypingKeyboards(context))) }
-    var installed by remember { mutableStateOf(labelled(installedTypingKeyboards(context))) }
+    var enabled by remember { mutableStateOf(otherKeyboards(context)) }
+    var installed by remember { mutableStateOf(installedKeyboards(context)) }
     LifecycleResumeEffect(Unit) {
-        enabled = labelled(otherTypingKeyboards(context))
-        installed = labelled(installedTypingKeyboards(context))
+        enabled = otherKeyboards(context)
+        installed = installedKeyboards(context)
         onPauseOrDispose { }
     }
-    var chosen by remember { mutableStateOf(settings.returnKeyboardId) }
-    val choices = returnKeyboardChoices(chosen, enabled, installed)
+    var chosen by remember { mutableStateOf(settings.returnKeyboardId to settings.returnKeyboardSubtype) }
+    val choices = returnKeyboardChoices(chosen.first, chosen.second, enabled, installed)
     SettingsRow(
         title = "Switch back to",
         subtitle = "After a snippet or image goes in",
@@ -621,14 +620,23 @@ private fun ReturnKeyboardRow(settings: PastilleSettings) {
     // The radios start at the text column, under the row's title, never in its glyph column.
     Column(Modifier.selectableGroup().padding(bottom = 6.dp)) {
         choices.forEach { choice ->
+            // A language row nests under its keyboard and shows its name alone; the keyboard it
+            // belongs to is the row above, and TalkBack still hears it ("French, FR · Gboard").
+            val language = choice.subtype != null
             SettingsChoiceRow(
                 title = choice.label,
-                subtitle = choice.note,
+                subtitle = if (language) null else choice.note,
                 selected = choice.selected,
                 enabled = choice.available,
+                nested = language,
+                modifier = if (language && choice.note != null) {
+                    Modifier.semantics(mergeDescendants = true) { contentDescription = "${choice.label}, ${choice.note}" }
+                } else {
+                    Modifier
+                },
                 onClick = {
-                    chosen = choice.value
-                    settings.returnKeyboardId = choice.value
+                    chosen = choice.value to choice.subtype
+                    settings.setReturnKeyboard(choice.value, choice.subtype)
                 },
             )
         }

@@ -103,8 +103,13 @@ abstract class RedesignRenders(private val dark: Boolean, private val screen: St
         repository = SnippetRepository.forDatabase(db)
         shadowOf(app).grantPermissions(photoPermission())
         val pastille = InputMethodInfo(app.packageName, "app.pastille.ime.PastilleIme", "Pastille", null)
+        // Settings › Switch back to lists the other enabled keyboards: two invented ones there.
+        val others = if (screen.startsWith("settings")) listOf(
+            InputMethodInfo("com.example.keys", "com.example.keys.Ime", "Gboard", null),
+            InputMethodInfo("com.example.voice", "com.example.voice.Ime", "Voice typing", null),
+        ) else emptyList()
         listOf<Context>(app, compose.activity).forEach {
-            shadowOf(it.getSystemService(InputMethodManager::class.java)).setEnabledInputMethodInfoList(listOf(pastille))
+            shadowOf(it.getSystemService(InputMethodManager::class.java)).setEnabledInputMethodInfoList(listOf(pastille) + others)
         }
     }
     @Test fun render() = when (screen) {

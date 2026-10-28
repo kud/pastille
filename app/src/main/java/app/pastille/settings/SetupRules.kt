@@ -25,8 +25,10 @@ fun photoAccessAction(granted: Boolean, partialOnly: Boolean, answered: Boolean)
 
 /** One row of Settings › Switch back to. */
 data class ReturnChoice(
-    /** What is stored when chosen: null (main), [PastilleSettings.PREVIOUS_KEYBOARD], or an IME id. */
+    /** What is stored when chosen: [PastilleSettings.PREVIOUS_KEYBOARD] or an IME id. */
     val value: String?,
+    /** The language stored with it, or null for the keyboard's own last one. */
+    val subtype: Int? = null,
     val label: String,
     val note: String?,
     val available: Boolean,
@@ -34,33 +36,55 @@ data class ReturnChoice(
 )
 
 /**
- * Every typing keyboard on the phone, the enabled ones first in the system's order, then
- * "Previous keyboard", then the installed ones Android won't switch to until they're enabled.
- * The first enabled keyboard is the main one and stores null, so it follows the system's order and
- * never appears twice. The selection shows what the keyboard will actually do
- * ([returnKeyboardTarget]): a chosen keyboard that has since been disabled falls back to the main one.
+ * The same set and grouping as Android's keyboard picker: every enabled input method but Pastille,
+ * voice input included, in the system's order; under a keyboard with two or more languages, one row
+ * for "whichever language it used last" and one per language. Then "Previous keyboard", then the
+ * installed ones Android won't switch to until they're enabled.
  *
- * [enabled] and [installed] are (id, label) pairs; [installed] may include the enabled ones.
+ * The selection shows what the keyboard will actually do ([returnKeyboardTarget]): no choice yet, or a
+ * keyboard since disabled, selects the first typing keyboard's own row; a language since removed
+ * selects its keyboard's row. Nothing is labelled "Main keyboard": while Pastille is up, Android
+ * reports Pastille as the default, so there's no honest way to name another one.
  */
 fun returnKeyboardChoices(
     chosen: String?,
-    enabled: List<Pair<String, String>>,
-    installed: List<Pair<String, String>>,
+    chosenSubtype: Int?,
+    enabled: List<KeyboardEntry>,
+    installed: List<KeyboardEntry>,
 ): List<ReturnChoice> {
-    val enabledIds = enabled.map { it.first }
-    val previous = chosen == PastilleSettings.PREVIOUS_KEYBOARD
-    val target = if (previous) null else returnKeyboardTarget(chosen, enabledIds)
+    val target = returnKeyboardTarget(chosen, chosenSubtype, enabled)
+    val enabledIds = enabled.map { it.id }.toSet()
     return buildList {
-        enabled.forEachIndexed { index, (id, label) ->
+        enabled.forEach { keyboard ->
+            val languages = keyboard.subtypes
+            val shownSubtype = target?.subtype?.takeIf { target.id == keyboard.id && languages.size > 1 }
             add(
                 ReturnChoice(
-                    value = if (index == 0) null else id,
-                    label = label,
-                    note = if (index == 0) "Main keyboard" else null,
+                    value = keyboard.id,
+                    label = keyboard.label,
+                    note = when {
+                        languages.size > 1 -> "Whichever language it had last"
+                        languages.size == 1 -> languages[0].describe()
+                        else -> null
+                    },
                     available = true,
-                    selected = !previous && id == target,
+                    selected = target?.id == keyboard.id && shownSubtype == null,
                 ),
             )
+            if (languages.size > 1) {
+                languages.forEach { language ->
+                    add(
+                        ReturnChoice(
+                            value = keyboard.id,
+                            subtype = language.hash,
+                            label = language.name,
+                            note = listOfNotNull(language.tag, keyboard.label).joinToString(" · "),
+                            available = true,
+                            selected = shownSubtype == language.hash,
+                        ),
+                    )
+                }
+            }
         }
         add(
             ReturnChoice(
@@ -68,11 +92,13 @@ fun returnKeyboardChoices(
                 label = "Previous keyboard",
                 note = "Whichever you used before Pastille",
                 available = true,
-                selected = previous || target == null,
+                selected = target == null,
             ),
         )
-        installed.filter { it.first !in enabledIds }.distinctBy { it.first }.forEach { (id, label) ->
-            add(ReturnChoice(value = id, label = label, note = "Not enabled", available = false, selected = false))
+        installed.filter { it.id !in enabledIds }.distinctBy { it.id }.forEach { keyboard ->
+            add(ReturnChoice(value = keyboard.id, label = keyboard.label, note = "Not enabled", available = false, selected = false))
         }
     }
 }
+
+private fun SubtypeEntry.describe(): String = listOfNotNull(tag, name.takeIf { it.isNotBlank() && it != tag }).joinToString(" · ")

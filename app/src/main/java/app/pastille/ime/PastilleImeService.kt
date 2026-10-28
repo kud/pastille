@@ -883,10 +883,14 @@ class PastilleImeService :
 
     override fun onSwitchKeyboard() {
         if (destroyed) return
-        val others = otherTypingKeyboards(this).map { it.id }
-        val target = returnKeyboardTarget(settings.returnKeyboardId, others)
+        val keyboards = otherKeyboards(this, labelled = false)
+        val target = returnKeyboardTarget(settings.returnKeyboardId, settings.returnKeyboardSubtype, keyboards)
         if (target != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            runCatching { switchInputMethod(target) }.onSuccess { return }
+            // A language that's gone was already dropped by returnKeyboardTarget; without one, the
+            // keyboard opens in whichever language it used last.
+            val subtype = target.subtype?.let { enabledSubtype(this, target.id, it) }
+            if (subtype != null) runCatching { switchInputMethod(target.id, subtype) }.onSuccess { return }
+            runCatching { switchInputMethod(target.id) }.onSuccess { return }
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             switchToPreviousInputMethod()

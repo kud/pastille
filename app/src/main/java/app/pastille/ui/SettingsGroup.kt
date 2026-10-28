@@ -184,6 +184,10 @@ fun SettingsRowDetail(
  * glyph column (Gamme spec §4). The whole row is the target. The radio's own 2dp padding is taken
  * back so its ring lines up with the row text and the chips above.
  */
+private val ChoiceGap = 12.dp
+/** The radio (20dp ring plus 2dp padding each side) and the gap after it. */
+private val ChoiceStep = 24.dp + ChoiceGap
+
 @Composable
 fun SettingsChoiceRow(
     title: String,
@@ -192,16 +196,20 @@ fun SettingsChoiceRow(
     modifier: Modifier = Modifier,
     subtitle: String? = null,
     enabled: Boolean = true,
+    nested: Boolean = false,
 ) {
     val alpha = if (enabled) 1f else 0.38f
+    // A nested choice (a keyboard's language) steps in by one radio plus its gap, so its radio sits
+    // under the parent's name: the grouping is a shape, like Android's own picker, not a colour.
+    val start = SettingsTextInset - 2.dp + if (nested) ChoiceStep else 0.dp
     Row(
         modifier = modifier
             .fillMaxWidth()
             .selectable(selected = selected, enabled = enabled, role = Role.RadioButton, onClick = onClick)
             .heightIn(min = 48.dp)
-            .padding(start = SettingsTextInset - 2.dp, end = SideMargin, top = 6.dp, bottom = 6.dp),
+            .padding(start = start, end = SideMargin, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(ChoiceGap),
     ) {
         RadioButton(selected = selected, onClick = null, enabled = enabled)
         Column(Modifier.weight(1f)) {

@@ -1216,7 +1216,8 @@ Sacha's mock-up (`docs/design/pastille-sacha-ui-2026-10-28.png`: list, editor, s
 - [x] Compact header: mark + wordmark, search and overflow; no large collapsing bar.
 - [x] Snippets | Stickers stays Sacha's two-half control (a two-segment `SingleChoiceSegmentedButtonRow`, the selected half carrying a check, so the state is a shape too).
 - [x] Folders are chips (All with a grid glyph, the selected one with a folder glyph and the filled container), with a trailing + chip.
-- [x] Rows are `surfaceContainer` cards, 16dp corners, 8dp apart: title, time top-right in tabular figures, a two-line preview, the copy button vertically centred against the card.
+- [x] Rows are `surfaceContainer` cards, 16dp corners, 8dp apart: title, time top-right, the preview under it, the copy button vertically centred against the card.
+- [ ] Tabular figures on the time and a fixed two-line preview: planned, not yet in the code.
 - [x] Extended "+ New snippet" FAB ("Add stickers" on Stickers).
 
 **Editor**

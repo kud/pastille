@@ -42,6 +42,8 @@ Pastille is an open-source Android keyboard for pasting, not typing. Tap a saved
 - **GitHub Releases:** download the latest APK from the [releases page](https://github.com/kud/pastille/releases) and open it on your phone. You may need to allow installs from your browser or file manager.
 - **F-Droid:** coming soon.
 
+Releases are cut by one workflow run; see [docs/RELEASING.md](docs/RELEASING.md).
+
 Pastille needs Android 9 (API 28) or later.
 
 ## How to enable the keyboard

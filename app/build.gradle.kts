@@ -18,6 +18,8 @@ android {
         targetSdk = 35
         versionCode = 16
         versionName = "0.1.5"
+        // A vX.Y.Z-dev.N pre-release names itself here and keeps the shipped versionCode (docs/RELEASING.md).
+        System.getenv("PASTILLE_VERSION_NAME")?.let { versionName = it }
     }
 
     // CI writes the keystore from the PASTILLE_KEYSTORE_* secrets; without them the release build is left unsigned.

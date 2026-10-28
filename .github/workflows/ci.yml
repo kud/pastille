@@ -1,46 +1,49 @@
-name: ci
+name: android
 
+# One workflow, as in tutti. A push or PR on main runs the checks. A manual run on main
+# with a tag runs the same checks, then releases: vX.Y.Z-dev.N as a pre-release, vX.Y.Z as
+# a final release that bumps the version, proves the build reproducible for F-Droid, and
+# tags the bump commit. docs/RELEASING.md is the one documented way to release.
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
-  # Check any branch by hand. The keystore step stays push-only, so a manual run builds unsigned.
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "vX.Y.Z (final) or vX.Y.Z-dev.N (pre-release); empty for a plain check"
+        required: false
+        default: ""
+      dry_run:
+        description: "Do everything except push, tag and release (allowed from any branch)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: android-${{ github.event_name == 'workflow_dispatch' && 'release' || 'ci' }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
+    name: Test, lint, build
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: gradle/actions/wrapper-validation@v4
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
       - uses: gradle/actions/setup-gradle@v4
-      - name: Write the release keystore
-        if: github.event_name == 'push'
-        env:
-          KEYSTORE_BASE64: ${{ secrets.PASTILLE_KEYSTORE_BASE64 }}
-        run: |
-          if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/pastille-release.jks"
-            echo "PASTILLE_KEYSTORE_PATH=$RUNNER_TEMP/pastille-release.jks" >> "$GITHUB_ENV"
-          fi
+      # Unsigned: the release key is only ever written by the release job below.
       - run: ./gradlew --no-daemon assembleDebug assembleRelease testDebugUnitTest lintDebug
-        env:
-          PASTILLE_KEYSTORE_PASSWORD: ${{ secrets.PASTILLE_KEYSTORE_PASSWORD }}
-      - uses: actions/upload-artifact@v4
-        if: env.PASTILLE_KEYSTORE_PATH != ''
-        with:
-          name: pastille-release-apk
-          path: app/build/outputs/apk/release/*.apk
-          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
           name: pastille-debug-apk
@@ -56,3 +59,193 @@ jobs:
         run: |
           git diff --exit-code app/schemas
           test -z "$(git status --porcelain app/schemas)"
+
+  release:
+    name: Build the release
+    needs: build
+    if: github.event_name == 'workflow_dispatch' && inputs.tag != '' && (github.ref == 'refs/heads/main' || inputs.dry_run)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    outputs:
+      sha: ${{ steps.commit.outputs.sha }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    env:
+      TAG: ${{ inputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: The tag is new
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null; then
+            echo "::error::Tag $TAG already exists"
+            exit 1
+          fi
+
+      # A final release bumps versionName and versionCode (+1) and its recipe build; it refuses
+      # without fastlane/.../changelogs/<code>.txt of at most 500 characters. A dev build only checks.
+      - name: Check the version
+        id: version
+        run: |
+          case "$TAG" in *-*) mode=check ;; *) mode=bump ;; esac
+          .github/scripts/release-version.sh "$mode" "$TAG" > "$RUNNER_TEMP/version.env"
+          cat "$RUNNER_TEMP/version.env" | tee -a "$GITHUB_ENV"
+          echo "prerelease=$(sed -n 's/^PRERELEASE=//p' "$RUNNER_TEMP/version.env")" >> "$GITHUB_OUTPUT"
+
+      - name: Commit the bump as Erwann
+        id: commit
+        run: |
+          if [ "$PRERELEASE" = "true" ]; then
+            echo "sha=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git -c user.name="Erwann Mest" -c user.email="m@kud.io" \
+            commit -q -a -m "🏷️ release(pastille): bump version to $VERSION_NAME"
+          git show --stat --format='%H %an <%ae>%n%s' HEAD
+          git branch release-bump
+          git bundle create "$RUNNER_TEMP/release.bundle" "$GITHUB_SHA..release-bump"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+
+      # The keystore exists only for this step and is removed before anything else runs.
+      - name: Build the signed release
+        env:
+          KEYSTORE_BASE64: ${{ secrets.PASTILLE_KEYSTORE_BASE64 }}
+          PASTILLE_KEYSTORE_PASSWORD: ${{ secrets.PASTILLE_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$PASTILLE_KEYSTORE_PASSWORD" ]; then
+            echo "::error::PASTILLE_KEYSTORE_BASE64 and PASTILLE_KEYSTORE_PASSWORD are required to release"
+            exit 1
+          fi
+          keystore="$RUNNER_TEMP/pastille-release.jks"
+          trap 'rm -f "$keystore"' EXIT
+          echo "$KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          if [ "$PRERELEASE" = "true" ]; then export PASTILLE_VERSION_NAME="$VERSION_NAME"; fi
+          PASTILLE_KEYSTORE_PATH="$keystore" ./gradlew --no-daemon assembleRelease
+          apk=app/build/outputs/apk/release/app-release.apk
+          [ -f "$apk" ] || { echo "::error::$apk not found: the release build came out unsigned"; exit 1; }
+
+      - name: Remove the keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/pastille-release.jks"
+
+      - name: The APK is signed with Pastille's key
+        run: |
+          apksigner=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n 1)
+          echo "$(dirname "$apksigner")" >> "$GITHUB_PATH"
+          apk=app/build/outputs/apk/release/app-release.apk
+          "$apksigner" verify "$apk"
+          # Public certificate digests only. The signer label varies with the scheme and build-tools.
+          "$apksigner" verify --print-certs "$apk" | grep 'SHA-256 digest'
+          got=$("$apksigner" verify --print-certs "$apk" | sed -n 's/^.*Signer.* certificate SHA-256 digest: //p' | sort -u)
+          want=$(sed -n 's/^AllowedAPKSigningKeys: //p' docs/fdroid/app.beansontoast.pastille.yml)
+          [ -n "$got" ] && [ "$got" = "$want" ] \
+            || { echo "::error::Signing certificate $got is not the recipe's AllowedAPKSigningKeys $want"; exit 1; }
+          badging=$("$(dirname "$apksigner")/aapt2" dump badging "$apk" | head -n 1)
+          echo "$badging"
+          grep -q "versionCode='$VERSION_CODE' versionName='$VERSION_NAME'" <<<"$badging" \
+            || { echo "::error::The APK is not versionCode $VERSION_CODE / versionName $VERSION_NAME"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/out"
+          cp "$apk" "$RUNNER_TEMP/out/pastille-$VERSION_NAME.apk"
+
+      # F-Droid rebuilds the tag from source and publishes our APK only if the two match apart from
+      # the signature. Rebuild unsigned from a clean `git archive` (no .git, another path) and compare.
+      - name: The release is reproducible
+        if: env.PRERELEASE == 'false'
+        run: |
+          src="$RUNNER_TEMP/repro/elsewhere/pastille"
+          mkdir -p "$src"
+          git archive HEAD | tar -x -C "$src"
+          (cd "$src" && ./gradlew --no-daemon assembleRelease)
+          unsigned="$src/app/build/outputs/apk/release/app-release-unsigned.apk"
+          [ -f "$unsigned" ] || { echo "::error::$unsigned not found"; exit 1; }
+          pipx install apksigcopier==1.1.1
+          apksigcopier compare "$RUNNER_TEMP/out/pastille-$VERSION_NAME.apk" --unsigned "$unsigned" \
+            || { echo "::error::The signed APK and a clean unsigned rebuild differ: F-Droid would reject this release"; exit 1; }
+          echo "Reproducible: a clean rebuild matches the signed APK apart from the signature."
+
+      - name: Release notes
+        run: |
+          if [ "$PRERELEASE" = "false" ]; then
+            cp "$CHANGELOG" "$RUNNER_TEMP/out/notes.md"
+          else
+            printf 'Pre-release for testing; F-Droid skips it. Installs over %s (same versionCode) and is replaced by the next final release.\n' \
+              "$(git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*' --exclude '*-*' 2>/dev/null || echo 'the last release')" \
+              > "$RUNNER_TEMP/out/notes.md"
+          fi
+          [ ! -f "$RUNNER_TEMP/release.bundle" ] || cp "$RUNNER_TEMP/release.bundle" "$RUNNER_TEMP/out/"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pastille-release
+          path: ${{ runner.temp }}/out/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Dry run summary
+        if: inputs.dry_run
+        run: |
+          git fetch -q origin main
+          {
+            echo "### Dry run: $TAG"
+            echo "Would push \`${{ steps.commit.outputs.sha }}\` as tag \`$TAG\`, release \`pastille-$VERSION_NAME.apk\` (prerelease: $PRERELEASE)."
+            if [ "$PRERELEASE" = "false" ]; then
+              if git merge-base --is-ancestor origin/main HEAD; then echo "main would fast-forward to the bump commit."
+              else echo "main has moved: a real run from here would be refused (non-fast-forward)."; fi
+            fi
+            echo; echo "Notes:"; echo; cat "$RUNNER_TEMP/out/notes.md"
+          } >> "$GITHUB_STEP_SUMMARY"
+          cat "$GITHUB_STEP_SUMMARY"
+
+  publish:
+    name: Tag and publish
+    needs: release
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ inputs.tag }}
+      SHA: ${{ needs.release.outputs.sha }}
+      PRERELEASE: ${{ needs.release.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # main has no rule the workflow token can't meet today; a PAT is only needed if one is added.
+          token: ${{ secrets.PASTILLE_RELEASE_TOKEN || github.token }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: pastille-release
+          path: ${{ runner.temp }}/out
+
+      # One atomic push: main and the tag both move, or neither does (main moved since the run started).
+      - name: Push the tag (and the bump to main)
+        run: |
+          refs=()
+          if [ "$PRERELEASE" = "false" ]; then
+            git fetch -q "$RUNNER_TEMP/out/release.bundle" release-bump
+            [ "$(git rev-parse FETCH_HEAD)" = "$SHA" ] || { echo "::error::The bundle is not $SHA"; exit 1; }
+            [ "$(git rev-parse FETCH_HEAD^)" = "$GITHUB_SHA" ] || { echo "::error::$SHA is not one commit on $GITHUB_SHA"; exit 1; }
+            refs+=("$SHA:refs/heads/main")
+          fi
+          git tag "$TAG" "$SHA"
+          refs+=("refs/tags/$TAG")
+          git push --atomic origin "${refs[@]}"
+
+      - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${TAG#v}"
+          flags=(--verify-tag --title "$TAG" --notes-file "$RUNNER_TEMP/out/notes.md")
+          [ "$PRERELEASE" = "false" ] || flags+=(--prerelease)
+          gh release create "$TAG" "$RUNNER_TEMP/out/pastille-$version.apk" "${flags[@]}"

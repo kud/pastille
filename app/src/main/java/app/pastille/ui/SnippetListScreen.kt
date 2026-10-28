@@ -1080,9 +1080,9 @@ internal fun SnippetRow(
                             text = snippet.text,
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            // A fixed two-line preview (Sacha): one-line texts keep the second line, so every
-                            // card with a preview is the same height and the copy buttons line up.
-                            minLines = if (expanded) 1 else 2,
+                            // Up to two lines, sized to the text: a reserved second line left a hole between a
+                            // one-line preview and its folder chip. Time and copy sit at the top, so they line
+                            // up whatever the height (Iris, 2026-10-28).
                             maxLines = if (expanded) Int.MAX_VALUE else 2,
                             overflow = TextOverflow.Ellipsis,
                             onTextLayout = { if (!expanded) overflows = it.hasVisualOverflow },

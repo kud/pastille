@@ -77,6 +77,10 @@ import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import sh.calvin.reorderable.rememberReorderableLazyGridState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.BrightnessAuto
+import androidx.compose.material.icons.rounded.LightMode
+import androidx.compose.material.icons.rounded.DarkMode
+import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.DragIndicator
 import androidx.compose.material.icons.rounded.SwapVert
@@ -1238,6 +1242,14 @@ private fun styleName(style: KeyboardStyle): String = when (style) {
     KeyboardStyle.Auto -> "Auto"
 }
 
+// The Look chips' glyphs, so the selected one can trade its glyph for a check without changing width.
+private fun styleGlyph(style: KeyboardStyle): ImageVector = when (style) {
+    KeyboardStyle.MaterialYou -> Icons.Rounded.Palette
+    KeyboardStyle.GboardDark -> Icons.Rounded.DarkMode
+    KeyboardStyle.GboardLight -> Icons.Rounded.LightMode
+    KeyboardStyle.Auto -> Icons.Rounded.BrightnessAuto
+}
+
 @Composable
 private fun StyleTile(
     style: KeyboardStyle,
@@ -1334,6 +1346,8 @@ private fun SettingsContent(state: KeyboardUiState, actions: KeyboardActions) {
             styles.forEach { style ->
                 FilterToggleChip(
                     label = styleName(style),
+                    icon = styleGlyph(style),
+                    checks = true,
                     selected = style == state.savedStyle,
                     onClick = { actions.onSetStyle(style) },
                 )
@@ -1345,6 +1359,7 @@ private fun SettingsContent(state: KeyboardUiState, actions: KeyboardActions) {
                 FilterToggleChip(
                     label = height.label,
                     icon = heightGlyph(height),
+                    checks = true,
                     selected = height == state.heightPreset,
                     onClick = { actions.onSetHeight(height) },
                 )

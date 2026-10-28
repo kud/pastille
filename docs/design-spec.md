@@ -1025,7 +1025,7 @@ Every spec below is made from these values; no literals elsewhere.
 - [ ] When it's true, every X, Z and Y transition above becomes `fadeIn(tween(SHORT_MS)) togetherWith fadeOut(tween(QUICK_MS))`, with no offset and no scale. `animateItem` keeps its fades and passes `placementSpec = null`. Swipe, press and selection colour changes stay: they're feedback, not movement. The check badge only fades.
 - [ ] With "Remove animations" on (animator scale 0), Compose's clock makes those fades instant anyway. That's correct; nothing extra to do, and no hand-multiplying of durations.
 
-## 12. Settings: grouped cards (overrides the layout of §11.7 and the §11.10 setting) — **v0.3**
+## 12. Settings: grouped cards (overrides the layout of §11.7 and the §11.10 setting) — **v0.3**, restyled by §20
 
 The Settings screen was one long column of `ListItem`s under `primary` section headers. It becomes a few grouped cards, each row on an icon tile, so the screen can be scanned by shape before it's read. The reference app's grouped settings are borrowed for their organisation only: Pastille's palette and tokens, one accent for every tile, never a colour per row.
 
@@ -1202,3 +1202,55 @@ Only the selected pill's width change is new: `SHORT_MS` with `Standard`, snappi
   - Under the group, `bodySmall` in `onSurfaceVariant`: "Your snippets, stickers and images stay on your phone unless you export, share or back them up yourself."
 - **Receiving a backup:** a plain `AlertDialog` over a translucent activity: "Import this backup?", "This backup holds 12 snippets and 3 stickers. Anything already in Pastille is skipped.", Import / Cancel; the result is a toast.
 - **QR code (2026-10-28):** a text snippet's long-press menu gains "Show QR code" (`Icons.Rounded.QrCode2`), after Share and before "Send to another phone". It opens a full-screen dialog on plain white whatever the theme: the title (`titleLarge`, black, two lines at most) with a Close button on its right, the code centred and as wide as the screen allows (at most 480dp) with its four-module white quiet zone, and under it, in `bodyMedium` grey: "Scan it with the other phone's camera, then share the text to Pastille." While it shows, the screen stays on at full brightness. TalkBack reads the code as "QR code for <title>". Too long for the biggest code, the item stays in the menu, disabled, with a second line in `bodySmall`: "Too long for a QR code: send it to another phone instead". Images and stickers have no QR item.
+
+## 20. Redesign after Sacha's mock-up (Iris, 2026-10-28) — overrides §8, §12 and the list rows of §6.1
+
+Sacha's mock-up (`docs/design/pastille-sacha-ui-2026-10-28.png`: list, editor, settings, the peeling-sticker mark) is a strong reference, not a pixel spec. Where Android, Material 3, accessibility or Pastille's flows need it, we deviate and say why below. Renders on invented data come from `app/src/test/java/app/pastille/redesign/RedesignRenders.kt`, run with `PASTILLE_RENDERS=<dir> ./gradlew :app:testDebugUnitTest --tests 'app.pastille.redesign.*'` (one JVM per render, since Robolectric's native canvas aborts when several share one).
+
+**Brand**
+
+- [x] The mark is traced from Sacha's peeling sticker into the launcher foreground, the monochrome (themed) icon and the Quick Settings tile; his blue joins the palette. Lockup weight follows `pastille-sacha-mark-v1.png`.
+
+**List**
+
+- [x] Compact header: mark + wordmark, search and overflow; no large collapsing bar.
+- [x] Snippets | Stickers stays Sacha's two-half control (a two-segment `SingleChoiceSegmentedButtonRow`, the selected half carrying a check, so the state is a shape too).
+- [x] Folders are chips (All with a grid glyph, the selected one with a folder glyph and the filled container), with a trailing + chip.
+- [x] Rows are `surfaceContainer` cards, 16dp corners, 8dp apart: title, time top-right in tabular figures, a two-line preview, the copy button vertically centred against the card.
+- [x] Extended "+ New snippet" FAB ("Add stickers" on Stickers).
+
+**Editor**
+
+- [x] A page, not a dialog: back, delete, overflow; the title as a headline; a folder chip with a drop-down and the tag chips under it; the body on its own surface; "Saved · 52 characters" as the footer.
+
+**Settings** (overrides §12's top bar, tiles, hairlines and Keyboard group)
+
+- [x] Plain `TopAppBar` with an `IconButton` back arrow; the large collapsing bar and the tonal back button go.
+- [x] Group headers in `titleSmall` `onSurface`, marked as headings for TalkBack.
+- [x] Connected cards: rows separated by a 2dp gap of the ground, not a hairline; outer corners 20dp only.
+- [x] Plain monochrome glyphs (24dp, `onSurfaceVariant`, `error` when destructive), no tiles. Titles at regular weight.
+- [x] Value subtitles: Style shows its value, Height its value (or "x upright · y sideways"), Clear after copying its delay. The clipboard caveat moved into the delay dialog.
+- [x] Style and Height are sub-pages (`SettingsPage`, a 200ms crossfade, system back returns to Settings), each with its live preview on top.
+- [x] Switches carry a check on the thumb when on (`PastilleSwitch`), so on/off is a shape as well as a colour.
+- [x] **Backup:** "Sync automatically" is a switch row. On opens the file chooser (nothing syncs until a file exists); off forgets the file and leaves it where it is (was "Stop syncing"). With sync off, "Use an existing file" follows; with it on, Sync now, Restore from this file, and "Choose another file". A problem whose message says "Tap to choose…" (Access, Write, NotKept, ReadOnly, CantOverwrite) shows on "Choose another file", in `error`, because a tap on the switch row would turn syncing off; the switch row then reads "name · Not syncing". Read and Mismatch stay on the switch row. pCloud diagnostics (`SyncDiagnosis.providerLabel`) are unchanged.
+- [x] **About** keeps main's rows and behaviour (version copy, source, licence, third-party notices, crash report) and inherits the new row style.
+
+**Bin and stickers**
+
+- [x] Bin rows are the list's cards (16dp corners, `surfaceContainer`, 8dp apart) instead of full-width rows under hairlines; swipe to restore or delete is unchanged.
+- [x] One empty-state template everywhere (`ui/EmptyState.kt`: a glyph in a disc, one line, an optional reason, at most one action): list, folder, search, bin, stickers. The stickers one has no button, since "Add stickers" is already the FAB.
+
+**Deviations from Sacha, and why**
+
+- **Switch back to stays an inline radio list**, not a row with a value and a chevron as in the mock-up: Erwann asked to see the whole list here (« On peut pas avoir la liste entière réellement ici ? »), and reversing that is his call.
+- **Show in the keyboard stays a segmented row** in the Keyboard card: it is a multi-choice the mock-up doesn't show, and a sub-page would hide which tabs are on.
+- **The Backup card has more than Sacha's one Sync row**: two phones need "Use an existing file", restore and a way to fix access, and the privacy and two-phone notes stay under the card.
+- **Group titles and row titles at regular weight**, Sacha's look, but headers in `onSurface` rather than his dim grey, for contrast in light theme.
+- **48dp targets** on every row and chip even where the mock-up draws them tighter.
+
+**Not done yet** (open for the next pass)
+
+- [ ] The same language on the share sheet, the import dialogs, the setup card and the QR sheet: they still use their pre-redesign layouts (dialogs and sheets are Material defaults, so they read as consistent, but the header and chip treatments aren't applied).
+- [ ] The keyboard's three modest wins: the active tab label at ≥400dp, two preview lines when the height allows, 48dp targets.
+- [ ] Springs ≤250ms with reduced-motion fades across the app's own transitions (the settings sub-pages crossfade at 200ms already).
+- [ ] Light theme checked on list, editor, settings and stickers renders only; contrast not measured on every role.

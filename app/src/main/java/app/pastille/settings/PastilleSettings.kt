@@ -118,10 +118,23 @@ class PastilleSettings private constructor(private val prefs: SharedPreferences)
         awaitClose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
     }.conflate()
 
-    // null means the main keyboard (the first other one the system lists); PREVIOUS_KEYBOARD keeps Android's "previous" behaviour.
-    var returnKeyboardId: String?
+    // null means the first typing keyboard the system lists (what "Main keyboard" stored); PREVIOUS_KEYBOARD
+    // keeps Android's "previous" behaviour; anything else is an IME id.
+    val returnKeyboardId: String?
         get() = prefs.getString(KEY_RETURN_KEYBOARD_ID, null)
-        set(value) = prefs.edit().apply { if (value == null) remove(KEY_RETURN_KEYBOARD_ID) else putString(KEY_RETURN_KEYBOARD_ID, value) }.apply()
+
+    // The language (subtype hash code) chosen under that keyboard; null means the keyboard's own last one.
+    // Added after the id, so older installs simply have none.
+    val returnKeyboardSubtype: Int?
+        get() = if (prefs.contains(KEY_RETURN_KEYBOARD_SUBTYPE)) prefs.getInt(KEY_RETURN_KEYBOARD_SUBTYPE, 0) else null
+
+    // Written together, so a subtype never outlives the keyboard it belongs to.
+    fun setReturnKeyboard(id: String?, subtype: Int?) {
+        prefs.edit().apply {
+            if (id == null) remove(KEY_RETURN_KEYBOARD_ID) else putString(KEY_RETURN_KEYBOARD_ID, id)
+            if (id == null || subtype == null) remove(KEY_RETURN_KEYBOARD_SUBTYPE) else putInt(KEY_RETURN_KEYBOARD_SUBTYPE, subtype)
+        }.apply()
+    }
 
     // Show in the keyboard › Clipboard: the tab and the recording are one switch. On by default: the clips
     // stay in memory for an hour at most, are only read while Pastille's keyboard or app is in front, and
@@ -224,6 +237,7 @@ class PastilleSettings private constructor(private val prefs: SharedPreferences)
         private const val KEY_RECENT_CLIPBOARD = "recent_clipboard"
         private const val KEY_CLIPBOARD_ENABLED = "clipboard_enabled"
         private const val KEY_RETURN_KEYBOARD_ID = "return_keyboard_id"
+        private const val KEY_RETURN_KEYBOARD_SUBTYPE = "return_keyboard_subtype"
         const val PREVIOUS_KEYBOARD = "previous"
         private const val KEY_RETURN_TO_PREVIOUS_KEYBOARD = "return_to_previous_keyboard"
         private const val KEY_RETURN_AFTER_SNIPPET = "return_after_snippet"
@@ -258,14 +272,50 @@ fun returnDefault(legacy: Boolean?, image: Boolean): Boolean = legacy ?: !image
 // The Clipboard choice in "Show in the keyboard" starts from the old Clipboard switch; fresh installs have it on.
 fun clipboardDefault(legacy: Boolean?): Boolean = legacy ?: true
 
-fun returnKeyboardTarget(chosen: String?, otherKeyboardIds: List<String>): String? = when {
-    chosen == PastilleSettings.PREVIOUS_KEYBOARD -> null
-    chosen != null && chosen in otherKeyboardIds -> chosen
-    else -> otherKeyboardIds.firstOrNull()
+/** Where the switch-back button goes: an enabled IME and, optionally, one of its languages. */
+data class ReturnTarget(val id: String, val subtype: Int? = null)
+
+/**
+ * Resolves the stored choice against the enabled keyboards (Pastille excluded); null means
+ * Android's previous keyboard. A keyboard since disabled, or no choice at all, goes to the first
+ * typing keyboard, as "Main keyboard" always did. A language that's gone leaves the subtype out,
+ * so the keyboard opens in whichever language it used last.
+ */
+fun returnKeyboardTarget(chosen: String?, chosenSubtype: Int?, keyboards: List<KeyboardEntry>): ReturnTarget? {
+    if (chosen == PastilleSettings.PREVIOUS_KEYBOARD) return null
+    val picked = keyboards.firstOrNull { it.id == chosen }
+    if (picked != null) {
+        val subtype = chosenSubtype?.takeIf { hash -> picked.subtypes.any { it.hash == hash } }
+        return ReturnTarget(picked.id, subtype)
+    }
+    return keyboards.firstOrNull { it.typing }?.let { ReturnTarget(it.id) }
 }
 
-// Voice input (Gboard's speech IME, for one) registers as an input method too; switching back should land on a keyboard.
-// Only voice input is excluded: a keyboard may declare subtypes without setting a mode.
+/** An enabled or installed input method other than Pastille, as Settings and the keyboard see it. */
+data class KeyboardEntry(
+    val id: String,
+    val label: String,
+    // False for voice input: listed and choosable, but never the fallback.
+    val typing: Boolean = true,
+    // Its enabled, non-auxiliary languages, as the system's picker lists them.
+    val subtypes: List<SubtypeEntry> = emptyList(),
+)
+
+data class SubtypeEntry(val hash: Int, val name: String, val tag: String?)
+
+/**
+ * The short tag the system picker shows beside a language: the region when there is one
+ * ("fr-FR" → "FR", "en_GB" → "GB"), otherwise the language ("de" → "DE"); null when unknown.
+ */
+fun localeTag(languageTag: String?): String? {
+    val parts = languageTag.orEmpty().split('-', '_').filter { it.isNotBlank() }
+    val language = parts.firstOrNull() ?: return null
+    val region = parts.drop(1).firstOrNull { it.length == 2 && it.all(Char::isLetter) }
+    return (region ?: language).uppercase(java.util.Locale.ROOT)
+}
+
+// Voice input (Gboard's speech IME, for one) registers as an input method too. It is listed like the
+// system picker lists it, but the default never lands on it: a keyboard may declare subtypes without a mode.
 fun isTypingKeyboard(subtypeModes: List<String>): Boolean =
     subtypeModes.isEmpty() || subtypeModes.any { it.isBlank() || it == "keyboard" }
 

@@ -31,13 +31,26 @@ class EffectiveModeTest {
 
 class ReturnKeyboardTargetTest {
 
+    private val gboard = KeyboardEntry("gboard/.Ime", "Gboard", subtypes = listOf(SubtypeEntry(1, "Français", "FR"), SubtypeEntry(2, "English", "GB")))
+    private val voice = KeyboardEntry("voice/.Ime", "Voice", typing = false)
+    private val passwords = KeyboardEntry("passwords/.Ime", "Passwords")
+
     @org.junit.Test
-    fun `defaults to the main keyboard, honours a choice, and can fall back to previous`() {
-        val others = listOf("gboard/.Ime", "passwords/.Ime")
-        org.junit.Assert.assertEquals("gboard/.Ime", returnKeyboardTarget(null, others))
-        org.junit.Assert.assertEquals("passwords/.Ime", returnKeyboardTarget("passwords/.Ime", others))
-        org.junit.Assert.assertEquals("gboard/.Ime", returnKeyboardTarget("uninstalled/.Ime", others))
-        org.junit.Assert.assertNull(returnKeyboardTarget(PastilleSettings.PREVIOUS_KEYBOARD, others))
+    fun `defaults to the first typing keyboard, honours a choice, and can fall back to previous`() {
+        val others = listOf(voice, gboard, passwords)
+        org.junit.Assert.assertEquals(ReturnTarget("gboard/.Ime"), returnKeyboardTarget(null, null, others))
+        org.junit.Assert.assertEquals(ReturnTarget("passwords/.Ime"), returnKeyboardTarget("passwords/.Ime", null, others))
+        org.junit.Assert.assertEquals(ReturnTarget("voice/.Ime"), returnKeyboardTarget("voice/.Ime", null, others))
+        org.junit.Assert.assertEquals(ReturnTarget("gboard/.Ime"), returnKeyboardTarget("uninstalled/.Ime", 2, others))
+        org.junit.Assert.assertNull(returnKeyboardTarget(PastilleSettings.PREVIOUS_KEYBOARD, null, others))
+        org.junit.Assert.assertNull(returnKeyboardTarget(null, null, listOf(voice)))
+    }
+
+    @org.junit.Test
+    fun `a language goes with its keyboard, and one that's gone falls back to the keyboard's last`() {
+        val others = listOf(gboard, passwords)
+        org.junit.Assert.assertEquals(ReturnTarget("gboard/.Ime", 2), returnKeyboardTarget("gboard/.Ime", 2, others))
+        org.junit.Assert.assertEquals(ReturnTarget("gboard/.Ime"), returnKeyboardTarget("gboard/.Ime", 99, others))
     }
 }
 

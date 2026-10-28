@@ -92,10 +92,10 @@ import app.pastille.ime.KeyboardHeightPreview
 import app.pastille.ime.KeyboardStylePreview
 import app.pastille.ime.LocalReduceMotion
 import app.pastille.ime.PastilleMotion
-import app.pastille.ime.installedTypingKeyboards
+import app.pastille.ime.installedKeyboards
 import app.pastille.ime.heightGlyph
 import app.pastille.ime.modeIcon
-import app.pastille.ime.otherTypingKeyboards
+import app.pastille.ime.otherKeyboards
 import app.pastille.settings.BackupProblem
 import app.pastille.settings.ClipboardClearDelay
 import app.pastille.settings.KeyboardMode
@@ -563,18 +563,16 @@ private fun ModesRow(
 @Composable
 private fun ReturnKeyboardRow(settings: PastilleSettings) {
     val context = LocalContext.current
-    fun labelled(list: List<android.view.inputmethod.InputMethodInfo>) =
-        list.map { it.id to it.loadLabel(context.packageManager).toString() }
     // Read again on resume: the way back from Android's keyboard settings is the usual reason it changed.
-    var enabled by remember { mutableStateOf(labelled(otherTypingKeyboards(context))) }
-    var installed by remember { mutableStateOf(labelled(installedTypingKeyboards(context))) }
+    var enabled by remember { mutableStateOf(otherKeyboards(context)) }
+    var installed by remember { mutableStateOf(installedKeyboards(context)) }
     LifecycleResumeEffect(Unit) {
-        enabled = labelled(otherTypingKeyboards(context))
-        installed = labelled(installedTypingKeyboards(context))
+        enabled = otherKeyboards(context)
+        installed = installedKeyboards(context)
         onPauseOrDispose { }
     }
-    var chosen by remember { mutableStateOf(settings.returnKeyboardId) }
-    val choices = returnKeyboardChoices(chosen, enabled, installed)
+    var chosen by remember { mutableStateOf(settings.returnKeyboardId to settings.returnKeyboardSubtype) }
+    val choices = returnKeyboardChoices(chosen.first, chosen.second, enabled, installed)
     SettingsRow(
         title = "Switch back to",
         subtitle = "After a snippet or image goes in",
@@ -588,8 +586,8 @@ private fun ReturnKeyboardRow(settings: PastilleSettings) {
                 selected = choice.selected,
                 enabled = choice.available,
                 onClick = {
-                    chosen = choice.value
-                    settings.returnKeyboardId = choice.value
+                    chosen = choice.value to choice.subtype
+                    settings.setReturnKeyboard(choice.value, choice.subtype)
                 },
             )
         }

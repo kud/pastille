@@ -54,9 +54,10 @@ The Pastille Quick Settings tile opens a sheet of your snippets and recent image
 
 ## Privacy
 
-- Pastille requests no `INTERNET` permission and has no analytics or network libraries. Your snippets and images never leave your phone.
+- Pastille requests no `INTERNET` permission and has no analytics or network libraries. Your snippets, stickers and images stay on your phone unless you export, share or back them up yourself.
 - Snippets live in a local Room database on your device.
-- Backups only move when you ask: export and import go through the system file picker (Storage Access Framework), so you choose where the file is saved or read from.
+- Pastille opts out of Android's cloud backup, so nothing goes to Google's backup servers. Moving to a new phone with Android's device-to-device transfer (by cable or over Wi-Fi) still brings your snippets, stickers, images and settings.
+- Exports only move when you ask: export and import go through the system file picker (Storage Access Framework), so you choose where the file is saved or read from.
 - Photo access is optional and only used to show recent images in the panel.
 
 ## Build

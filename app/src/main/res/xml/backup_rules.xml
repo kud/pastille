@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 9 to 11. Every include requires a device-to-device transfer, so a cloud backup
+     carries nothing and a phone-to-phone transfer carries the same five things as
+     data_extraction_rules.xml. Keep both files and BackupRulesTest in step. -->
+<full-backup-content>
+    <include domain="database" path="." requireFlags="deviceToDeviceTransfer" />
+    <include domain="file" path="images/" requireFlags="deviceToDeviceTransfer" />
+    <include domain="file" path="crashes/" requireFlags="deviceToDeviceTransfer" />
+    <include domain="file" path="sync/" requireFlags="deviceToDeviceTransfer" />
+    <include domain="sharedpref" path="pastille_settings.xml" requireFlags="deviceToDeviceTransfer" />
+</full-backup-content>

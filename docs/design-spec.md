@@ -1046,7 +1046,7 @@ The Settings screen was one long column of `ListItem`s under `primary` section h
 | Keyboard | Style (preview + the inline radio list), Height (preview, Portrait and Landscape segmented rows), Show in the keyboard (Snippets / Stickers / Images), Return after a snippet, Switch back to (an inline radio list) |
 | Clipboard | Clear clipboard after copying (a dialog of radio rows: Off, 5 s, 10 s, 30 s, 1 min) |
 | Photos | Photo access, Return after an image |
-| About | Pastille (version), Source code, Licence, Last crash report (only when one exists) |
+| About | Pastille (version), Source code, Licence, Third-party notices, Last crash report (only when one exists) |
 
 **Row anatomy** (shared composables in `ui/SettingsGroup.kt`: `SettingsGroup`, `SettingsRow`, `SettingsRowDetail`, `SettingsHairline`, `SettingsChevron`)
 
@@ -1069,6 +1069,7 @@ The Settings screen was one long column of `ListItem`s under `primary` section h
 - [x] **Pastille:** subtitle "Version 0.1.5 (16)", from `BuildConfig` (`versionName (versionCode)`, "· debug" on the debug build, which installs beside the release one). Tapping copies "Pastille 0.1.5 (16)" (TalkBack: "Copy version"); a toast confirms below Android 13, where the system doesn't.
 - [x] **Source code:** "github.com/kud/pastille", an `ACTION_VIEW` intent to the browser (TalkBack: "Open in browser"), with a trailing `OpenInNew` rather than the chevron, since it leaves the app. Pastille has no `INTERNET` permission and doesn't need one for this.
 - [x] **Licence:** "GPL-3.0-or-later", the SPDX id as the subtitle. Not tappable.
+- [x] **Third-party notices (2026-10-28):** "Code from others that Pastille includes", with a chevron; opens a plain `AlertDialog` listing each notice (name in `titleSmall`, what it is for in `bodyMedium` `onSurfaceVariant`, the licence text selectable in monospace `bodySmall`), from `THIRD_PARTY_NOTICES` in `ui/ThirdPartyNoticesDialog.kt`, which mirrors `docs/third-party-notices.md`. Offline: the MIT notice must ship in the APK, not only on GitHub.
 - [x] **Last crash report:** moved from the list's overflow (§8.3), where a diagnostic sat among everyday actions. Shown only when one exists, read again on resume; opens the same copyable dialog (`CrashReportDialog`).
 
 **Destructive** (none today)
@@ -1200,3 +1201,4 @@ Only the selected pill's width change is new: `SHORT_MS` with `Standard`, snappi
   - Problem: the first row turns destructive (error tile, error title) and reads "Can't reach pastille-backup.zip. Tap to choose a file again." or "The last backup to pastille-backup.zip failed. Tap to choose a file again."
   - Under the group, `bodySmall` in `onSurfaceVariant`: "Your snippets, stickers and images stay on your phone unless you export, share or back them up yourself."
 - **Receiving a backup:** a plain `AlertDialog` over a translucent activity: "Import this backup?", "This backup holds 12 snippets and 3 stickers. Anything already in Pastille is skipped.", Import / Cancel; the result is a toast.
+- **QR code (2026-10-28):** a text snippet's long-press menu gains "Show QR code" (`Icons.Rounded.QrCode2`), after Share and before "Send to another phone". It opens a full-screen dialog on plain white whatever the theme: the title (`titleLarge`, black, two lines at most) with a Close button on its right, the code centred and as wide as the screen allows (at most 480dp) with its four-module white quiet zone, and under it, in `bodyMedium` grey: "Scan it with the other phone's camera, then share the text to Pastille." While it shows, the screen stays on at full brightness. TalkBack reads the code as "QR code for <title>". Too long for the biggest code, the item stays in the menu, disabled, with a second line in `bodySmall`: "Too long for a QR code: send it to another phone instead". Images and stickers have no QR item.

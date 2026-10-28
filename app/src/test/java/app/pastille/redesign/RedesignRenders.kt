@@ -15,6 +15,8 @@ import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -108,6 +110,7 @@ abstract class RedesignRenders(private val dark: Boolean, private val screen: St
     @Test fun render() = when (screen) {
         "list" -> list()
         "list-wide" -> list()
+        "list-menu" -> listMenu()
         "editor" -> editor()
         "settings" -> settings()
         "stickers" -> stickers()
@@ -164,6 +167,13 @@ abstract class RedesignRenders(private val dark: Boolean, private val screen: St
             compose.onAllNodesWithText("Replies")[0].performTouchInput { swipeLeft() }
             settle(); capture("list-wide-end")
         }
+    }
+    private fun listMenu() {
+        seed(); PastilleSettings.forContext(app).appStickersMode = false
+        compose.setContent { PastilleTheme(darkTheme = dark) { SnippetListScreen(repository = repository, onCreate = {}, onEdit = {}, onOpenSettings = {}) } }
+        wait("Running late")
+        compose.onNodeWithContentDescription("More options").performClick()
+        wait("Reorder"); captureWindows("list-menu")
     }
     private fun editor() {
         val ids = seed()
@@ -394,6 +404,8 @@ abstract class RedesignRenders(private val dark: Boolean, private val screen: St
 // Robolectric's native canvas aborts the process when several renders share one.
 class ListDark : RedesignRenders(true, "list")
 class ListLight : RedesignRenders(false, "list")
+class ListMenuLight : RedesignRenders(false, "list-menu")
+class ListMenuDark : RedesignRenders(true, "list-menu")
 @Config(qualifiers = "w411dp-h860dp-xxhdpi") class ListWideDark : RedesignRenders(true, "list-wide")
 class EditorDark : RedesignRenders(true, "editor")
 class EditorLight : RedesignRenders(false, "editor")

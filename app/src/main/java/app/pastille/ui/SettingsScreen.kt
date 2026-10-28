@@ -32,6 +32,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.KeyboardReturn
+import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.FileUpload
+import androidx.compose.material.icons.rounded.FileDownload
 import androidx.compose.material.icons.rounded.Backup
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ContentPaste
@@ -647,6 +650,25 @@ private fun BackupGroup(settings: PastilleSettings) {
     }
     val zipTypes = arrayOf(BackupArchive.MIME, "application/x-zip-compressed", "application/x-zip", "application/octet-stream")
 
+    // One-off copies, apart from syncing (moved from the list's menu, Iris, 2026-10-28): the same zip
+    // archive with images and stickers; Import still reads the old JSON exports.
+    val exportOnce = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(BackupArchive.MIME)) { picked ->
+        if (picked != null) scope.launch {
+            runCatching {
+                val (file, written) = BackupFiles.build(context)
+                try { BackupFiles.writeTo(context, picked, file) } finally { file.delete() }
+                exportMessage(written)
+            }.onSuccess { say(it) }.onFailure { say(EXPORT_FAILED) }
+        }
+    }
+    val importOnce = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { picked ->
+        if (picked != null) scope.launch {
+            val file = runCatching { BackupFiles.copyIn(context, picked) }.getOrNull()
+            if (file == null) say(IMPORT_UNREADABLE)
+            else runCatching { BackupFiles.importFile(context, file) }
+                .onSuccess { say(importMessage(it)) }.onFailure { say(IMPORT_NOT_A_BACKUP) }
+        }
+    }
     SettingsGroup(title = "Backup") {
         // Sacha's switch, with a check on its thumb (Iris, 2026-10-28). On opens the file chooser,
         // since there is nothing to sync until a file exists; off forgets the file and leaves it be.
@@ -723,6 +745,34 @@ private fun BackupGroup(settings: PastilleSettings) {
                 trailing = { SettingsChevron() },
             )
         }
+        SettingsHairline()
+        SettingsRow(
+            title = "Import a backup",
+            subtitle = "Adds what isn't already in Pastille",
+            icon = Icons.Rounded.FileDownload,
+            // Any type: Drive and file managers label zips and old JSON exports inconsistently.
+            modifier = Modifier.clickable { importOnce.launch(arrayOf("*/*")) },
+            trailing = { SettingsChevron() },
+        )
+        SettingsHairline()
+        SettingsRow(
+            title = "Export a backup",
+            icon = Icons.Rounded.FileUpload,
+            modifier = Modifier.clickable { exportOnce.launch(BackupArchive.SUGGESTED_NAME) },
+            trailing = { SettingsChevron() },
+        )
+        SettingsHairline()
+        SettingsRow(
+            title = "Share a backup",
+            icon = Icons.Rounded.Share,
+            modifier = Modifier.clickable {
+                scope.launch {
+                    runCatching { BackupFiles.buildForSharing(context).first }
+                        .onSuccess { app.pastille.share.shareBackup(context, it) }
+                        .onFailure { say(SHARE_FAILED) }
+                }
+            },
+        )
     }
     Text(
         text = SYNC_NOTE,

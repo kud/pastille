@@ -89,6 +89,8 @@ import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.MenuDefaults
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -251,50 +253,6 @@ fun SnippetListScreen(
     val allTagNames by remember { repository.observeTagNames() }
         .collectAsStateWithLifecycle(initialValue = emptyList())
     val organising = organisingId?.let { id -> snippets.firstOrNull { it.id == id } ?: stickers.firstOrNull { it.id == id } }
-
-    // Export, Import and Share backup: one format for all three, the zip archive with images and
-    // stickers (BackupArchive). Import still reads the old JSON exports.
-    val exportLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument(BackupArchive.MIME),
-    ) { uri ->
-        if (uri != null) {
-            scope.launch {
-                runCatching {
-                    val (file, written) = BackupFiles.build(context)
-                    try {
-                        BackupFiles.writeTo(context, uri, file)
-                    } finally {
-                        file.delete()
-                    }
-                    exportMessage(written)
-                }.onSuccess { toast(context, it) }
-                    .onFailure { toast(context, EXPORT_FAILED) }
-            }
-        }
-    }
-    val importLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument(),
-    ) { uri ->
-        if (uri != null) {
-            scope.launch {
-                val file = runCatching { BackupFiles.copyIn(context, uri) }.getOrNull()
-                if (file == null) {
-                    toast(context, IMPORT_UNREADABLE)
-                } else {
-                    runCatching { BackupFiles.importFile(context, file) }
-                        .onSuccess { toast(context, importMessage(it)) }
-                        .onFailure { toast(context, IMPORT_NOT_A_BACKUP) }
-                }
-            }
-        }
-    }
-    fun shareWholeBackup() {
-        scope.launch {
-            runCatching { BackupFiles.buildForSharing(context).first }
-                .onSuccess { shareBackup(context, it) }
-                .onFailure { toast(context, SHARE_FAILED) }
-        }
-    }
 
     fun copySnippet(snippet: SnippetRecord) {
         val content = app.pastille.clipboard.clipContentFor(context, snippet)
@@ -585,16 +543,24 @@ fun SnippetListScreen(
                         IconButton(onClick = { showMenu = true }) {
                             Icon(Icons.Rounded.MoreVert, contentDescription = "More options")
                         }
-                        DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                            // The menu follows the mode on screen (Erwann, 2026-10-28): Reorder for
-                            // the mode shown, then what belongs to the whole app. The backup now
-                            // carries stickers and images too, so it sits with the app-wide items.
-                            // New folder lives at the end of the folder row ("+ Add").
+                        // Three doors (Iris, 2026-10-28): Reorder for the mode on screen, then the Bin and
+                        // Settings. Backup lives in Settings › Backup and keyboard setup in Settings ›
+                        // Keyboard; "Keyboard setup" shows here only until Pastille is an enabled keyboard.
+                        // One icon family (Rounded), one tint, and a 12dp card inset from the edge.
+                        val itemColors = MenuDefaults.itemColors(
+                            leadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            disabledLeadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f),
+                        )
+                        DropdownMenu(
+                            expanded = showMenu,
+                            onDismissRequest = { showMenu = false },
+                            shape = RoundedCornerShape(12.dp),
+                            offset = DpOffset((-8).dp, 0.dp),
+                        ) {
                             DropdownMenuItem(
                                 text = { Text("Reorder") },
-                                leadingIcon = {
-                                    Icon(Icons.Rounded.SwapVert, contentDescription = null)
-                                },
+                                leadingIcon = { Icon(Icons.Rounded.SwapVert, contentDescription = null) },
+                                colors = itemColors,
                                 // Reorder applies to the mode on screen.
                                 enabled = if (stickersMode) stickers.size > 1 else snippets.size > 1 || orderedFolders.size > 1,
                                 onClick = {
@@ -603,69 +569,35 @@ fun SnippetListScreen(
                                     reordering = true
                                 },
                             )
-                            HorizontalDivider()
-                            DropdownMenuItem(
-                                text = { Text("Keyboard setup") },
-                                leadingIcon = {
-                                    Icon(Icons.Rounded.Keyboard, contentDescription = null)
-                                },
-                                onClick = {
-                                    showMenu = false
-                                    context.startActivity(Intent(AndroidSettings.ACTION_INPUT_METHOD_SETTINGS))
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Import backup") },
-                                leadingIcon = {
-                                    Icon(Icons.Rounded.FileDownload, contentDescription = null)
-                                },
-                                onClick = {
-                                    showMenu = false
-                                    // Any type: Drive and file managers label zips and old JSON
-                                    // exports inconsistently, and the contents decide anyway.
-                                    importLauncher.launch(arrayOf("*/*"))
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Export backup") },
-                                leadingIcon = {
-                                    Icon(Icons.Rounded.FileUpload, contentDescription = null)
-                                },
-                                onClick = {
-                                    showMenu = false
-                                    exportLauncher.launch(BackupArchive.SUGGESTED_NAME)
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Share backup") },
-                                leadingIcon = {
-                                    Icon(Icons.Rounded.Share, contentDescription = null)
-                                },
-                                onClick = {
-                                    showMenu = false
-                                    shareWholeBackup()
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Settings") },
-                                leadingIcon = {
-                                    Icon(Icons.Rounded.Settings, contentDescription = null)
-                                },
-                                onClick = {
-                                    showMenu = false
-                                    onOpenSettings()
-                                },
-                            )
                             DropdownMenuItem(
                                 text = { Text(if (binCount > 0) "Bin ($binCount)" else "Bin") },
-                                leadingIcon = {
-                                    Icon(Icons.Rounded.Delete, contentDescription = null)
-                                },
+                                leadingIcon = { Icon(Icons.Rounded.Delete, contentDescription = null) },
+                                colors = itemColors,
                                 onClick = {
                                     showMenu = false
                                     onOpenBin()
                                 },
                             )
+                            DropdownMenuItem(
+                                text = { Text("Settings") },
+                                leadingIcon = { Icon(Icons.Rounded.Settings, contentDescription = null) },
+                                colors = itemColors,
+                                onClick = {
+                                    showMenu = false
+                                    onOpenSettings()
+                                },
+                            )
+                            if (showMenu && !isPastilleEnabled(context)) {
+                                DropdownMenuItem(
+                                    text = { Text("Keyboard setup") },
+                                    leadingIcon = { Icon(Icons.Rounded.Keyboard, contentDescription = null) },
+                                    colors = itemColors,
+                                    onClick = {
+                                        showMenu = false
+                                        context.startActivity(Intent(AndroidSettings.ACTION_INPUT_METHOD_SETTINGS))
+                                    },
+                                )
+                            }
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(

@@ -113,6 +113,9 @@ abstract class RedesignRenders(private val dark: Boolean, private val screen: St
         "list-menu" -> listMenu()
         "editor" -> editor()
         "settings" -> settings()
+        "settings-wide" -> settings(name = "settings-wide")
+        "settings-height" -> settingsHeight("settings-height")
+        "settings-height-wide" -> settingsHeight("settings-height-wide")
         "stickers" -> stickers()
         "keyboard" -> keyboard()
         "clipboard" -> keyboard(clipboard = true)
@@ -180,10 +183,16 @@ abstract class RedesignRenders(private val dark: Boolean, private val screen: St
         compose.setContent { PastilleTheme(darkTheme = dark) { SnippetEditorScreen(snippetId = ids.getValue("Wi-Fi at the cottage"), repository = repository, onDone = {}, onDeleted = {}) } }
         wait("Wi-Fi at the cottage"); capture("editor")
     }
-    private fun settings() {
+    private fun settings(name: String = "settings") {
         compose.setContent { PastilleTheme(darkTheme = dark) { SettingsScreen(onBack = {}) } }
-        settle(); capture("settings")
-        compose.onNodeWithText("Licence").performScrollTo(); settle(); capture("settings-lower")
+        settle(); capture(name)
+        compose.onNodeWithText("Licence").performScrollTo(); settle(); capture("$name-lower")
+    }
+    private fun settingsHeight(name: String) {
+        compose.setContent { PastilleTheme(darkTheme = dark) { SettingsScreen(onBack = {}) } }
+        settle(); compose.onNodeWithText("Height").performClick(); settle(); capture(name)
+        // The landscape row drives the preview: change it to see the preview turn sideways.
+        compose.onAllNodesWithText("Tall")[1].performClick(); settle(); capture("$name-landscape")
     }
     private fun stickers() {
         val dir = ImageStore.forContext(app).imagesDir().apply { mkdirs() }
@@ -411,6 +420,12 @@ class EditorDark : RedesignRenders(true, "editor")
 class EditorLight : RedesignRenders(false, "editor")
 class SettingsDark : RedesignRenders(true, "settings")
 class SettingsLight : RedesignRenders(false, "settings")
+@Config(qualifiers = "w411dp-h860dp-xxhdpi") class SettingsWideDark : RedesignRenders(true, "settings-wide")
+@Config(qualifiers = "w411dp-h860dp-xxhdpi") class SettingsWideLight : RedesignRenders(false, "settings-wide")
+class SettingsHeightDark : RedesignRenders(true, "settings-height")
+class SettingsHeightLight : RedesignRenders(false, "settings-height")
+@Config(qualifiers = "w411dp-h860dp-xxhdpi") class SettingsHeightWideDark : RedesignRenders(true, "settings-height-wide")
+@Config(qualifiers = "w411dp-h860dp-xxhdpi") class SettingsHeightWideLight : RedesignRenders(false, "settings-height-wide")
 class StickersDark : RedesignRenders(true, "stickers")
 class StickersLight : RedesignRenders(false, "stickers")
 class Icon : RedesignRenders(true, "icon")

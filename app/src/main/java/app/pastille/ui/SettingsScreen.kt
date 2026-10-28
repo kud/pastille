@@ -106,7 +106,6 @@ import app.pastille.ime.KeyboardStylePreview
 import app.pastille.ime.LocalReduceMotion
 import app.pastille.ime.PastilleMotion
 import app.pastille.ime.installedTypingKeyboards
-import app.pastille.ime.heightGlyph
 import app.pastille.ime.modeIcon
 import app.pastille.ime.otherTypingKeyboards
 import app.pastille.settings.BackupProblem
@@ -224,11 +223,19 @@ private fun HeightPage(settings: PastilleSettings) {
     var previewLandscape by remember { mutableStateOf(false) }
     SettingsGroup(title = null) {
         SettingsRowDetail(modifier = Modifier.padding(top = 16.dp)) {
+            // One preview, following the orientation last changed, and saying in words which it shows.
             KeyboardHeightPreview(
                 style = settings.keyboardStyle,
                 height = if (previewLandscape) panelLandscape else panelPortrait,
                 landscape = previewLandscape,
-                modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+                modifier = Modifier.fillMaxWidth().height(200.dp),
+            )
+            Text(
+                text = if (previewLandscape) "Landscape preview" else "Portrait preview",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp),
             )
             HeightRow(
                 label = "Portrait",
@@ -442,6 +449,10 @@ private fun StyleRow(
     )
 }
 
+// Four heights don't breathe as one segmented row at 360dp, so they are chips that wrap, with no
+// per-option glyph: the selected chip's check and heavier label are enough, and its width never
+// changes (Gamme spec §4, from Erwann's review of this page, 2026-10-28).
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun HeightRow(
     label: String,
@@ -452,27 +463,21 @@ private fun HeightRow(
         text = label,
         style = MaterialTheme.typography.labelLarge,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = 12.dp, bottom = 8.dp),
+        modifier = Modifier.padding(top = 12.dp, bottom = 4.dp).semantics { heading() },
     )
-    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-        PanelHeight.entries.forEachIndexed { index, height ->
-            SegmentedButton(
+    // Two a row at every width, so 411dp never leaves "Tall" on a line of its own.
+    FlowRow(
+        modifier = Modifier.fillMaxWidth().selectableGroup(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        maxItemsInEachRow = 2,
+    ) {
+        PanelHeight.entries.forEach { height ->
+            FolderChip(
+                label = height.label,
+                icon = Icons.Rounded.Check,
                 selected = height == selected,
                 onClick = { onSelect(height) },
-                shape = SegmentedButtonDefaults.itemShape(index, PanelHeight.entries.size),
-                icon = {
-                    SegmentedButtonDefaults.Icon(active = height == selected) {
-                        Icon(heightGlyph(height), contentDescription = null, modifier = Modifier.size(SegmentedButtonDefaults.IconSize))
-                    }
-                },
-                label = {
-                    Text(
-                        text = height.label,
-                        maxLines = 1,
-                        softWrap = false,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                },
+                role = Role.RadioButton,
             )
         }
     }

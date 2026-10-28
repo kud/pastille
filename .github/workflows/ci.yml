@@ -5,6 +5,8 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Check any branch by hand. The keystore step stays push-only, so a manual run builds unsigned.
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}

@@ -82,6 +82,7 @@ import app.pastille.PastilleApplication
 import app.pastille.backup.AutoBackup
 import app.pastille.backup.BackupArchive
 import app.pastille.backup.BackupFiles
+import app.pastille.backup.SyncDiagnosis
 import app.pastille.backup.ImportConfirmDialog
 import app.pastille.backup.importInBackground
 import android.widget.Toast
@@ -510,7 +511,7 @@ private fun BackupGroup(settings: PastilleSettings) {
         if (picked != null) {
             scope.launch {
                 busy = true
-                val outcome = autoBackup.choose(picked)
+                val outcome = autoBackup.choose(picked, justCreated = true)
                 busy = false
                 if (outcome == AutoBackup.Outcome.Written) say("Synced")
             }
@@ -549,7 +550,7 @@ private fun BackupGroup(settings: PastilleSettings) {
         } else {
             SettingsRow(
                 title = "Sync automatically",
-                subtitle = backupStatus(name, lastAt, problem, System.currentTimeMillis()),
+                subtitle = backupStatus(name, lastAt, problem, System.currentTimeMillis(), SyncDiagnosis.providerLabel(Uri.parse(uri).authority)),
                 icon = if (problem == null) Icons.Rounded.Backup else Icons.Rounded.ErrorOutline,
                 destructive = problem != null,
                 modifier = Modifier.clickable { chooser.launch(BackupArchive.SUGGESTED_NAME) },

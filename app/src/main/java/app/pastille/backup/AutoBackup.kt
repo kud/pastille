@@ -19,7 +19,11 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import java.io.FileNotFoundException
+import android.content.pm.PackageManager
+import android.os.Build
+import android.os.Process
+import android.provider.DocumentsContract
+import app.pastille.crash.CrashLog
 
 /**
  * Settings › Backup › Back up automatically. No WorkManager and no scheduler: the app process is
@@ -64,29 +68,36 @@ class AutoBackup(context: Context, private val scope: CoroutineScope) {
     }
 
     /**
-     * Starts syncing with [uri]: a file just created, or one another phone already syncs with
-     * (then its contents are merged in first). Writes it at once.
+     * Starts syncing with [uri]: a file just created ([justCreated], from "Sync automatically"), or
+     * one another phone already syncs with (then its contents are merged in first). Writes it at once.
      */
-    suspend fun choose(uri: Uri): Outcome {
+    suspend fun choose(uri: Uri, justCreated: Boolean = false): Outcome {
         val resolver = app.contentResolver
         val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
         settings.backupUri?.let { old -> if (old != uri.toString()) release(Uri.parse(old)) }
+        var grantProblem: Throwable? = null
         try {
             resolver.takePersistableUriPermission(uri, flags)
-        } catch (_: SecurityException) {
-            // A provider that grants no persistable permission can't hold an automatic backup.
-            settings.backupProblem = BackupProblem.Access
+            // Some providers return without persisting anything; that only shows after a restart.
+            if (!isPersisted(uri)) grantProblem = SecurityException("takePersistableUriPermission returned but nothing was persisted")
+        } catch (error: SecurityException) {
+            grantProblem = error
         }
         settings.backupUri = uri.toString()
         settings.backupName = BackupFiles.displayName(app, uri) ?: BackupArchive.SUGGESTED_NAME
         settings.backupLastAt = null
         settings.backupFingerprint = null
+        settings.backupProblem = null
         settings.syncRemoteSize = null
         settings.syncRemoteModified = null
         settings.syncRemoteHash = null
         // A new file starts a new sync: nothing agreed yet, so the first merge is last-edit-wins.
         SyncBase.clear(app)
-        return backUp(force = true)
+        val outcome = backUp(force = true, justCreated = justCreated)
+        // The picker's own grant lasts until the phone restarts, so this sync may well have worked;
+        // the status still says the storage app didn't keep it, which is what will stop it later.
+        grantProblem?.let { fail(SyncStep.Grant, it, uri, mapOf("Outcome now" to outcome.name)) }
+        return outcome
     }
 
     /** Stops backing up; the file stays where it is. */
@@ -99,56 +110,70 @@ class AutoBackup(context: Context, private val scope: CoroutineScope) {
     /**
      * One sync with the chosen file: read it if it changed since we last saw it and merge it in
      * ([SyncMerge]), then write back whatever the file doesn't hold yet. A file that can't be read
-     * stops the write: this phone never overwrites changes it hasn't seen.
+     * stops the write: this phone never overwrites changes it hasn't seen. The one exception is a
+     * file the user just created and the provider reports empty ([SyncDiagnosis.mayWriteUnread]).
      */
-    suspend fun backUp(force: Boolean): Outcome = mutex.withLock {
+    suspend fun backUp(force: Boolean, justCreated: Boolean = false): Outcome = mutex.withLock {
         lastAttempt = System.currentTimeMillis()
         val uri = settings.backupUri?.let(Uri::parse) ?: return@withLock Outcome.Off
-        if (!hasPermission(uri)) {
-            settings.backupProblem = BackupProblem.Access
+        val persisted = isPersisted(uri)
+        if (!persisted && !hasGrant(uri)) {
+            // A provider that never kept the permission keeps saying so, rather than "can't reach".
+            val keep = settings.backupProblem == BackupProblem.NotKept || settings.backupProblem == BackupProblem.ReadOnly
+            val error = SecurityException("No persisted or current permission")
+            if (keep) {
+                fail(SyncStep.Grant, SyncFailure(SyncStep.Grant, settings.backupProblem!!, "Permission not kept", error), uri)
+            } else {
+                fail(SyncStep.Grant, SyncFailure(SyncStep.Grant, BackupProblem.Access, "Permission gone", error), uri)
+            }
             return@withLock Outcome.Failed
         }
         val repository = SnippetRepository.forContext(app)
+        var seenLength: Long? = null
+        var mustWrite = force
         try {
-            pull(uri, repository)
-        } catch (_: SecurityException) {
-            settings.backupProblem = BackupProblem.Access
-            return@withLock Outcome.Failed
-        } catch (_: FileNotFoundException) {
-            // Drive answers "not found" both for a deleted file and for one it can't fetch while
-            // offline: a file the provider still lists is only waiting.
-            settings.backupProblem = if (BackupFiles.exists(app, uri)) BackupProblem.Read else BackupProblem.Access
-            return@withLock Outcome.Failed
-        } catch (_: Exception) {
-            settings.backupProblem = BackupProblem.Read
-            return@withLock Outcome.Failed
+            seenLength = pull(uri, repository)
+        } catch (error: Exception) {
+            val size = BackupFiles.stat(app, uri).first
+            if (SyncDiagnosis.mayReplaceBroken(settings.syncPendingWrite, error)) {
+                // Our own write was cut off (process killed, upload dropped): put the whole file back.
+                mustWrite = true
+            } else if (!SyncDiagnosis.mayWriteUnread(justCreated, size)) {
+                fail(SyncStep.Read, error, uri)
+                return@withLock Outcome.Failed
+            }
+            seenLength = size ?: 0L
         }
         val fingerprint = repository.backupFingerprint()
-        if (!force && fingerprint == settings.backupFingerprint) {
+        if (!mustWrite && fingerprint == settings.backupFingerprint) {
             settings.backupLastAt = System.currentTimeMillis()
-            settings.backupProblem = null
+            settings.backupProblem = if (persisted) null else BackupProblem.NotKept
             return@withLock Outcome.Unchanged
         }
         var built: File? = null
         try {
             built = BackupFiles.build(app, withSync = true).first
-            BackupFiles.writeTo(app, uri, built)
+            // What the file holds now, as long as anyone has reported it: plain "w" is only safe
+            // over a file no longer than the new one.
+            val current = listOfNotNull(BackupFiles.stat(app, uri).first, seenLength, settings.syncRemoteSize).maxOrNull()
+            // Before the first byte: what the file held (a stale cache may serve it again) and what
+            // it is about to hold (until it reads back, a broken file is our own cut-off write).
+            settings.syncReplacedHash = settings.syncRemoteHash
+            settings.syncPendingWrite = BackupFiles.sha256Hex(built)
+            BackupFiles.writeTo(app, uri, built, current)
+            settings.syncPendingWrite = null
             // What the file now holds is what both phones agree on.
             val json = BackupArchive.readJson(built)
             SyncBase.save(app, json)
             remember(uri, built)
             settings.backupLastAt = System.currentTimeMillis()
             settings.backupFingerprint = fingerprint
-            settings.backupProblem = null
+            settings.backupProblem = if (persisted) null else BackupProblem.NotKept
             Outcome.Written
-        } catch (_: SecurityException) {
-            settings.backupProblem = BackupProblem.Access
-            Outcome.Failed
-        } catch (_: FileNotFoundException) {
-            settings.backupProblem = BackupProblem.Access
-            Outcome.Failed
-        } catch (_: Exception) {
-            settings.backupProblem = BackupProblem.Write
+        } catch (error: Exception) {
+            // Refused before anything was opened: the file is as it was.
+            if (error is CantOverwrite) settings.syncPendingWrite = null
+            fail(if (error is ReadBackMismatch) SyncStep.ReadBack else SyncStep.Write, error, uri)
             Outcome.Failed
         } finally {
             built?.delete()
@@ -156,25 +181,68 @@ class AutoBackup(context: Context, private val scope: CoroutineScope) {
     }
 
     /**
+     * Records why a sync failed: the plain reason for Settings › Backup, and where and how for the
+     * diagnostic log (provider authority, step, exception classes, what the provider says it
+     * supports; never the file's contents).
+     */
+    private fun fail(step: SyncStep, error: Throwable, uri: Uri, extra: Map<String, String> = emptyMap()) {
+        val flags = BackupFiles.flags(app, uri)
+        // The flags when the provider gives them; else a grant that reads but doesn't write says it.
+        val canWrite = flags?.let { it and DocumentsContract.Document.FLAG_SUPPORTS_WRITE != 0 }
+            ?: if (hasGrant(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) && !hasGrant(uri, Intent.FLAG_GRANT_WRITE_URI_PERMISSION)) false else null
+        val listed = BackupFiles.exists(app, uri)
+        val problem = SyncDiagnosis.problemFor(step, error, listed, canWrite)
+        settings.backupProblem = problem
+        runCatching {
+            val (size, modified) = BackupFiles.stat(app, uri)
+            val permission = app.contentResolver.persistedUriPermissions.firstOrNull { it.uri == uri }
+            val facts = extra + mapOf(
+                "Listed" to listed.toString(),
+                "Flags" to (flags?.let { "0x" + Integer.toHexString(it) + (if (canWrite == true) " write" else "") + (if (it and DocumentsContract.Document.FLAG_SUPPORTS_DELETE != 0) " delete" else "") } ?: "unknown"),
+                "Size known" to (size != null).toString(),
+                "Modified known" to (modified != null).toString(),
+                "Persisted" to (permission?.let { "read=${it.isReadPermission} write=${it.isWritePermission}" } ?: "none"),
+            )
+            CrashLog.forContext(app).recordSync(
+                SyncDiagnosis.report(step, error, problem, uri.authority, facts),
+                SyncDiagnosis.signature(step, error, uri.authority),
+                versionName(),
+                "${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})",
+            )
+        }
+    }
+
+    /**
      * Reads the shared file when its size, modified time or hash moved since we last saw it, and
      * merges it into the database. An empty file (just created) holds nothing to merge. Throws when
-     * the file can't be read or isn't a backup.
+     * the file can't be read or isn't a backup. Returns how many bytes it read, or null when the
+     * file was unchanged and not read.
      */
-    private suspend fun pull(uri: Uri, repository: SnippetRepository) {
+    private suspend fun pull(uri: Uri, repository: SnippetRepository): Long? {
         val (size, modified) = BackupFiles.stat(app, uri)
         if (size != null && modified != null && settings.syncRemoteHash != null &&
             size == settings.syncRemoteSize && modified == settings.syncRemoteModified
         ) {
-            return
+            return null
         }
         val copy = BackupFiles.copyIn(app, uri)
         try {
+            val length = copy.length()
             val hash = BackupFiles.sha256Hex(copy)
-            if (hash == settings.syncRemoteHash || copy.length() == 0L) {
+            if (hash == settings.syncRemoteHash || length == 0L) {
                 remember(uri, copy)
-                return
+                return length
             }
-            val remote = SnippetBackup.decodeState(BackupArchive.readJson(copy))
+            if (SyncDiagnosis.isStaleRead(hash, settings.syncReplacedHash, settings.syncRemoteHash)) {
+                // The provider's cache, not news: neither merge it nor write over what it hides.
+                throw StaleRead()
+            }
+            val json = try {
+                BackupArchive.readJson(copy)
+            } catch (error: Exception) {
+                throw BrokenArchive(error)
+            }
+            val remote = SnippetBackup.decodeState(json)
             val result = SyncMerge.merge(SyncBase.load(app), repository.syncState(), remote, System.currentTimeMillis())
             val images = ImageStore.forContext(app).imagesDir()
             val zip = BackupArchive.isZip(copy)
@@ -186,6 +254,7 @@ class AutoBackup(context: Context, private val scope: CoroutineScope) {
             SyncBase.save(app, SnippetBackup.encodeState(remote))
             settings.backupFingerprint = SnippetBackup.fingerprint(remote)
             remember(uri, copy)
+            return length
         } finally {
             copy.delete()
         }
@@ -205,8 +274,21 @@ class AutoBackup(context: Context, private val scope: CoroutineScope) {
         scope.launch { runCatching { backUp(force = false) } }
     }
 
-    private fun hasPermission(uri: Uri): Boolean =
+    private fun isPersisted(uri: Uri): Boolean =
         app.contentResolver.persistedUriPermissions.any { it.uri == uri && it.isWritePermission && it.isReadPermission }
+
+    /** The picker's grant, which outlives the activity but not a restart. */
+    private fun hasGrant(
+        uri: Uri,
+        flags: Int = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+    ): Boolean = app.checkUriPermission(uri, Process.myPid(), Process.myUid(), flags) == PackageManager.PERMISSION_GRANTED
+
+    private fun versionName(): String = try {
+        @Suppress("DEPRECATION")
+        app.packageManager.getPackageInfo(app.packageName, 0).versionName ?: "unknown"
+    } catch (_: Exception) {
+        "unknown"
+    }
 
     private fun release(uri: Uri) {
         runCatching {

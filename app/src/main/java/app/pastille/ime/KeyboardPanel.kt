@@ -84,6 +84,7 @@ import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.PhotoCamera
 import androidx.compose.material.icons.rounded.Screenshot
 import androidx.compose.material.icons.rounded.GridView
+import androidx.compose.material.icons.automirrored.rounded.KeyboardReturn
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
@@ -204,10 +205,10 @@ data class KeyboardUiState(
     val stickersEnabled: Boolean = true,
     val recentClips: List<RecentClip> = emptyList(),
     val clipboardEnabled: Boolean = false,
-    val clipboardOpen: Boolean = false,
 ) {
     val enabledModes: Set<KeyboardMode>
         get() = buildSet {
+            if (clipboardEnabled) add(KeyboardMode.Clipboard)
             if (snippetsEnabled) add(KeyboardMode.Snippets)
             if (stickersEnabled) add(KeyboardMode.Stickers)
             if (imagesEnabled) add(KeyboardMode.Images)
@@ -216,7 +217,6 @@ data class KeyboardUiState(
 
 interface KeyboardActions {
     fun onModeChange(mode: KeyboardMode) {}
-    fun onOpenClipboard() {}
     fun onOpenFolder(categoryId: Long?) {}
     fun onBack() {}
     fun onOpenAdd() {}
@@ -333,84 +333,94 @@ private fun Toolbar(state: KeyboardUiState, actions: KeyboardActions, title: Str
     val reduceMotion = LocalReduceMotion.current
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
         val compactTabs = maxWidth < 400.dp
-        Row(
+        AnimatedContent(
+            targetState = title,
+            transitionSpec = {
+                if (reduceMotion) {
+                    EnterTransition.None togetherWith ExitTransition.None
+                } else {
+                    fadeIn(tween(150, delayMillis = 60)) togetherWith fadeOut(tween(90))
+                }
+            },
             modifier = Modifier.fillMaxWidth().height(TOOLBAR_HEIGHT_DP.dp).background(palette.strip),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(modifier = Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.CenterStart) {
-                AnimatedContent(
-                    targetState = title,
-                    transitionSpec = {
-                        if (reduceMotion) {
-                            EnterTransition.None togetherWith ExitTransition.None
-                        } else {
-                            fadeIn(tween(150, delayMillis = 60)) togetherWith fadeOut(tween(90))
-                        }
-                    },
-                    contentAlignment = Alignment.CenterStart,
-                    label = "toolbarLeading",
-                ) { current ->
-                    if (current == null) {
-                        if (state.enabledModes.size > 1 || state.clipboardEnabled) {
-                            ModeSwitch(
-                                mode = state.mode,
-                                enabled = state.enabledModes,
-                                onChange = actions::onModeChange,
-                                compact = compactTabs,
-                                clipboard = state.clipboardEnabled,
-                                clipboardOpen = state.clipboardOpen,
-                                onClipboard = actions::onOpenClipboard,
-                            )
-                        }
-                    } else {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(onClick = actions::onBack) {
-                                Icon(
-                                    Icons.AutoMirrored.Rounded.ArrowBack,
-                                    contentDescription = "Back",
-                                    tint = palette.icon,
-                                )
-                            }
-                            Text(
-                                text = current,
-                                style = MaterialTheme.typography.titleSmall,
-                                color = palette.label,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
+            label = "toolbar",
+        ) { current ->
+            if (current == null) {
+                // Browsing: the tools at the start, the content tabs at the end, where the thumb lands.
+                Row(modifier = Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+                    Row(modifier = Modifier.padding(start = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        ToolbarAction(icon = Icons.Rounded.Settings, label = "Keyboard settings", onClick = actions::onOpenSettings)
+                        SwitchKeyboardAction(actions)
+                        ContextAction(state, actions)
+                    }
+                    Spacer(Modifier.weight(1f))
+                    if (state.enabledModes.size > 1) {
+                        ModeSwitch(
+                            mode = state.mode,
+                            enabled = state.enabledModes,
+                            onChange = actions::onModeChange,
+                            compact = compactTabs,
+                            modifier = Modifier.padding(end = 8.dp),
+                        )
                     }
                 }
-            }
-            Row(
-                modifier = Modifier.padding(end = 4.dp),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-                    when {
-                        state.clipboardOpen -> if (state.recentClips.isNotEmpty()) {
-                            ToolbarAction(icon = Icons.Rounded.DeleteSweep, label = "Clear clipboard", onClick = actions::onClearClips)
+            } else {
+                // A titled view: back and title at the start, the tools at the end.
+                Row(modifier = Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+                    Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = actions::onBack) {
+                            Icon(
+                                Icons.AutoMirrored.Rounded.ArrowBack,
+                                contentDescription = "Back",
+                                tint = palette.icon,
+                            )
                         }
-                        state.mode == KeyboardMode.Snippets ->
-                            ToolbarAction(icon = Icons.Rounded.Add, label = "New snippet", onClick = actions::onOpenAdd)
-                        state.mode == KeyboardMode.Stickers ->
-                            ToolbarAction(icon = Icons.Rounded.Add, label = "Add stickers", onClick = actions::onAddStickers)
-                        else -> Unit
+                        Text(
+                            text = current,
+                            style = MaterialTheme.typography.titleSmall,
+                            color = palette.label,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    Row(modifier = Modifier.padding(end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        ContextAction(state, actions)
+                        SwitchKeyboardAction(actions)
+                        ToolbarAction(icon = Icons.Rounded.Settings, label = "Keyboard settings", onClick = actions::onOpenSettings)
                     }
                 }
-                // A long press opens Android's keyboard picker, for any keyboard rather than the usual one.
-                ToolbarAction(
-                    icon = Icons.Rounded.Keyboard,
-                    label = "Switch keyboard",
-                    onClick = actions::onSwitchKeyboard,
-                    onLongClick = actions::onPickKeyboard,
-                    onLongClickLabel = "Choose a keyboard",
-                )
-                ToolbarAction(icon = Icons.Rounded.Settings, label = "Keyboard settings", onClick = actions::onOpenSettings)
             }
         }
     }
+}
+
+// What the shown tab adds or clears; a fixed 48dp slot, so nothing beside it moves when it empties.
+@Composable
+private fun ContextAction(state: KeyboardUiState, actions: KeyboardActions) {
+    Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+        when (state.mode) {
+            KeyboardMode.Clipboard -> if (state.recentClips.isNotEmpty()) {
+                ToolbarAction(icon = Icons.Rounded.DeleteSweep, label = "Clear clipboard", onClick = actions::onClearClips)
+            }
+            KeyboardMode.Snippets ->
+                ToolbarAction(icon = Icons.Rounded.Add, label = "New snippet", onClick = actions::onOpenAdd)
+            KeyboardMode.Stickers ->
+                ToolbarAction(icon = Icons.Rounded.Add, label = "Add stickers", onClick = actions::onAddStickers)
+            KeyboardMode.Images -> Unit
+        }
+    }
+}
+
+// A long press opens Android's keyboard picker, for any keyboard rather than the usual one.
+@Composable
+private fun SwitchKeyboardAction(actions: KeyboardActions) {
+    ToolbarAction(
+        icon = Icons.Rounded.Keyboard,
+        label = "Switch keyboard",
+        onClick = actions::onSwitchKeyboard,
+        onLongClick = actions::onPickKeyboard,
+        onLongClickLabel = "Choose a keyboard",
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -537,11 +547,7 @@ private fun PanelContent(
         label = "panel",
     ) { panel ->
         when (panel) {
-            PanelState.Browse -> if (state.clipboardOpen) {
-                ClipboardContent(clips = state.recentClips, actions = actions)
-            } else {
-                BrowseContent(state = state, actions = actions)
-            }
+            PanelState.Browse -> BrowseContent(state = state, actions = actions)
             PanelState.Add -> AddContent(
                 sources = state.addSources,
                 categories = state.categories,
@@ -593,6 +599,7 @@ private fun BrowseContent(state: KeyboardUiState, actions: KeyboardActions) {
         label = "mode",
     ) { mode ->
         when (mode) {
+            KeyboardMode.Clipboard -> ClipboardContent(clips = state.recentClips, actions = actions)
             KeyboardMode.Snippets -> FolderContent(state = state, actions = actions)
             KeyboardMode.Stickers -> StickersContent(state = state, actions = actions)
             KeyboardMode.Images -> ImagesContent(state = state, actions = actions)
@@ -1337,6 +1344,7 @@ private fun SettingsContent(state: KeyboardUiState, actions: KeyboardActions) {
             PanelHeight.entries.forEach { height ->
                 FilterToggleChip(
                     label = height.label,
+                    icon = heightGlyph(height),
                     selected = height == state.heightPreset,
                     onClick = { actions.onSetHeight(height) },
                 )
@@ -1349,6 +1357,8 @@ private fun SettingsContent(state: KeyboardUiState, actions: KeyboardActions) {
                 val on = mode in enabled
                 FilterToggleChip(
                     label = mode.label,
+                    icon = modeIcon(mode),
+                    checks = true,
                     selected = on,
                     onClick = { if (canSwitchOff(mode, enabled)) actions.onSetModeEnabled(mode, !on) },
                 )
@@ -1356,11 +1366,13 @@ private fun SettingsContent(state: KeyboardUiState, actions: KeyboardActions) {
         }
         SettingsHeading("After inserting")
         SettingsSwitchRow(
+            icon = Icons.AutoMirrored.Rounded.KeyboardReturn,
             headline = "Return after a snippet",
             checked = state.returnAfterSnippet,
             onChange = { actions.onSetReturn(image = false, enabled = it) },
         )
         SettingsSwitchRow(
+            icon = Icons.Rounded.Image,
             headline = "Return after an image",
             checked = state.returnAfterImage,
             onChange = { actions.onSetReturn(image = true, enabled = it) },
@@ -1460,10 +1472,12 @@ private fun ChipLine(content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun SettingsSwitchRow(headline: String, checked: Boolean, onChange: (Boolean) -> Unit, enabled: Boolean = true) {
+private fun SettingsSwitchRow(icon: ImageVector, headline: String, checked: Boolean, onChange: (Boolean) -> Unit, enabled: Boolean = true) {
     val palette = LocalKeyboardPalette.current
     ListItem(
         headlineContent = { Text(headline, color = palette.label) },
+        // The app Settings' plain glyph: 24dp, monochrome, no tile.
+        leadingContent = { Icon(icon, contentDescription = null, tint = palette.icon) },
         trailingContent = {
             Switch(
                 checked = checked,

@@ -181,44 +181,34 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 internal fun modeIcon(mode: KeyboardMode): ImageVector = when (mode) {
+    KeyboardMode.Clipboard -> Icons.Rounded.ContentPaste
     KeyboardMode.Snippets -> Icons.AutoMirrored.Rounded.ShortText
     KeyboardMode.Stickers -> Icons.Rounded.EmojiEmotions
     KeyboardMode.Images -> Icons.Rounded.Image
 }
 
-// Icon pills in bar order; only the selected one shows its label, and under 400dp none do.
+// Icon pills in bar order; only the selected one shows its label, and under 400dp none do. The
+// clipboard stays icon-only even selected, so four tabs and three tools fit at 411dp too; selected,
+// it wears the same pill as the others (a shape, not only a colour).
 @Composable
 internal fun ModeSwitch(
     mode: KeyboardMode,
     enabled: Set<KeyboardMode>,
     onChange: (KeyboardMode) -> Unit,
     compact: Boolean = false,
-    clipboard: Boolean = false,
-    clipboardOpen: Boolean = false,
-    onClipboard: () -> Unit = {},
+    modifier: Modifier = Modifier,
 ) {
     Row(
-        modifier = Modifier.padding(start = 8.dp).selectableGroup(),
+        modifier = modifier.selectableGroup(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         KeyboardMode.entries.filter { it in enabled }.forEach { tab ->
             ModeTab(
                 icon = modeIcon(tab),
                 label = tab.label,
-                selected = mode == tab && !clipboardOpen,
-                showLabel = mode == tab && !clipboardOpen && !compact,
+                selected = mode == tab,
+                showLabel = mode == tab && tab.isContent && !compact,
             ) { onChange(tab) }
-        }
-        // The clipboard is its own view, like Gboard's: always icon-only, so four tabs and three
-        // actions fit at 360dp; selected, it wears the same pill as a tab (a shape, not only a colour).
-        if (clipboard) {
-            ModeTab(
-                icon = Icons.Rounded.ContentPaste,
-                label = "Clipboard",
-                selected = clipboardOpen,
-                showLabel = false,
-                onClick = onClipboard,
-            )
         }
     }
 }
@@ -567,16 +557,23 @@ internal fun ThumbPlaceholder(shimmer: Boolean, content: @Composable () -> Unit 
 }
 
 @Composable
-internal fun FilterToggleChip(label: String, selected: Boolean, onClick: () -> Unit, icon: ImageVector? = null) {
+// With [checks], an on/off choice: on, the glyph gives way to a check and the label gets heavier,
+// so the state is a shape as well as the fill.
+internal fun FilterToggleChip(label: String, selected: Boolean, onClick: () -> Unit, icon: ImageVector? = null, checks: Boolean = false) {
     val palette = LocalKeyboardPalette.current
     FilterChip(
         selected = selected,
         onClick = onClick,
-        label = { Text(label) },
+        label = {
+            Text(
+                label,
+                fontWeight = if (checks && selected) androidx.compose.ui.text.font.FontWeight.SemiBold else null,
+            )
+        },
         leadingIcon = if (icon != null) {
             {
                 Icon(
-                    icon,
+                    if (checks && selected) Icons.Rounded.Check else icon,
                     contentDescription = null,
                     modifier = Modifier.size(FilterChipDefaults.IconSize),
                 )
@@ -591,6 +588,7 @@ internal fun FilterToggleChip(label: String, selected: Boolean, onClick: () -> U
             selectedContainerColor = palette.stripButton,
             selectedLabelColor = palette.onStripButton,
             selectedLeadingIconColor = palette.onStripButton,
+            iconColor = palette.icon,
         ),
         border = null,
     )

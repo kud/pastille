@@ -1,5 +1,7 @@
 package app.pastille.redesign
 
+import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.performTouchInput
 import android.app.Application
 import android.content.Context
 import android.graphics.Bitmap
@@ -31,6 +33,7 @@ import app.pastille.ime.keyboardPalette
 import app.pastille.model.CategoryRecord
 import app.pastille.qr.QrScreen
 import app.pastille.qr.SnippetQr
+import app.pastille.ime.PanelState
 import app.pastille.settings.KeyboardMode
 import app.pastille.settings.KeyboardStyle
 import app.pastille.share.ShareSheet
@@ -88,11 +91,13 @@ abstract class RedesignRenders(private val dark: Boolean, private val screen: St
     }
     @Test fun render() = when (screen) {
         "list" -> list()
+        "list-wide" -> list()
         "editor" -> editor()
         "settings" -> settings()
         "stickers" -> stickers()
         "keyboard" -> keyboard()
         "clipboard" -> keyboard(clipboard = true)
+        "keyboard-settings" -> keyboard(settingsPanel = true)
         "share" -> share()
         "qr" -> qr()
         "import" -> importOne()
@@ -133,7 +138,13 @@ abstract class RedesignRenders(private val dark: Boolean, private val screen: St
     private fun list() {
         seed(); PastilleSettings.forContext(app).appStickersMode = false
         compose.setContent { PastilleTheme(darkTheme = dark) { SnippetListScreen(repository = repository, onCreate = {}, onEdit = {}, onOpenSettings = {}) } }
-        wait("Running late"); capture("list")
+        val wide = compose.activity.resources.configuration.screenWidthDp >= 400
+        wait("Running late"); capture(if (wide) "list-wide" else "list")
+        if (wide) {
+            // The folder row's end, where the new-folder chip sits beside the folders.
+            compose.onAllNodesWithText("Replies")[0].performTouchInput { swipeLeft() }
+            settle(); capture("list-wide-end")
+        }
     }
     private fun editor() {
         val ids = seed()
@@ -161,7 +172,7 @@ abstract class RedesignRenders(private val dark: Boolean, private val screen: St
         compose.setContent { PastilleTheme(darkTheme = dark) { SnippetListScreen(repository = repository, onCreate = {}, onEdit = {}, onOpenSettings = {}) } }
         settle(); settle(); capture("stickers")
     }
-    private fun keyboard(clipboard: Boolean = false) {
+    private fun keyboard(clipboard: Boolean = false, settingsPanel: Boolean = false) {
         val now = System.currentTimeMillis()
         val state = KeyboardUiState(
             darkTheme = dark,
@@ -184,7 +195,9 @@ abstract class RedesignRenders(private val dark: Boolean, private val screen: St
                 RecentClip(3, "See you at the station at 6", now - 900_000),
             ),
             clipboardEnabled = true,
-            clipboardOpen = clipboard,
+            mode = if (clipboard) KeyboardMode.Clipboard else KeyboardMode.Snippets,
+            panelState = if (settingsPanel) PanelState.Settings else PanelState.Browse,
+            stickersEnabled = !settingsPanel,
         )
         compose.setContent {
             PastilleTheme(darkTheme = dark) {
@@ -194,13 +207,16 @@ abstract class RedesignRenders(private val dark: Boolean, private val screen: St
                     contentAlignment = androidx.compose.ui.Alignment.BottomCenter,
                 ) {
                     KeyboardTheme(palette = palette) {
-                        KeyboardPanel(state = state, actions = NoKeyboardActions, contentHeight = 300.dp)
+                        // The settings panel scrolls in 300dp; the render opens it tall to show every row at once.
+                        KeyboardPanel(state = state, actions = NoKeyboardActions, contentHeight = if (settingsPanel) 600.dp else 300.dp)
                     }
                 }
             }
         }
         val wide = if (compose.activity.resources.configuration.screenWidthDp >= 400) "-wide" else ""
-        if (clipboard) {
+        if (settingsPanel) {
+            wait("Show in the keyboard"); capture("keyboard-settings$wide")
+        } else if (clipboard) {
             wait("Order #48213 ships Thursday"); capture("clipboard$wide")
         } else {
             wait("Running late"); capture("keyboard$wide")
@@ -302,6 +318,7 @@ abstract class RedesignRenders(private val dark: Boolean, private val screen: St
 // Robolectric's native canvas aborts the process when several renders share one.
 class ListDark : RedesignRenders(true, "list")
 class ListLight : RedesignRenders(false, "list")
+@Config(qualifiers = "w411dp-h860dp-xxhdpi") class ListWideDark : RedesignRenders(true, "list-wide")
 class EditorDark : RedesignRenders(true, "editor")
 class EditorLight : RedesignRenders(false, "editor")
 class SettingsDark : RedesignRenders(true, "settings")
@@ -314,6 +331,9 @@ class KeyboardLight : RedesignRenders(false, "keyboard")
 class ClipboardDark : RedesignRenders(true, "clipboard")
 class ClipboardLight : RedesignRenders(false, "clipboard")
 @Config(qualifiers = "w411dp-h860dp-xxhdpi") class KeyboardWideDark : RedesignRenders(true, "keyboard")
+class KeyboardSettingsDark : RedesignRenders(true, "keyboard-settings")
+class KeyboardSettingsLight : RedesignRenders(false, "keyboard-settings")
+@Config(qualifiers = "w411dp-h860dp-xxhdpi") class KeyboardSettingsWideDark : RedesignRenders(true, "keyboard-settings")
 class ShareDark : RedesignRenders(true, "share")
 class ShareLight : RedesignRenders(false, "share")
 class QrLight : RedesignRenders(false, "qr")

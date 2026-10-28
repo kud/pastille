@@ -107,7 +107,6 @@ class PastilleImeService :
 
     private val panelState = mutableStateOf<PanelState>(PanelState.Browse)
     private val mode = mutableStateOf(KeyboardMode.Snippets)
-    private val clipboardOpen = mutableStateOf(false)
     private val folderId = mutableStateOf<Long?>(null)
     private val sourceId = mutableStateOf<Long?>(null)
     private val pickerStyle = mutableStateOf(KeyboardStyle.Auto)
@@ -205,10 +204,6 @@ class PastilleImeService :
                 }
                 panelState.value != PanelState.Browse -> {
                     panelState.value = PanelState.Browse
-                    return true
-                }
-                clipboardOpen.value -> {
-                    clipboardOpen.value = false
                     return true
                 }
                 shownMode() == KeyboardMode.Snippets && folderId.value != null -> {
@@ -376,19 +371,13 @@ class PastilleImeService :
     }
 
     private fun showSnippet(id: Long, categoryId: Long?) {
-        clipboardOpen.value = false
         mode.value = KeyboardMode.Snippets
         settings.keyboardMode = KeyboardMode.Snippets
         onOpenFolder(categoryId)
         highlightedSnippetId.value = id
     }
 
-    override fun onOpenClipboard() {
-        clipboardOpen.value = !clipboardOpen.value
-    }
-
     override fun onModeChange(mode: KeyboardMode) {
-        clipboardOpen.value = false
         this.mode.value = mode
         settings.keyboardMode = mode
     }
@@ -574,6 +563,8 @@ class PastilleImeService :
 
     override fun onSetModeEnabled(mode: KeyboardMode, enabled: Boolean) {
         settings.setModeEnabled(mode, enabled)
+        // Off means nothing kept: clips are memory only, so clearing them is all there is to delete.
+        if (mode == KeyboardMode.Clipboard && !enabled) recentClipboard.clear()
     }
 
     // Importing needs the photo picker, which a keyboard can't host: the app opens on Stickers and launches it.
@@ -656,7 +647,7 @@ class PastilleImeService :
         val snippetsOn = remember(settingsTick) { settings.snippetsEnabled }
         val imagesOn = remember(settingsTick) { settings.imagesEnabled }
         val stickersOn = remember(settingsTick) { settings.stickersEnabled }
-        val recentOn = remember(settingsTick) { settings.recentClipboard }
+        val recentOn = remember(settingsTick) { settings.clipboardEnabled }
         val recentState by recentClipboard.state.collectAsState()
         val shownMode = effectiveMode(mode.value, remember(settingsTick) { settings.enabledModes() })
         val enabledSourceIds = remember(settingsTick) { settings.enabledImageSources }
@@ -692,7 +683,6 @@ class PastilleImeService :
             stickersEnabled = stickersOn,
             recentClips = if (recentOn) recentState.clips else emptyList(),
             clipboardEnabled = recentOn,
-            clipboardOpen = recentOn && clipboardOpen.value,
             snippets = snippets,
             stickers = stickers,
             categories = categories,

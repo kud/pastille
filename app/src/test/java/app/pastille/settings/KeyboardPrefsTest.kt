@@ -67,7 +67,7 @@ class KeyboardPrefsTest {
 
     @Test
     fun `each mode switched off on its own gives way to the first enabled one`() {
-        val all = KeyboardMode.entries.toSet()
+        val all = KeyboardMode.content.toSet()
         assertEquals(KeyboardMode.Stickers, effectiveMode(KeyboardMode.Snippets, all - KeyboardMode.Snippets))
         assertEquals(KeyboardMode.Snippets, effectiveMode(KeyboardMode.Stickers, all - KeyboardMode.Stickers))
         assertEquals(KeyboardMode.Snippets, effectiveMode(KeyboardMode.Images, all - KeyboardMode.Images))
@@ -97,5 +97,32 @@ class KeyboardPrefsTest {
     @Test
     fun `unknown keys and the stickers key resolve`() {
         assertEquals(KeyboardMode.Stickers, KeyboardMode.fromKey("stickers"))
+    }
+
+    @Test
+    fun `the clipboard leads the bar and is not a content tab`() {
+        assertEquals(KeyboardMode.Clipboard, KeyboardMode.entries.first())
+        assertEquals(listOf(KeyboardMode.Snippets, KeyboardMode.Stickers, KeyboardMode.Images), KeyboardMode.content)
+        assertEquals(KeyboardMode.Clipboard, KeyboardMode.fromKey("clipboard"))
+    }
+
+    @Test
+    fun `the keyboard reopens on the clipboard when it was the last tab used`() {
+        val all = KeyboardMode.entries.toSet()
+        assertEquals(KeyboardMode.Clipboard, effectiveMode(KeyboardMode.Clipboard, all))
+    }
+
+    @Test
+    fun `a switched-off tab never falls back to the clipboard`() {
+        val clipAndImages = setOf(KeyboardMode.Clipboard, KeyboardMode.Images)
+        assertEquals(KeyboardMode.Images, effectiveMode(KeyboardMode.Snippets, clipAndImages))
+        assertEquals(KeyboardMode.Snippets, effectiveMode(KeyboardMode.Clipboard, KeyboardMode.content.toSet()))
+    }
+
+    @Test
+    fun `the clipboard can always go and never counts as the last tab`() {
+        assertEquals(true, canSwitchOff(KeyboardMode.Clipboard, setOf(KeyboardMode.Clipboard, KeyboardMode.Snippets)))
+        assertEquals(false, canSwitchOff(KeyboardMode.Snippets, setOf(KeyboardMode.Clipboard, KeyboardMode.Snippets)))
+        assertEquals(true, canSwitchOff(KeyboardMode.Snippets, setOf(KeyboardMode.Clipboard, KeyboardMode.Snippets, KeyboardMode.Images)))
     }
 }

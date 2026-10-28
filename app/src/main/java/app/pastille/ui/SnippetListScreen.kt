@@ -1,5 +1,8 @@
 package app.pastille.ui
 
+import androidx.compose.foundation.layout.offset
+import app.pastille.settings.KeyboardMode
+import app.pastille.ime.modeIcon
 import androidx.compose.material.icons.rounded.Keyboard
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.ui.semantics.heading
@@ -22,7 +25,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
@@ -1045,7 +1047,7 @@ internal fun SnippetRow(
                     modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp)
                         .combinedClickable(onClick = onEdit, onLongClick = { menuOpen = true })
                         .padding(start = 16.dp, end = 4.dp, top = 12.dp, bottom = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                    verticalAlignment = Alignment.Top,
                 ) {
                     ImageThumbnail(
                         fileName = imageFile,
@@ -1056,28 +1058,22 @@ internal fun SnippetRow(
                     )
                     Spacer(modifier = Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        TitleAndTime(title = snippet.title.ifBlank { "Image" }, snippet = snippet)
+                        CardTitle(snippet.title.ifBlank { "Image" })
                         Spacer(modifier = Modifier.height(6.dp))
                         SnippetMetaRow(snippet = snippet, categoryName = categoryName)
                     }
-                    IconButton(onClick = onCopy) {
-                        Icon(
-                            imageVector = Icons.Rounded.ContentCopy,
-                            contentDescription = "Copy ${snippet.title.ifBlank { "Image" }}",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
+                    TimeAndCopy(snippet = snippet, copyLabel = "Copy ${snippet.title.ifBlank { "Image" }}", onCopy = onCopy)
                 }
             } else {
                 Row(
                     modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp)
                         .combinedClickable(onClick = onEdit, onLongClick = { menuOpen = true })
                         .padding(start = 16.dp, end = 4.dp, top = 12.dp, bottom = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                    verticalAlignment = Alignment.Top,
                 ) {
                 Column(modifier = Modifier.weight(1f).animateContentSize()) {
                     val title = remember(snippet.title, snippet.text) { rowTitle(snippet.title, snippet.text) }
-                    TitleAndTime(title = title, snippet = snippet)
+                    CardTitle(title)
                     if (snippet.text.trim() != title) {
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
@@ -1106,13 +1102,11 @@ internal fun SnippetRow(
                         SnippetMetaRow(snippet = snippet, categoryName = categoryName)
                     }
                 }
-                IconButton(onClick = onCopy) {
-                    Icon(
-                        imageVector = Icons.Rounded.ContentCopy,
-                        contentDescription = "Copy ${rowTitle(snippet.title, snippet.text).ifBlank { "snippet" }}",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                TimeAndCopy(
+                    snippet = snippet,
+                    copyLabel = "Copy ${rowTitle(snippet.title, snippet.text).ifBlank { "snippet" }}",
+                    onCopy = onCopy,
+                )
                 }
             }
             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
@@ -1391,30 +1385,49 @@ private fun hasMeta(snippet: SnippetRecord, categoryName: String?): Boolean =
     snippet.tags.isNotEmpty() || snippet.sticker || categoryName != null ||
         snippetKind(snippet.isImage, snippet.text) != SnippetKind.Text
 
-/** Sacha's card head: the title, medium weight, and the time right-aligned on the same line ("5 min"). */
+/** The card's title, medium weight, one line. */
 @Composable
-private fun TitleAndTime(title: String, snippet: SnippetRecord) {
-    Row(verticalAlignment = Alignment.Top) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
-        Spacer(modifier = Modifier.width(8.dp))
+private fun CardTitle(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.onSurface,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
+}
+
+/**
+ * The card's right column, one unit on the title's line: the time ("5 min", "2 h"), then copy. The
+ * 48dp button is pulled up by half the difference between it and the title's 24sp line, so the time,
+ * the glyph and the title share one centre (Erwann, 2026-10-28: « Bizarre l'alignement », when the
+ * time sat on the title and copy floated lower, centred on the card). The glyph sits 16dp from the
+ * card's edge, the same as the title's start.
+ */
+@Composable
+private fun TimeAndCopy(snippet: SnippetRecord, copyLabel: String, onCopy: () -> Unit) {
+    Row(
+        modifier = Modifier.offset(y = (-12).dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Text(
             text = relativeTime(
                 then = snippet.updatedAt.takeIf { it > 0 } ?: snippet.createdAt,
                 now = System.currentTimeMillis(),
             ).removeSuffix(" ago"),
-            // Tabular figures, so "5 min" and "28 h" sit on the same column edge down the list.
+            // Tabular figures, so "5 min" and "28 h" end on the same column edge down the list.
             style = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum"),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
-            modifier = Modifier.padding(top = 2.dp, end = 4.dp),
+            modifier = Modifier.padding(start = 8.dp),
         )
+        IconButton(onClick = onCopy) {
+            Icon(
+                imageVector = Icons.Rounded.ContentCopy,
+                contentDescription = copyLabel,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 
@@ -1531,6 +1544,16 @@ private fun ModeSwitch(stickers: Boolean, enabled: Boolean, onSelect: (Boolean) 
                     inactiveBorderColor = MaterialTheme.colorScheme.outline,
                 ),
                 modifier = Modifier.heightIn(min = 48.dp),
+                // The keyboard tab's glyph; the selected half swaps it for the check, as in the share sheet.
+                icon = {
+                    SegmentedButtonDefaults.Icon(active = stickers == value) {
+                        Icon(
+                            modeIcon(if (value) KeyboardMode.Stickers else KeyboardMode.Snippets),
+                            contentDescription = null,
+                            modifier = Modifier.size(SegmentedButtonDefaults.IconSize),
+                        )
+                    }
+                },
                 label = { Text(label, maxLines = 1) },
             )
         }
@@ -1717,18 +1740,23 @@ private fun SearchField(
 @Composable
 private fun rememberListDrivenScrollBehavior(): TopAppBarScrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
 
-/** Sacha: the folder row ends with a round outlined "+" that creates a folder. */
+/**
+ * The folder row ends with a "+" that creates a folder, built as one of the row's own chips: 36dp tall
+ * in a 48dp target, the chips' stadium shape and unselected fill, so it shares their height, centre and
+ * edges (Erwann, 2026-10-28: the outlined 36dp circle read taller and foreign beside them).
+ */
 @Composable
 private fun AddFolderChip(onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     Box(
         modifier = Modifier
             .minimumInteractiveComponentSize()
-            .size(36.dp)
+            .height(36.dp)
             .clip(CircleShape)
-            .border(1.dp, colors.outline, CircleShape)
+            .background(colors.surfaceContainerHigh)
             .clickable(role = Role.Button, onClickLabel = "New folder", onClick = onClick)
-            .semantics { contentDescription = "New folder" },
+            .semantics { contentDescription = "New folder" }
+            .padding(horizontal = 14.dp),
         contentAlignment = Alignment.Center,
     ) {
         Icon(Icons.Rounded.Add, contentDescription = null, tint = colors.onSurface, modifier = Modifier.size(20.dp))

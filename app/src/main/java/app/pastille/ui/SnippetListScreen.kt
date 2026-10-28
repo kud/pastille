@@ -216,8 +216,12 @@ fun SnippetListScreen(
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     val flow = remember { repository.observeSnippets() }
-    val snippets by flow.collectAsStateWithLifecycle(initialValue = emptyList())
-    val stickers by remember { repository.observeStickers() }.collectAsStateWithLifecycle(initialValue = emptyList())
+    // null until the first read, so the screen never shows "No snippets yet" (or no tag row) for a
+    // frame and then jumps to the real list: nothing below the folder row draws before it loads.
+    val loadedSnippets by flow.collectAsStateWithLifecycle(initialValue = null as List<SnippetRecord>?)
+    val snippets = loadedSnippets.orEmpty()
+    val loadedStickers by remember { repository.observeStickers() }.collectAsStateWithLifecycle(initialValue = null as List<SnippetRecord>?)
+    val stickers = loadedStickers.orEmpty()
     var query by rememberSaveable { mutableStateOf("") }
     var searching by rememberSaveable { mutableStateOf(false) }
     var refreshTick by remember { mutableStateOf(0) }
@@ -237,6 +241,7 @@ fun SnippetListScreen(
     val loadedCategories by remember { repository.observeCategories() }
         .collectAsStateWithLifecycle(initialValue = null as List<CategoryRecord>?)
     val categories = loadedCategories.orEmpty()
+    val loaded = loadedSnippets != null && loadedStickers != null && loadedCategories != null
     var showCreateFolder by remember { mutableStateOf(false) }
     var organisingId by rememberSaveable { mutableStateOf<Long?>(null) }
     // The folder the snippet had when the sheet opened, for the snackbar's Undo.
@@ -731,7 +736,7 @@ fun SnippetListScreen(
                         onAdd = { showCreateFolder = true },
                     )
                 }
-                if (tagsInUse.isNotEmpty() && !reordering && !onStickers) {
+                if (loaded && tagsInUse.isNotEmpty() && !reordering && !onStickers) {
                     TagFilterRow(
                         tags = tagsInUse,
                         selected = selectedTags.toSet(),
@@ -749,7 +754,9 @@ fun SnippetListScreen(
                     label = "listMode",
                     modifier = Modifier.fillMaxSize(),
                 ) { showGrid ->
-                    if (showGrid) {
+                    if (!loaded) {
+                        Box(modifier = Modifier.fillMaxSize())
+                    } else if (showGrid) {
                         StickerManageGrid(
                             stickers = stickers,
                             reordering = reordering,

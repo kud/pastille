@@ -1,6 +1,8 @@
 package app.pastille.ui
 
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.draw.alpha
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -26,6 +28,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.pastille.ime.LocalReduceMotion
@@ -67,33 +70,36 @@ internal fun FolderChip(
         contentAlignment = Alignment.Center,
     ) {
         val tint = if (selected) colors.onSecondaryContainer else colors.onSurface
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            // Sacha: "All" keeps its grid glyph; a folder shows its glyph only when selected, so the
-            // selection is a shape and a heavier label as well as a fill, never colour alone.
-            if (alwaysIcon) {
-                Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(6.dp))
-            } else {
-                AnimatedVisibility(
-                    visible = selected,
-                    enter = PastilleMotion.glyphEnter(reduceMotion),
-                    exit = PastilleMotion.glyphExit(reduceMotion),
-                ) {
-                    Row {
-                        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                    }
-                }
-            }
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelLarge.copy(
-                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                ),
-                color = tint,
-                maxLines = 1,
-            )
+        // Selecting never changes the chip's width, so the row never reflows (Erwann, 2026-10-28:
+        // « ça jump »). Both looks are laid out on top of each other, the box takes the wider (the
+        // selected one, glyph and heavier label), and only their opacity moves. Sacha: "All" keeps its
+        // grid glyph; a folder shows its glyph only when selected, so selection is a shape and a heavier
+        // label as well as a fill, never colour alone.
+        val selectedAlpha by animateFloatAsState(
+            targetValue = if (selected) 1f else 0f,
+            animationSpec = if (reduceMotion) tween(150) else PastilleMotion.screenSpring(),
+            label = "chipSelection",
+        )
+        Box(contentAlignment = Alignment.Center) {
+            ChipFace(label, icon, showIcon = true, bold = true, tint = tint, modifier = Modifier.alpha(selectedAlpha))
+            ChipFace(label, icon, showIcon = alwaysIcon, bold = false, tint = tint, modifier = Modifier.alpha(1f - selectedAlpha).clearAndSetSemantics {})
         }
     }
 }
 
+
+@Composable
+private fun ChipFace(label: String, icon: ImageVector, showIcon: Boolean, bold: Boolean, tint: androidx.compose.ui.graphics.Color, modifier: Modifier) {
+    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+        if (showIcon) {
+            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+        }
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge.copy(fontWeight = if (bold) FontWeight.SemiBold else FontWeight.Normal),
+            color = tint,
+            maxLines = 1,
+        )
+    }
+}

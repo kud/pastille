@@ -76,7 +76,9 @@ import kotlinx.coroutines.launch
 fun BinScreen(repository: SnippetRepository, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
-    val binned by remember { repository.observeBin() }.collectAsStateWithLifecycle(initialValue = emptyList())
+    // null until the first read: no "Bin is empty" flash before the bin's rows arrive.
+    val loadedBin by remember { repository.observeBin() }.collectAsStateWithLifecycle(initialValue = null)
+    val binned = loadedBin.orEmpty()
     val categories by remember { repository.observeCategories() }
         .collectAsStateWithLifecycle(initialValue = emptyList<CategoryRecord>())
     val folderNames = remember(categories) { categories.associate { it.id to it.name } }
@@ -145,7 +147,7 @@ fun BinScreen(repository: SnippetRepository, onBack: () -> Unit) {
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                 )
             }
-            if (binned.isEmpty()) {
+            if (loadedBin != null && binned.isEmpty()) {
                 item(key = "empty") {
                     EmptyState(
                         icon = Icons.Rounded.DeleteOutline,

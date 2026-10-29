@@ -29,7 +29,7 @@ F-Droid then finds the tag (`UpdateCheckMode: Tags ^v[0-9]+\.[0-9]+\.[0-9]+$`), 
 
 ## Dev pre-releases and version codes
 
-Every update of `main` gets the next `vX.Y.Z-dev.N` pre-release, with no go-ahead needed (Erwann, 2026-10-29: « Oui, une pré-version à chaque main »), so the newest link always carries what `main` holds. X.Y.Z is the next final release; N counts up from 1 and starts again after it. A final release still waits for his word.
+Every update of `main` gets the next `vX.Y.Z-dev.N` pre-release on its own (Erwann, 2026-10-29: « Oui, une pré-version à chaque main »), so the newest link always carries what `main` holds: once the checks pass on the push, the `dev-prerelease` job queues a run of this workflow with that tag. X.Y.Z is the patch after the current `versionName`; N is one more than the highest existing tag for it. Pushes that touch only `docs/` or Markdown, and a final release's bump commit, are skipped. A final release still waits for his word.
 
 
 `versionCode` is a plain counter that F-Droid and the changelogs key on, so there is no number between two releases. A dev build keeps the shipped `versionCode` and only changes its name (`PASTILLE_VERSION_NAME`), signed with the same key: it installs over the last release (same code), a later dev build installs over it, and the next final release (code + 1) replaces it.

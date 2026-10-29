@@ -249,3 +249,38 @@ jobs:
           flags=(--verify-tag --title "$TAG" --notes-file "$RUNNER_TEMP/out/notes.md")
           [ "$PRERELEASE" = "false" ] || flags+=(--prerelease)
           gh release create "$TAG" "$RUNNER_TEMP/out/pastille-$version.apk" "${flags[@]}"
+
+  # Every update of main gets the next vX.Y.Z-dev.N pre-release (Erwann, 2026-10-29), through the
+  # same manual path above: once the checks pass, this asks for a run with the tag, which a
+  # workflow token may do (workflow_dispatch is exempt from GitHub's no-recursion rule). Pushes
+  # that touch only docs, and the final release's own bump commit, are skipped.
+  dev-prerelease:
+    name: Queue the next dev pre-release
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && !startsWith(github.event.head_commit.message, '🏷️ release')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Pick the tag and queue the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          changed=$(git diff --name-only "$BEFORE" "$GITHUB_SHA" 2>/dev/null || echo unknown)
+          if [ -n "$changed" ] && ! grep -qvE '^(docs/|.*\.md$)' <<<"$changed"; then
+            echo "Only docs changed: no pre-release."; exit 0
+          fi
+          current=$(sed -n 's/^ *versionName = "\([^"]*\)"$/\1/p' app/build.gradle.kts)
+          IFS=. read -r major minor patch <<<"$current"
+          next="$major.$minor.$((patch + 1))"
+          last=$(git tag -l "v$next-dev.*" | sed 's/.*-dev\.//' | sort -n | tail -n 1)
+          tag="v$next-dev.$(( ${last:-0} + 1 ))"
+          echo "Queueing $tag for $GITHUB_SHA" | tee -a "$GITHUB_STEP_SUMMARY"
+          gh workflow run ci.yml --ref main -f tag="$tag"

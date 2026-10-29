@@ -2,6 +2,8 @@ package app.pastille.redesign
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.drawable.Animatable
+import android.os.Looper
 import android.view.ContextThemeWrapper
 import androidx.test.core.app.ApplicationProvider
 import app.pastille.R
@@ -9,15 +11,16 @@ import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.File
+import java.time.Duration
 
 /**
- * The launch screen as the window draws it before Android 12 (drawable/splash_window.xml under
- * Theme.Pastille.Starting): ground, navy disc, mark and the wordmark 60dp above the bottom, where
- * Android 12+ puts its branding image. A render of the drawable, not a device capture: the system's
- * own Android 12+ splash isn't drawn here. Runs only with PASTILLE_RENDERS=<dir>.
+ * The launch screen as Theme.Pastille.Starting lays it out: the ground, then splash_icon (mark, navy
+ * disc and "Pastille") at 288dp in the centre, the Android 12+ assembly run to its end. A render of
+ * the drawables, not a device capture. Runs only with PASTILLE_RENDERS=<dir>.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -27,21 +30,21 @@ abstract class SplashRenders(private val name: String) {
         assumeTrue(dir != null)
         val themed = ContextThemeWrapper(ApplicationProvider.getApplicationContext(), R.style.Theme_Pastille_Starting)
         val metrics = themed.resources.displayMetrics
-        // The pre-12 layer list, layer for layer from the same drawables: the offline Robolectric jars are
-        // API 31+, where drawable-v31/splash_window.xml (the plain ground) wins.
         val bitmap = Bitmap.createBitmap(metrics.widthPixels, metrics.heightPixels, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
-        val compat = requireNotNull(themed.getDrawable(androidx.core.splashscreen.R.drawable.compat_splash_screen))
-        compat.setBounds(0, 0, bitmap.width, bitmap.height)
-        compat.draw(canvas)
-        val dp = metrics.density
-        val word = requireNotNull(themed.getDrawable(R.drawable.splash_wordmark))
-        val w = (200 * dp).toInt()
-        val h = (80 * dp).toInt()
-        val left = (bitmap.width - w) / 2
-        val bottom = bitmap.height - (60 * dp).toInt()
-        word.setBounds(left, bottom - h, left + w, bottom)
-        word.draw(canvas)
+        canvas.drawColor(themed.getColor(R.color.splash_background))
+        val icon = requireNotNull(themed.getDrawable(R.drawable.splash_icon))
+        val size = (288 * metrics.density).toInt()
+        val left = (bitmap.width - size) / 2
+        val top = (bitmap.height - size) / 2
+        icon.setBounds(left, top, left + size, top + size)
+        (icon as? Animatable)?.let {
+            it.start()
+            icon.draw(canvas) // a software canvas runs the animation on the main looper
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(2))
+            canvas.drawColor(themed.getColor(R.color.splash_background))
+        }
+        icon.draw(canvas)
         writePng(bitmap, File(dir!!, "redesign-splash-$name.png"))
     }
 }

@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
@@ -211,12 +210,11 @@ fun PickerSheet(
                             },
                         )
                         if (enabledModes.size > 1) {
-                            BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                            Box(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                                 ModeSwitch(
                                     mode = mode,
                                     enabled = enabledModes,
                                     onChange = actions::onModeChange,
-                                    compact = maxWidth < 400.dp,
                                     modifier = Modifier.padding(start = 8.dp),
                                 )
                             }

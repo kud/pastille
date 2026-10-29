@@ -333,8 +333,7 @@ private fun previewTitle(image: ImageItem, source: ImageSource?): String {
 private fun Toolbar(state: KeyboardUiState, actions: KeyboardActions, title: String?) {
     val palette = LocalKeyboardPalette.current
     val reduceMotion = LocalReduceMotion.current
-    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-        val compactTabs = maxWidth < 400.dp
+    Box(modifier = Modifier.fillMaxWidth()) {
         AnimatedContent(
             targetState = title,
             transitionSpec = {
@@ -361,7 +360,6 @@ private fun Toolbar(state: KeyboardUiState, actions: KeyboardActions, title: Str
                             mode = state.mode,
                             enabled = state.enabledModes,
                             onChange = actions::onModeChange,
-                            compact = compactTabs,
                             modifier = Modifier.padding(end = 8.dp),
                         )
                     }

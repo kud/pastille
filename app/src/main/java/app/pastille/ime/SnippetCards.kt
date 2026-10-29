@@ -141,6 +141,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.layout.onPlaced
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.material3.ripple
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -185,67 +192,106 @@ internal fun modeIcon(mode: KeyboardMode): ImageVector = when (mode) {
     KeyboardMode.Images -> Icons.Rounded.Image
 }
 
-// Icon pills in bar order; only the selected one shows its label, and under 400dp none do. The
-// clipboard stays icon-only even selected, so four tabs and three tools fit at 411dp too; selected,
-// it wears the same pill as the others (a shape, not only a colour).
+// Glyph tabs in bar order, every one the same 48dp whatever is selected, so choosing a tab never
+// reflows the bar (Erwann, 2026-10-29: the label that grew in on the selected tab, and never on the
+// clipboard, made the switch jump). One pill slides between them on the house spring; with reduced
+// motion it fades in place. TalkBack reads each tab's name and selection.
 @Composable
 internal fun ModeSwitch(
     mode: KeyboardMode,
     enabled: Set<KeyboardMode>,
     onChange: (KeyboardMode) -> Unit,
-    compact: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
+    val palette = LocalKeyboardPalette.current
+    val reduceMotion = LocalReduceMotion.current
+    val tabs = KeyboardMode.entries.filter { it in enabled }
+    // How much of the pill each tab holds: the outgoing and incoming tabs run the same critically damped
+    // spring from 1 and 0, so their shares always sum to one and the pill travels without overshoot.
+    val shares = tabs.associateWith { tab ->
+        animateFloatAsState(
+            targetValue = if (tab == mode) 1f else 0f,
+            animationSpec = if (reduceMotion) tween(PastilleMotion.SHORT_MS) else PastilleMotion.screenSpring(0.001f),
+            label = "modeShare",
+        )
+    }
+    val bounds = remember { mutableStateMapOf<KeyboardMode, Rect>() }
     Row(
-        modifier = modifier.selectableGroup(),
+        modifier = modifier
+            .selectableGroup()
+            .drawBehind {
+                if (reduceMotion) {
+                    // Opacity only: the pill fades out of one tab and into the other.
+                    tabs.forEach { tab ->
+                        val share = shares.getValue(tab).value
+                        val rect = bounds[tab] ?: return@forEach
+                        if (share > 0f) drawRoundRect(palette.stripButton.copy(alpha = palette.stripButton.alpha * share), rect.topLeft, rect.size, CornerRadius(rect.height / 2))
+                    }
+                } else {
+                    var left = 0f; var top = 0f; var right = 0f; var bottom = 0f; var total = 0f
+                    tabs.forEach { tab ->
+                        val share = shares.getValue(tab).value
+                        val rect = bounds[tab] ?: return@forEach
+                        left += rect.left * share; top += rect.top * share
+                        right += rect.right * share; bottom += rect.bottom * share; total += share
+                    }
+                    if (total > 0f) {
+                        val rect = Rect(left / total, top / total, right / total, bottom / total)
+                        drawRoundRect(palette.stripButton, rect.topLeft, rect.size, CornerRadius(rect.height / 2))
+                    }
+                }
+            },
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        KeyboardMode.entries.filter { it in enabled }.forEach { tab ->
+        tabs.forEach { tab ->
             ModeTab(
                 icon = modeIcon(tab),
                 label = tab.label,
                 selected = mode == tab,
-                showLabel = mode == tab && tab.isContent && !compact,
+                share = { shares.getValue(tab).value },
+                onPlaced = { bounds[tab] = it },
             ) { onChange(tab) }
         }
     }
 }
 
 @Composable
-private fun ModeTab(icon: ImageVector, label: String, selected: Boolean, showLabel: Boolean, onClick: () -> Unit) {
+private fun ModeTab(
+    icon: ImageVector,
+    label: String,
+    selected: Boolean,
+    share: () -> Float,
+    onPlaced: (Rect) -> Unit,
+    onClick: () -> Unit,
+) {
     val palette = LocalKeyboardPalette.current
-    val reduceMotion = LocalReduceMotion.current
-    val background by animateColorAsState(
-        targetValue = if (selected) palette.stripButton else Color.Transparent,
-        animationSpec = tween(PastilleMotion.EXIT_MS),
-        label = "modePill",
-    )
-    val tint = if (selected) palette.onStripButton else palette.icon
-    Row(
+    Box(
         modifier = Modifier
             .minimumInteractiveComponentSize()
-            .height(32.dp)
+            .size(width = 48.dp, height = 32.dp)
+            .onPlaced { coordinates ->
+                val parent = coordinates.parentLayoutCoordinates ?: return@onPlaced
+                onPlaced(parent.localBoundingBoxOf(coordinates, clipBounds = false))
+            }
             .clip(RoundedCornerShape(50))
-            .background(background)
-            .selectable(selected = selected, role = Role.Tab, onClick = onClick)
-            .semantics { contentDescription = label }
-            .animateContentSize(
-                if (reduceMotion) snap() else tween(PastilleMotion.SHORT_MS, easing = PastilleMotion.Standard),
+            // The quiet ripple on touch, inside the pill's shape; never the app's focus ring here.
+            .selectable(
+                selected = selected,
+                interactionSource = null,
+                indication = ripple(),
+                role = Role.Tab,
+                onClick = onClick,
             )
-            .padding(horizontal = if (showLabel) 12.dp else 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
-        if (showLabel) {
-            Spacer(Modifier.width(6.dp))
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelLarge,
-                color = tint,
-                maxLines = 1,
-                modifier = Modifier.clearAndSetSemantics { },
-            )
-        }
+        Icon(
+            icon,
+            contentDescription = null,
+            // The glyph's colour follows the pill under it, frame by frame.
+            tint = lerp(palette.icon, palette.onStripButton, share().coerceIn(0f, 1f)),
+            modifier = Modifier.size(20.dp),
+        )
     }
 }
 

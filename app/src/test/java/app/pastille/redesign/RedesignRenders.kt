@@ -503,7 +503,7 @@ private fun Bubble(text: String, mine: Boolean) {
     }
 }
 
-private fun writePng(bitmap: Bitmap, file: File) {
+internal fun writePng(bitmap: Bitmap, file: File) {
     val w = bitmap.width; val h = bitmap.height
     val px = IntArray(w * h).also { bitmap.getPixels(it, 0, w, 0, 0, w, h) }
     val raw = ByteArrayOutputStream()

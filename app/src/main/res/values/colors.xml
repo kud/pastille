@@ -7,4 +7,6 @@
     <color name="ic_launcher_ink">#0B3A78</color>
     <!-- The list's ground (Theme.kt background), so the splash fades into the first screen. -->
     <color name="splash_background">#F2F5F9</color>
+    <!-- The splash wordmark: the list's onSurface, so it reads like the header's. -->
+    <color name="splash_wordmark">#161B22</color>
 </resources>

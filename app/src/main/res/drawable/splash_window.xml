@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The launch window before Android 12: core-splashscreen's own drawing (ground, navy disc, mark),
+    plus the wordmark where Android 12+ puts its branding image, 60dp above the bottom edge.
+    core-splashscreen has no branding slot of its own. Android 12+: drawable-v31/splash_window.xml.
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@drawable/compat_splash_screen" />
+    <item
+        android:width="200dp"
+        android:height="80dp"
+        android:bottom="60dp"
+        android:gravity="bottom|center_horizontal"
+        android:drawable="@drawable/splash_wordmark" />
+</layer-list>

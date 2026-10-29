@@ -113,6 +113,7 @@ class MainActivity : ComponentActivity() {
         splash.setOnExitAnimationListener { provider ->
             entrance.start()
             val ground = provider.view
+            keepWordmark(ground)
             if (PastilleMotion.reduceMotion()) {
                 ground.animate().alpha(0f).setDuration(PastilleMotion.EXIT_MS.toLong())
                     .withEndAction { provider.remove() }.start()
@@ -126,6 +127,30 @@ class MainActivity : ComponentActivity() {
         }
         // A safety net: should the exit listener never run, the list must not stay invisible.
         window.decorView.postDelayed({ entrance.start() }, SPLASH_CAP_MS + 400)
+    }
+
+    /**
+     * Before Android 12 the wordmark lives in the launch window's drawing (drawable/splash_window.xml),
+     * but core-splashscreen's exit view redraws only the ground and the mark, so the word would vanish
+     * the moment the exit starts. Put it back in the same spot, so it leaves with the ground. Android
+     * 12+ keeps its branding image in the exit view on its own.
+     */
+    private fun keepWordmark(ground: android.view.View) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) return
+        val frame = ground as? android.widget.FrameLayout ?: return
+        val dp = resources.displayMetrics.density
+        val word = android.widget.ImageView(this).apply {
+            setImageResource(R.drawable.splash_wordmark)
+            importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }
+        frame.addView(
+            word,
+            android.widget.FrameLayout.LayoutParams(
+                (200 * dp).toInt(),
+                (80 * dp).toInt(),
+                android.view.Gravity.BOTTOM or android.view.Gravity.CENTER_HORIZONTAL,
+            ).apply { bottomMargin = (60 * dp).toInt() },
+        )
     }
 
     // Coming back reads the synced file, so changes from the other phone show up.

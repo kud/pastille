@@ -14,8 +14,8 @@ import java.io.IOException
  * if not, it creates it. It never creates a second one: a provider that appends " (1)" to a name it
  * already holds only gets asked to create when the listing holds no exact match.
  *
- * Not every storage app offers folders: Google Drive's provider doesn't show in the folder picker,
- * so the single-file pick stays as the fallback.
+ * Not every storage app offers folders, so the single-file pick stays as the fallback. Google
+ * Drive does (seen on Erwann's phone, 2026-10-29, though older reports said it didn't).
  */
 object SyncFolder {
 

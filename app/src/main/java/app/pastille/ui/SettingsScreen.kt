@@ -675,8 +675,8 @@ private fun BackupGroup(settings: PastilleSettings) {
             }
         }
     }
-    // The fallback for storage apps whose provider offers no folders (Google Drive): one existing
-    // file, the same one on both phones. Never a "create" here, which made the duplicates.
+    // The fallback for storage apps whose provider offers no folders: one existing file, the same
+    // one on both phones.
     // Erwann, 2026-10-29: where no folder can be picked, the same Sync flow offers both choosing the
     // existing file and creating one. A created file is written at once, through the verified path.
     var placeChoice by remember { mutableStateOf(false) }
@@ -881,9 +881,9 @@ private fun BackupGroup(settings: PastilleSettings) {
 /**
  * Where to sync, asked once when Sync turns on (Erwann, 2026-10-29: one tap, one choice, one picker).
  * Android has no picker that both opens an existing file and creates one, and Drive can't say
- * whether a file already exists, so the choice is the user's. The existing file comes first, so
- * creating a second where one exists takes a deliberate tap; the folder, which finds or creates
- * the file by itself, is last because Google Drive doesn't offer folders.
+ * whether a file already exists, so the choice is the user's. The folder leads: it finds or creates
+ * the file by itself, and Google Drive offers folders after all (Erwann, 2026-10-29). The existing
+ * file comes before creating one, so a second file where one exists takes a deliberate tap.
  */
 @Composable
 private fun SyncPlaceDialog(onExisting: () -> Unit, onCreate: () -> Unit, onFolder: () -> Unit, onCancel: () -> Unit) {
@@ -892,9 +892,9 @@ private fun SyncPlaceDialog(onExisting: () -> Unit, onCreate: () -> Unit, onFold
         title = { Text(SYNC_PLACE_TITLE) },
         text = {
             Column {
+                SyncPlaceOption(SYNC_FOLDER_TITLE, SYNC_FOLDER_SUBTITLE, onFolder)
                 SyncPlaceOption(SYNC_EXISTING_TITLE, SYNC_EXISTING_SUBTITLE, onExisting)
                 SyncPlaceOption(SYNC_CREATE_TITLE, SYNC_CREATE_SUBTITLE, onCreate)
-                SyncPlaceOption(SYNC_FOLDER_TITLE, SYNC_FOLDER_SUBTITLE, onFolder)
             }
         },
         confirmButton = {},

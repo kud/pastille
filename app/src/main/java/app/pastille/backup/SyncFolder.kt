@@ -64,20 +64,19 @@ object SyncFolder {
             DocumentsContract.Document.COLUMN_LAST_MODIFIED,
             DocumentsContract.Document.COLUMN_MIME_TYPE,
         )
-        val listed = resolver.query(children, columns, null, null, null)?.use { cursor ->
-            buildList {
-                while (cursor.moveToNext()) {
-                    val id = cursor.getString(0) ?: continue
-                    add(
-                        Child(
-                            documentId = id,
-                            name = cursor.getString(1),
-                            modified = SyncDiagnosis.knownModified(if (cursor.isNull(2)) null else cursor.getLong(2)),
-                            isDirectory = cursor.getString(3) == DocumentsContract.Document.MIME_TYPE_DIR,
-                        ),
-                    )
-                }
+        val listed: List<Child> = resolver.query(children, columns, null, null, null)?.use { cursor ->
+            val found = mutableListOf<Child>()
+            while (cursor.moveToNext()) {
+                val id: String = cursor.getString(0) ?: continue
+                val modified: Long? = if (cursor.isNull(2)) null else cursor.getLong(2)
+                found += Child(
+                    documentId = id,
+                    name = cursor.getString(1),
+                    modified = SyncDiagnosis.knownModified(modified),
+                    isDirectory = cursor.getString(3) == DocumentsContract.Document.MIME_TYPE_DIR,
+                )
             }
+            found
         } ?: throw IOException("Folder listing unavailable")
         when (val choice = choose(listed)) {
             is Choice.Use -> Resolved(DocumentsContract.buildDocumentUriUsingTree(tree, choice.documentId), false, choice.matches, choice.modified)

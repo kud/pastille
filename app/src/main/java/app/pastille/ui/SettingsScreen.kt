@@ -106,6 +106,7 @@ import app.pastille.backup.BackupArchive
 import app.pastille.backup.BackupFiles
 import app.pastille.backup.ImportConfirmDialog
 import app.pastille.backup.SyncDiagnosis
+import app.pastille.backup.SyncFolder
 import app.pastille.backup.importInBackground
 import app.pastille.ime.ImageSourceReader
 import app.pastille.ime.KeyboardHeightPreview
@@ -676,6 +677,19 @@ private fun BackupGroup(settings: PastilleSettings) {
     }
     // The fallback for storage apps whose provider offers no folders (Google Drive): one existing
     // file, the same one on both phones. Never a "create" here, which made the duplicates.
+    // Erwann, 2026-10-29: where no folder can be picked, the same Sync flow offers both choosing the
+    // existing file and creating one. A created file is written at once, through the verified path.
+    var placeChoice by remember { mutableStateOf(false) }
+    val created = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(BackupArchive.MIME)) { picked ->
+        if (picked != null) {
+            scope.launch {
+                busy = true
+                val outcome = autoBackup.choose(picked, justCreated = true)
+                busy = false
+                if (outcome == AutoBackup.Outcome.Written) say("Synced")
+            }
+        }
+    }
     val existing = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { picked ->
         if (picked != null) {
             scope.launch {
@@ -728,22 +742,12 @@ private fun BackupGroup(settings: PastilleSettings) {
             icon = if (on && problem != null) Icons.Rounded.ErrorOutline else Icons.Rounded.Sync,
             destructive = on && problem != null,
             modifier = Modifier.toggleable(value = on, enabled = !busy, role = Role.Switch) { want ->
-                if (want) folderChooser.launch(null) else autoBackup.stop()
+                if (want) placeChoice = true else autoBackup.stop()
             },
             trailing = { PastilleSwitch(checked = on) },
         )
         SettingsHairline()
-        if (uri == null) {
-            SettingsRow(
-                title = "Sync a single file instead",
-                subtitle = "For apps that can't share a folder, like Google Drive",
-                icon = Icons.Rounded.FileOpen,
-                enabled = !busy,
-                unavailable = if (busy) "Working on it…" else null,
-                modifier = Modifier.clickable(enabled = !busy) { existing.launch(zipTypes) },
-                trailing = { SettingsChevron() },
-            )
-        } else {
+        if (uri != null) {
             SettingsRow(
                 title = "Sync now",
                 icon = Icons.Rounded.Refresh,
@@ -787,18 +791,17 @@ private fun BackupGroup(settings: PastilleSettings) {
             SettingsHairline()
             val duplicates = if (inFolder) duplicatesNote(matches, picked) else null
             SettingsRow(
-                title = if (inFolder) "Choose another folder" else "Use a folder instead",
+                title = "Change where it syncs",
                 subtitle = when {
                     actionable -> status
                     duplicates != null -> duplicates
-                    inFolder -> "Pick a different folder, or fix access to this one"
-                    else -> "Pastille keeps one file in a folder you choose"
+                    else -> "Another file or folder, or fix access to this one"
                 },
                 icon = if (actionable || duplicates != null) Icons.Rounded.ErrorOutline else Icons.Rounded.Backup,
                 destructive = actionable,
                 enabled = !busy,
                 unavailable = if (busy) "Working on it…" else null,
-                modifier = Modifier.clickable(enabled = !busy) { folderChooser.launch(null) },
+                modifier = Modifier.clickable(enabled = !busy) { placeChoice = true },
                 trailing = { SettingsChevron() },
             )
         }
@@ -843,6 +846,23 @@ private fun BackupGroup(settings: PastilleSettings) {
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(horizontal = 32.dp),
     )
+    if (placeChoice) {
+        SyncPlaceDialog(
+            onExisting = {
+                placeChoice = false
+                existing.launch(zipTypes)
+            },
+            onCreate = {
+                placeChoice = false
+                created.launch(SyncFolder.FILE_NAME)
+            },
+            onFolder = {
+                placeChoice = false
+                folderChooser.launch(null)
+            },
+            onCancel = { placeChoice = false },
+        )
+    }
     restoring?.let { (file, counts) ->
         ImportConfirmDialog(
             counts = counts,
@@ -855,5 +875,42 @@ private fun BackupGroup(settings: PastilleSettings) {
                 file.delete()
             },
         )
+    }
+}
+
+/**
+ * Where to sync, asked once when Sync turns on (Erwann, 2026-10-29: one tap, one choice, one picker).
+ * Android has no picker that both opens an existing file and creates one, and Drive can't say
+ * whether a file already exists, so the choice is the user's. The existing file comes first, so
+ * creating a second where one exists takes a deliberate tap; the folder, which finds or creates
+ * the file by itself, is last because Google Drive doesn't offer folders.
+ */
+@Composable
+private fun SyncPlaceDialog(onExisting: () -> Unit, onCreate: () -> Unit, onFolder: () -> Unit, onCancel: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text(SYNC_PLACE_TITLE) },
+        text = {
+            Column {
+                SyncPlaceOption(SYNC_EXISTING_TITLE, SYNC_EXISTING_SUBTITLE, onExisting)
+                SyncPlaceOption(SYNC_CREATE_TITLE, SYNC_CREATE_SUBTITLE, onCreate)
+                SyncPlaceOption(SYNC_FOLDER_TITLE, SYNC_FOLDER_SUBTITLE, onFolder)
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onCancel) { Text("Cancel") } },
+    )
+}
+
+@Composable
+private fun SyncPlaceOption(title: String, subtitle: String, onClick: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(vertical = 12.dp),
+    ) {
+        Text(title, style = MaterialTheme.typography.titleMedium)
+        Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

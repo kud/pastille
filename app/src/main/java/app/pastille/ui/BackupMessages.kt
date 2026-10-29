@@ -104,9 +104,17 @@ fun backupStatus(
 }
 
 const val SYNC_NOTE =
-    "To sync two phones, choose the same folder on both. Pastille keeps one file in it, " +
-        app.pastille.backup.SyncFolder.FILE_NAME + ", and never makes a second. " +
-        "On Google Drive, export a backup once, then sync that single file on both."
+    "To sync two phones, start a sync file on one and choose that same file on the other. " +
+        "Pastille merges both ways and never makes a second file on its own."
+
+const val SYNC_PLACE_TITLE = "Where should Pastille sync?"
+const val SYNC_EXISTING_TITLE = "I already have a pastille file"
+const val SYNC_EXISTING_SUBTITLE =
+    "Pick the " + app.pastille.backup.SyncFolder.FILE_NAME + " your other phone syncs with. Its snippets are merged in"
+const val SYNC_CREATE_TITLE = "Start a new sync file"
+const val SYNC_CREATE_SUBTITLE = "For the first phone only. If one already exists, choose it above instead"
+const val SYNC_FOLDER_TITLE = "Choose a folder"
+const val SYNC_FOLDER_SUBTITLE = "Pastille uses the file in it, or creates one. Not available in Google Drive"
 
 /** The status line's name for the synced place: the folder, or the file marked as a single file. */
 fun syncPlaceName(folderName: String?, fileName: String, inFolder: Boolean): String =

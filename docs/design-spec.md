@@ -110,7 +110,7 @@ FilterChip(
 - [ ] FAB: `ExtendedFloatingActionButton(text = { Text("New snippet") }, icon = { Icon(Icons.Filled.Add, null) })`.
 - [ ] Scaffold: `contentWindowInsets = WindowInsets.safeDrawing`; FAB gets `Modifier.imePadding()` so it sits above the keyboard.
 - [ ] The search field doesn't autofocus on launch. An empty list doesn't need a keyboard.
-- [ ] App empty state (replaces "No snippets yet. Tap + to add your first one."): centred `Column`, `bodyLarge` "No snippets yet" in `onSurfaceVariant`, 16dp spacer, `FilledTonalButton("Add your first snippet")` that opens the editor. Don't point at a control that isn't guaranteed to be on screen.
+- [ ] App empty state (replaces "No snippets yet. Tap + to add your first one."): centred `Column`, `bodyLarge` "No snippets yet" in `onSurfaceVariant`, 16dp spacer, `FilledTonalButton("New snippet")` that opens the editor (§23). Don't point at a control that isn't guaranteed to be on screen.
 - [ ] With search active and no results: "No snippets match "<query>"" in `bodyMedium`, no button.
 
 ## 5. Screenshot thumbnails and the blank-tile placeholder
@@ -958,7 +958,7 @@ The owner, twice: "a bit too neon" (Android 16, cyan FAB `#00C4FF` and links) an
 - [ ] ⚠ **Check first:** `#D0BCFF` and `#4F378B` are _exactly_ M3's static baseline dark `primary` and `primaryContainer`. A real purple wallpaper rarely lands on those values, so on their Android 12 phone the editor or the whole app is probably not getting dynamic colour (a screen outside `PastilleTheme`, or `dynamicColor = false` somewhere). Confirm that every activity, the editor and the share sheet are wrapped in `PastilleTheme`, or the fix won't reach them.
 - [ ] The FAB keeps its default colours (`primaryContainer`); don't set `containerColor`. In dark it becomes a muted slate tint of the wallpaper with pale text, a step above the surface.
 - [ ] The focused text field keeps the M3 2dp outline. The change from a 1dp `outline` to a 2dp pale `primary` (T80, low chroma) is still clearly visible, so focus stays obvious without the glow.
-- [ ] "Add your first snippet" (`FilledTonalButton`, `secondaryContainer`) is unchanged; it was already accent2.
+- [ ] The empty state's "New snippet" (`FilledTonalButton`, `secondaryContainer`) is unchanged; it was already accent2.
 - [ ] Contrast: T90 on T30, T20 on T80 and T10 on T90 all clear 4.5:1 for labels; check once on device in both themes.
 
 **Keyboard consistency.** The keyboard doesn't change. In its Material You style (§11.9) it's built from accent1 at T10 and T20, which are near-neutral at those tones. Its only accent is the small T40 "active" circle, the same "accent in small doses" rule. The app and panel share the wallpaper's hue family and the same restraint; the app's accents are simply a shade quieter. The Gboard Dark and Light styles (§11.1–§11.2) are fixed palettes and are unaffected.
@@ -1305,3 +1305,7 @@ Sacha's mock-up (`docs/design/pastille-sacha-ui-2026-10-28.png`: list, editor, s
 ### Store images (0.1.6)
 
 One command regenerates the six F-Droid screenshots, the README's images, fastlane's `icon.png` (512) and `assets/icon.png` / `icon-monochrome.png` (1024): `./scripts/store-images.sh` (extra arguments go to Gradle, e.g. `--offline`). It renders the real composables on invented data, light theme, 1080×2340, through `RedesignRenders.kt` (`ListLight`, `StoreKeyboard`, `StoreClipboard`, `StickersLight`, `EditorLight`, `SettingsLight`, `StoreIcon`), and copies only once every render exists. The keyboard shots sit under an invented chat with Sam, not any real app's chrome. The feature graphic is Sacha's and never touched by the script. The sticker render decodes its stickers once on the test thread before the cards do on `Dispatchers.IO`: the first native decode on a worker aborted the JVM (exit 134, JniConstants "Class not found: java/nio/FloatBuffer").
+
+## 23. Wording: New and Add (Iris, 2026-10-29)
+
+Erwann asked why it was "New snippet" but "Add stickers" (« Ça se tient »). The two verbs are deliberate. **New** makes something from scratch: an editor opens, empty. **Add** brings in what already exists: a picker opens, several at once. Each action keeps one label wherever it appears. A snippet is always "New snippet" (keyboard toolbar tooltip, the Add view's title, both keyboard empty states, the app FAB, both app empty states). Stickers are always "Add stickers" (toolbar, keyboard empty state, FAB). No "Add a snippet", "Add your first snippet" or "Add a snippet here". A new action follows the same test: does it open a blank editor or a picker?

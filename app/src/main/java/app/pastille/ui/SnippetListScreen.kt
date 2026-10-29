@@ -752,13 +752,13 @@ fun SnippetListScreen(
                                         icon = Icons.Rounded.Inbox,
                                         title = "No snippets yet",
                                         body = "Save the things you type again and again, then paste them from the keyboard.",
-                                        action = "Add your first snippet",
+                                        action = "New snippet",
                                         onAction = { onCreate(selectedFolderId) },
                                     )
                                     else -> EmptyState(
                                         icon = Icons.Rounded.FolderOpen,
                                         title = "Nothing in this folder yet",
-                                        action = "Add a snippet here",
+                                        action = "New snippet",
                                         onAction = { onCreate(selectedFolderId) },
                                     )
                                 }

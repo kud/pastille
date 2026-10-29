@@ -679,7 +679,7 @@ private fun SnippetsPage(state: KeyboardUiState, folderId: Long?, actions: Keybo
         )
         items.isEmpty() -> EmptyState(
             message = "No snippets yet",
-            button = "Add a snippet",
+            button = "New snippet",
             onClick = actions::onOpenAdd,
         )
         else -> SnippetGrid(

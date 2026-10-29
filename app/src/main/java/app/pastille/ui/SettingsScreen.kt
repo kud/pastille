@@ -652,21 +652,30 @@ private fun BackupGroup(settings: PastilleSettings) {
 
     fun say(message: String) = Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
 
-    // ACTION_CREATE_DOCUMENT rather than a folder: Google Drive offers no folder picker, but it does
-    // create and keep a single file, and that file's grant can be made persistable.
-    val chooser = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument(BackupArchive.MIME),
-    ) { picked ->
-        if (picked != null) {
+    val folderUri = remember(version) { settings.syncFolderUri }
+    val folderName = remember(version) { settings.syncFolderName }
+    val matches = remember(version) { settings.syncFolderMatches }
+    val picked = remember(version) { settings.syncFolderPicked }
+
+    // Sync with a folder (Erwann, 2026-10-29): one pick, and Pastille merges with the file it finds
+    // there by name or creates it, never a second one. The switch only shows on once a folder is
+    // actually chosen; cancelling the picker leaves it off (Iris).
+    val folderChooser = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { tree ->
+        if (tree != null) {
             scope.launch {
                 busy = true
-                val outcome = autoBackup.choose(picked, justCreated = true)
+                val outcome = autoBackup.chooseFolder(tree)
                 busy = false
-                if (outcome == AutoBackup.Outcome.Written) say("Synced")
+                when (outcome) {
+                    null -> say(FOLDER_UNREADABLE)
+                    AutoBackup.Outcome.Written, AutoBackup.Outcome.Unchanged -> say("Synced")
+                    else -> Unit
+                }
             }
         }
     }
-    // The second phone picks the file the first one created, so both read and write the same one.
+    // The fallback for storage apps whose provider offers no folders (Google Drive): one existing
+    // file, the same one on both phones. Never a "create" here, which made the duplicates.
     val existing = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { picked ->
         if (picked != null) {
             scope.launch {
@@ -702,7 +711,10 @@ private fun BackupGroup(settings: PastilleSettings) {
         // Sacha's switch, with a check on its thumb (Iris, 2026-10-28). On opens the file chooser,
         // since there is nothing to sync until a file exists; off forgets the file and leaves it be.
         val on = uri != null
-        val status = uri?.let { backupStatus(name, lastAt, problem, System.currentTimeMillis(), SyncDiagnosis.providerLabel(Uri.parse(it).authority)) }
+        val inFolder = folderUri != null
+        val place = syncPlaceName(folderName, name, inFolder)
+        val choose = if (inFolder) "a folder" else "a file"
+        val status = uri?.let { backupStatus(place, lastAt, problem, System.currentTimeMillis(), SyncDiagnosis.providerLabel(Uri.parse(it).authority), choose) }
         // A problem whose message says "Tap to choose…" lives on the row that does that, never on the
         // switch, where a tap would turn syncing off instead.
         val actionable = on && problem in TapToChooseProblems
@@ -710,23 +722,25 @@ private fun BackupGroup(settings: PastilleSettings) {
             title = "Sync automatically",
             subtitle = when {
                 !on -> "Off"
-                actionable -> "$name · Not syncing"
+                actionable -> "$place · Not syncing"
                 else -> status
             },
             icon = if (on && problem != null) Icons.Rounded.ErrorOutline else Icons.Rounded.Sync,
             destructive = on && problem != null,
-            modifier = Modifier.toggleable(value = on, role = Role.Switch) { want ->
-                if (want) chooser.launch(BackupArchive.SUGGESTED_NAME) else autoBackup.stop()
+            modifier = Modifier.toggleable(value = on, enabled = !busy, role = Role.Switch) { want ->
+                if (want) folderChooser.launch(null) else autoBackup.stop()
             },
             trailing = { PastilleSwitch(checked = on) },
         )
         SettingsHairline()
         if (uri == null) {
             SettingsRow(
-                title = "Use an existing file",
-                subtitle = "The file your other phone already syncs with",
+                title = "Sync a single file instead",
+                subtitle = "For apps that can't share a folder, like Google Drive",
                 icon = Icons.Rounded.FileOpen,
-                modifier = Modifier.clickable { existing.launch(zipTypes) },
+                enabled = !busy,
+                unavailable = if (busy) "Working on it…" else null,
+                modifier = Modifier.clickable(enabled = !busy) { existing.launch(zipTypes) },
                 trailing = { SettingsChevron() },
             )
         } else {
@@ -746,7 +760,7 @@ private fun BackupGroup(settings: PastilleSettings) {
             )
             SettingsHairline()
             SettingsRow(
-                title = "Restore from this file",
+                title = "Restore from the synced file",
                 subtitle = "Adds what isn't already in Pastille",
                 icon = Icons.Rounded.Restore,
                 enabled = !busy && problem != BackupProblem.Access,
@@ -771,12 +785,20 @@ private fun BackupGroup(settings: PastilleSettings) {
                 },
             )
             SettingsHairline()
+            val duplicates = if (inFolder) duplicatesNote(matches, picked) else null
             SettingsRow(
-                title = "Choose another file",
-                subtitle = if (actionable) status else "Start a new file, or fix access to this one",
-                icon = if (actionable) Icons.Rounded.ErrorOutline else Icons.Rounded.Backup,
+                title = if (inFolder) "Choose another folder" else "Use a folder instead",
+                subtitle = when {
+                    actionable -> status
+                    duplicates != null -> duplicates
+                    inFolder -> "Pick a different folder, or fix access to this one"
+                    else -> "Pastille keeps one file in a folder you choose"
+                },
+                icon = if (actionable || duplicates != null) Icons.Rounded.ErrorOutline else Icons.Rounded.Backup,
                 destructive = actionable,
-                modifier = Modifier.clickable { chooser.launch(BackupArchive.SUGGESTED_NAME) },
+                enabled = !busy,
+                unavailable = if (busy) "Working on it…" else null,
+                modifier = Modifier.clickable(enabled = !busy) { folderChooser.launch(null) },
                 trailing = { SettingsChevron() },
             )
         }

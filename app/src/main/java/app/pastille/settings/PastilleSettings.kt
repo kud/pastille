@@ -206,8 +206,33 @@ class PastilleSettings private constructor(private val prefs: SharedPreferences)
         get() = prefs.getString(KEY_SYNC_REPLACED, null)
         set(value) = prefs.edit().apply { if (value == null) remove(KEY_SYNC_REPLACED) else putString(KEY_SYNC_REPLACED, value) }.apply()
 
+    // Sync with a folder (Erwann, 2026-10-29): the folder the user chose (a tree URI) and its name.
+    // backupUri is then the sync file inside it. Absent for a single-file sync, which an install from
+    // before folders keeps exactly as it was until a folder is chosen.
+    var syncFolderUri: String?
+        get() = prefs.getString(KEY_SYNC_FOLDER_URI, null)
+        set(value) = prefs.edit().apply { if (value == null) remove(KEY_SYNC_FOLDER_URI) else putString(KEY_SYNC_FOLDER_URI, value) }.apply()
+
+    var syncFolderName: String?
+        get() = prefs.getString(KEY_SYNC_FOLDER_NAME, null)
+        set(value) = prefs.edit().apply { if (value == null) remove(KEY_SYNC_FOLDER_NAME) else putString(KEY_SYNC_FOLDER_NAME, value) }.apply()
+
+    // How many files in the folder carry the sync name when it was last looked at (the newest one
+    // is used), and that file's modified time, so Settings can say which one.
+    var syncFolderMatches: Int
+        get() = prefs.getInt(KEY_SYNC_FOLDER_MATCHES, 1)
+        set(value) = prefs.edit().putInt(KEY_SYNC_FOLDER_MATCHES, value).apply()
+
+    var syncFolderPicked: Long?
+        get() = if (prefs.contains(KEY_SYNC_FOLDER_PICKED)) prefs.getLong(KEY_SYNC_FOLDER_PICKED, 0) else null
+        set(value) = prefs.edit().apply { if (value == null) remove(KEY_SYNC_FOLDER_PICKED) else putLong(KEY_SYNC_FOLDER_PICKED, value) }.apply()
+
     fun clearBackup() {
         prefs.edit()
+            .remove(KEY_SYNC_FOLDER_URI)
+            .remove(KEY_SYNC_FOLDER_NAME)
+            .remove(KEY_SYNC_FOLDER_MATCHES)
+            .remove(KEY_SYNC_FOLDER_PICKED)
             .remove(KEY_BACKUP_URI)
             .remove(KEY_BACKUP_NAME)
             .remove(KEY_BACKUP_LAST_AT)
@@ -232,6 +257,10 @@ class PastilleSettings private constructor(private val prefs: SharedPreferences)
         private const val KEY_SYNC_HASH = "sync_remote_hash"
         private const val KEY_SYNC_PENDING = "sync_pending_write"
         private const val KEY_SYNC_REPLACED = "sync_replaced_hash"
+        private const val KEY_SYNC_FOLDER_URI = "sync_folder_uri"
+        private const val KEY_SYNC_FOLDER_NAME = "sync_folder_name"
+        private const val KEY_SYNC_FOLDER_MATCHES = "sync_folder_matches"
+        private const val KEY_SYNC_FOLDER_PICKED = "sync_folder_picked"
         private const val PREFS_NAME = "pastille_settings"
         private const val KEY_CLIPBOARD_CLEAR_DELAY = "clipboard_clear_delay"
         private const val KEY_RECENT_CLIPBOARD = "recent_clipboard"

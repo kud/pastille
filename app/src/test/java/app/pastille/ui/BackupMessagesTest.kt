@@ -71,4 +71,19 @@ class BackupMessagesTest {
         assertEquals("Added “Door”", addOneMessage("“Door”", added = true))
         assertEquals("This sticker is already in Pastille", addOneMessage("this sticker", added = false))
     }
+
+    @Test
+    fun `the synced place names the folder, or marks a single file`() {
+        assertEquals("Pastille", syncPlaceName("Pastille", "pastille-backup.zip", inFolder = true))
+        assertEquals("pastille-backup.zip · single file", syncPlaceName(null, "pastille-backup.zip", inFolder = false))
+        assertEquals("Can't reach Pastille. Tap to choose a folder again.", backupStatus("Pastille", null, BackupProblem.Access, 0, choose = "a folder"))
+    }
+
+    @Test
+    fun `duplicate sync files say how many and which one is used`() {
+        val utc = java.util.TimeZone.getTimeZone("UTC")
+        assertEquals(null, duplicatesNote(1, 0, utc))
+        assertEquals("2 sync files here · using the newest, 12 Oct 14:02", duplicatesNote(2, 1_791_813_720_000, utc))
+        assertEquals("3 sync files here · using the newest", duplicatesNote(3, null, utc))
+    }
 }

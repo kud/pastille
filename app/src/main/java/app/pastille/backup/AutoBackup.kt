@@ -72,17 +72,63 @@ class AutoBackup(context: Context, private val scope: CoroutineScope) {
      * one another phone already syncs with (then its contents are merged in first). Writes it at once.
      */
     suspend fun choose(uri: Uri, justCreated: Boolean = false): Outcome {
-        val resolver = app.contentResolver
-        val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        val previousFolder = settings.syncFolderUri
         settings.backupUri?.let { old -> if (old != uri.toString()) release(Uri.parse(old)) }
-        var grantProblem: Throwable? = null
-        try {
-            resolver.takePersistableUriPermission(uri, flags)
-            // Some providers return without persisting anything; that only shows after a restart.
-            if (!isPersisted(uri)) grantProblem = SecurityException("takePersistableUriPermission returned but nothing was persisted")
-        } catch (error: SecurityException) {
-            grantProblem = error
+        previousFolder?.let { release(Uri.parse(it)) }
+        settings.syncFolderUri = null
+        settings.syncFolderName = null
+        settings.syncFolderMatches = 1
+        settings.syncFolderPicked = null
+        val grantProblem = keep(uri)
+        return begin(uri, justCreated, grantProblem)
+    }
+
+    /**
+     * Starts syncing with a folder ([tree], from ACTION_OPEN_DOCUMENT_TREE): the file named
+     * [SyncFolder.FILE_NAME] in it is merged with if it is there and created if not. Returns null
+     * when the folder can't be listed or the file can't be created; then nothing changes and the
+     * previous sync, if any, carries on.
+     */
+    suspend fun chooseFolder(tree: Uri): Outcome? {
+        val grantProblem = keep(tree)
+        val resolved = try {
+            SyncFolder.resolve(app, tree)
+        } catch (error: Exception) {
+            if (settings.syncFolderUri != tree.toString()) release(tree)
+            CrashLog.forContext(app).recordSync(
+                SyncDiagnosis.report(SyncStep.Read, error, BackupProblem.Access, tree.authority, mapOf("Stage" to "folder")),
+                "Folder|" + SyncDiagnosis.signature(SyncStep.Read, error, tree.authority),
+                versionName(),
+                "${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})",
+            )
+            return null
         }
+        settings.backupUri?.let { old -> if (settings.syncFolderUri == null) release(Uri.parse(old)) }
+        settings.syncFolderUri?.let { old -> if (old != tree.toString()) release(Uri.parse(old)) }
+        settings.syncFolderUri = tree.toString()
+        settings.syncFolderName = SyncFolder.folderName(app, tree)
+        settings.syncFolderMatches = resolved.matches
+        settings.syncFolderPicked = resolved.modified
+        return begin(resolved.uri, resolved.created, grantProblem)
+    }
+
+    /** Takes the persistable grant on [uri]; returns why it didn't stick, or null. */
+    private fun keep(uri: Uri): Throwable? = try {
+        app.contentResolver.takePersistableUriPermission(
+            uri,
+            Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+        )
+        // Some providers return without persisting anything; that only shows after a restart.
+        if (app.contentResolver.persistedUriPermissions.none { it.uri == uri && it.isReadPermission && it.isWritePermission }) {
+            SecurityException("takePersistableUriPermission returned but nothing was persisted")
+        } else {
+            null
+        }
+    } catch (error: SecurityException) {
+        error
+    }
+
+    private suspend fun begin(uri: Uri, justCreated: Boolean, grantProblem: Throwable?): Outcome {
         settings.backupUri = uri.toString()
         settings.backupName = BackupFiles.displayName(app, uri) ?: BackupArchive.SUGGESTED_NAME
         settings.backupLastAt = null
@@ -103,6 +149,7 @@ class AutoBackup(context: Context, private val scope: CoroutineScope) {
     /** Stops backing up; the file stays where it is. */
     fun stop() {
         settings.backupUri?.let { release(Uri.parse(it)) }
+        settings.syncFolderUri?.let { release(Uri.parse(it)) }
         settings.clearBackup()
         SyncBase.clear(app)
     }
@@ -115,7 +162,8 @@ class AutoBackup(context: Context, private val scope: CoroutineScope) {
      */
     suspend fun backUp(force: Boolean, justCreated: Boolean = false): Outcome = mutex.withLock {
         lastAttempt = System.currentTimeMillis()
-        val uri = settings.backupUri?.let(Uri::parse) ?: return@withLock Outcome.Off
+        var uri = settings.backupUri?.let(Uri::parse) ?: return@withLock Outcome.Off
+        uri = refind(uri)
         val persisted = isPersisted(uri)
         if (!persisted && !hasGrant(uri)) {
             // A provider that never kept the permission keeps saying so, rather than "can't reach".
@@ -260,6 +308,31 @@ class AutoBackup(context: Context, private val scope: CoroutineScope) {
         }
     }
 
+    /**
+     * In a folder sync, the file the other phone deleted or replaced is looked up again by name:
+     * another file carrying it is used, or a new one created. A folder that can't be listed changes
+     * nothing (the sync then fails on the old file as before), and a still-listed file is kept.
+     * A different file starts a new sync, so its first merge is last-edit-wins, never "deleted".
+     */
+    private suspend fun refind(uri: Uri): Uri {
+        val tree = settings.syncFolderUri?.let(Uri::parse) ?: return uri
+        if (BackupFiles.exists(app, uri)) return uri
+        val resolved = runCatching { SyncFolder.resolve(app, tree) }.getOrNull() ?: return uri
+        settings.syncFolderMatches = resolved.matches
+        settings.syncFolderPicked = resolved.modified
+        if (resolved.uri == uri) return uri
+        settings.backupUri = resolved.uri.toString()
+        settings.backupName = BackupFiles.displayName(app, resolved.uri) ?: SyncFolder.FILE_NAME
+        settings.backupFingerprint = null
+        settings.syncRemoteSize = null
+        settings.syncRemoteModified = null
+        settings.syncRemoteHash = null
+        settings.syncPendingWrite = null
+        settings.syncReplacedHash = null
+        SyncBase.clear(app)
+        return resolved.uri
+    }
+
     private fun remember(uri: Uri, contents: File) {
         val (size, modified) = BackupFiles.stat(app, uri)
         settings.syncRemoteSize = size
@@ -274,8 +347,13 @@ class AutoBackup(context: Context, private val scope: CoroutineScope) {
         scope.launch { runCatching { backUp(force = false) } }
     }
 
-    private fun isPersisted(uri: Uri): Boolean =
-        app.contentResolver.persistedUriPermissions.any { it.uri == uri && it.isWritePermission && it.isReadPermission }
+    /** A persisted grant on the file itself, or on the folder it was found in. */
+    private fun isPersisted(uri: Uri): Boolean {
+        val folder = settings.syncFolderUri?.let(Uri::parse)
+        return app.contentResolver.persistedUriPermissions.any {
+            (it.uri == uri || it.uri == folder) && it.isWritePermission && it.isReadPermission
+        }
+    }
 
     /** The picker's grant, which outlives the activity but not a restart. */
     private fun hasGrant(

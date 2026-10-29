@@ -63,6 +63,7 @@ const val SEND_FAILED = "Couldn't prepare it to send."
 const val EXPORT_FAILED = "Couldn't save the backup. Try another place."
 const val IMPORT_UNREADABLE = "Couldn't open that file."
 const val IMPORT_NOT_A_BACKUP = "That file isn't a Pastille backup."
+const val FOLDER_UNREADABLE = "Couldn't open that folder. Try another one."
 const val SHARE_FAILED = "Couldn't prepare the backup to share."
 
 /**
@@ -76,12 +77,13 @@ fun backupStatus(
     problem: app.pastille.settings.BackupProblem?,
     now: Long,
     provider: String = "the storage app",
+    choose: String = "a file",
 ): String {
     // "The storage app" opens a sentence; a brand keeps its own case ("pCloud", never "PCloud").
     val who = if (provider.first().isLowerCase() && ' ' in provider) provider.replaceFirstChar { it.uppercase() } else provider
     return when (problem) {
-        app.pastille.settings.BackupProblem.Access -> "Can't reach $name. Tap to choose a file again."
-        app.pastille.settings.BackupProblem.Write -> "The last sync with $name failed. Tap to choose a file again."
+        app.pastille.settings.BackupProblem.Access -> "Can't reach $name. Tap to choose $choose again."
+        app.pastille.settings.BackupProblem.Write -> "The last sync with $name failed. Tap to choose $choose again."
         app.pastille.settings.BackupProblem.Read -> "$name · Waiting for $provider"
         app.pastille.settings.BackupProblem.NotKept ->
             "$who didn't keep permission to $name, so syncing stops when the phone restarts. Tap to choose it again."
@@ -102,7 +104,31 @@ fun backupStatus(
 }
 
 const val SYNC_NOTE =
-    "To sync two phones, both choose the same file: create it on one, then use the existing file on the other."
+    "To sync two phones, choose the same folder on both. Pastille keeps one file in it, " +
+        app.pastille.backup.SyncFolder.FILE_NAME + ", and never makes a second. " +
+        "On Google Drive, export a backup once, then sync that single file on both."
+
+/** The status line's name for the synced place: the folder, or the file marked as a single file. */
+fun syncPlaceName(folderName: String?, fileName: String, inFolder: Boolean): String =
+    if (inFolder) folderName ?: "Sync folder" else "$fileName · single file"
+
+/**
+ * When the folder holds more than one file with the sync name: how many, and which one is used, by
+ * its modified time, so it can be checked in the storage app. Null when there is only one.
+ */
+fun duplicatesNote(
+    matches: Int,
+    modified: Long?,
+    zone: java.util.TimeZone = java.util.TimeZone.getDefault(),
+): String? {
+    if (matches < 2) return null
+    val which = modified?.let {
+        val format = java.text.SimpleDateFormat("d MMM HH:mm", java.util.Locale.ENGLISH)
+        format.timeZone = zone
+        "using the newest, " + format.format(java.util.Date(it))
+    } ?: "using the newest"
+    return "$matches sync files here · $which"
+}
 
 const val PRIVACY_NOTE =
     "Your snippets, stickers and images stay on your phone unless you export, share or back them up yourself."

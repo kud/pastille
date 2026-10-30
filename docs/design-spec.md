@@ -1068,10 +1068,17 @@ The Settings screen was one long column of `ListItem`s under `primary` section h
 **About** (Iris, 2026-10-28; Erwann: « Dans les settings on veut le about et la version »)
 
 - [x] **Pastille:** subtitle "Version 0.1.5 (16)", from `BuildConfig` (`versionName (versionCode)`, "· debug" on the debug build, which installs beside the release one). Tapping copies "Pastille 0.1.5 (16)" (TalkBack: "Copy version"); a toast confirms below Android 13, where the system doesn't.
-- [x] **Source code:** "github.com/kud/pastille", an `ACTION_VIEW` intent to the browser (TalkBack: "Open in browser"), with a trailing `OpenInNew` rather than the chevron, since it leaves the app. Pastille has no `INTERNET` permission and doesn't need one for this.
+- [x] **Source code:** "github.com/kud/pastille", an `ACTION_VIEW` intent to the browser (TalkBack: "Open in browser"), with a trailing `OpenInNew` rather than the chevron, since it leaves the app. It needs no `INTERNET` permission (the fdroid build has none).
 - [x] **Licence:** "GPL-3.0-or-later", the SPDX id as the subtitle. Not tappable.
 - [x] **Third-party notices (2026-10-28):** "Code from others that Pastille includes", with a chevron; opens a plain `AlertDialog` listing each notice (name in `titleSmall`, what it is for in `bodyMedium` `onSurfaceVariant`, the licence text selectable in monospace `bodySmall`), from `THIRD_PARTY_NOTICES` in `ui/ThirdPartyNoticesDialog.kt`, which mirrors `docs/third-party-notices.md`. Offline: the MIT notice must ship in the APK, not only on GitHub.
 - [x] **Last crash report:** moved from the list's overflow (§8.3), where a diagnostic sat among everyday actions. Shown only when one exists, read again on resume; opens the same copyable dialog (`CrashReportDialog`).
+
+**Updates** (github build only; Iris, 2026-10-30; [ADR 0001](adr/0001-in-app-updates.md))
+
+- [x] **About › Updates**, under the Pastille row: the subtitle says where the updater stands in words ("Up to date · checked 5 min ago", "Version 0.1.6-dev.3 is ready", "Downloading 0.1.6-dev.3 · 42%", "Waiting for Android to confirm"), and the next step is a `TextButton` named as a word: Check, Download, Allow installs, Try again, plus Later beside Download. Never a coloured status alone. Failures read "what: do this" in at most 14 words ("Couldn't reach GitHub: check the connection and try again").
+- [x] **Test builds:** a switch row under it, "Also offer the pre-release built from every change"; on by default when a test build is installed.
+- [x] **The ⋮ item:** "Update to X" with the `SystemUpdate` glyph, last, under a divider, so Reorder, Bin and Settings never move; only while a newer build is known and not set aside with Later. It opens Settings. **No dot** on ⋮: the About row and the item are enough for a calm app.
+- [x] The debug build's row reads "The debug build doesn't update itself". The fdroid build has no row and no item.
 
 **Destructive** (none today)
 

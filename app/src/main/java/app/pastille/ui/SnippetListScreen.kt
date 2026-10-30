@@ -230,6 +230,7 @@ fun SnippetListScreen(
     var showMenu by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
     val scrollBehavior = rememberListDrivenScrollBehavior()
+    UpdatesOnOpen()
     val binned by remember { repository.observeBin() }
         .collectAsStateWithLifecycle(initialValue = emptyList())
     val binCount = binned.size
@@ -613,6 +614,8 @@ fun SnippetListScreen(
                                     },
                                 )
                             }
+                            // The github build only: last, under a divider, while a newer build is known.
+                            UpdateMenuItem(onOpenSettings = onOpenSettings, onDismissMenu = { showMenu = false })
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(

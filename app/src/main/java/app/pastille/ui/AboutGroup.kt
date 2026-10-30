@@ -62,6 +62,8 @@ internal fun AboutGroup() {
                 }
             },
         )
+        // The github build's updater; nothing in the fdroid build.
+        UpdateAboutRow()
         SettingsHairline()
         SettingsRow(
             title = "Source code",

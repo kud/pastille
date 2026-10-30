@@ -1320,3 +1320,30 @@ Erwann asked why it was "New snippet" but "Add stickers" (« Ça se tient »). T
 ## 24. Splash wordmark (Iris, 2026-10-29)
 
 Erwann: « Pastille n'a toujours pas le texte en splashscreen », then « the text … should be closer to the logo ». Android 12+ pins a branding image to the bottom of the screen, so the word lives in the splash icon itself, a lockup: the launcher mark on its navy disc (112dp) with "Pastille" 28dp under it (16dp read as too close: Erwann, 2026-10-29, « too close ») (Inter Bold 26dp, outlined because a drawable can't use the system font, in the list header's ink: `@color/splash_wordmark`, onSurface per theme). `splash_icon` is 288dp with no system icon background (`Theme.SplashScreen`), everything inside the 192dp circle Android 12+ keeps; the disc is drawn by us and the mark clipped to the launcher's own circle. Android 12+ still assembles the mark (drawable-v31); before 12 the same lockup stands still, and the exit view carries it, word included. No branding image, no custom window background. Render (drawables, not a device): `PASTILLE_RENDERS=<dir> ./gradlew :app:testDebugUnitTest --tests 'app.pastille.redesign.Splash*'`.
+
+## 25. A quieter accent (Iris, 2026-10-30) — overrides the accent roles in `Theme.kt` and §20's FAB
+
+Erwann, on the dark Stickers tab: « Je suis pas un fan de l'accent sur pastille », and asked whether he meant no accent, the wallpaper's colour, another hue or less of it: « Possible je trouve qu'on peut faire juste plus élégant ». Earlier: « Pourquoi tout est bleu ? »
+
+**What was wrong.** Two saturated blues did the accent's work at once: the selected half of Snippets | Stickers in `primaryContainer` `#1C4C82` (a heavy navy slab), and the FAB and selected folder chip in `secondaryContainer` `#9CCBFF` (a bright sky pill). Neither carried meaning the check, the glyph or the value step didn't already carry; the hue was decoration.
+
+**The rule: structure in ink, a whisper of blue.** Neutrals carry the hierarchy; the brand's blue survives only as a muted steel in `primary` (switch track, links, cursor, the share sheet's link host). Selection is a value step plus a shape (the ✓ on the selected half, the glyph and heavier label on the chip), never a hue. The one strong thing per screen is the action, and it is ink: the extended FAB takes `inverseSurface` / `inverseOnSurface` (a pale ink pill in dark, a dark ink pill in light), so it stays obviously the button without colour.
+
+| Role | Dark before → after | Light before → after |
+| --- | --- | --- |
+| `primary` | `#8EC1FF` → `#A9BFD9` | `#1662C4` → `#3D5A7C` |
+| `onPrimary` | `#00315F` → `#1A2A3D` | `#FFFFFF` (same) |
+| `primaryContainer` (selected half) | `#1C4C82` → `#434E5D` | `#D3E3FB` → `#D3DAE4` |
+| `onPrimaryContainer` | `#D5E5FF` → `#EEF1F5` | `#062A4F` → `#161B22` |
+| `secondaryContainer` (selected chip, Settings' "Show in the keyboard" squares, tonal buttons, swipe, sticker pill) | `#9CCBFF` → `#D3D9E1` | `#C4DBFA` → `#C3CBD6` |
+| `onSecondaryContainer` | `#062A4F` → `#161B22` | `#062A4F` → `#161B22` |
+| `surfaceTint` | = `primary` | = `primary` |
+| `inversePrimary` | `#1662C4` → `#3D5A7C` | `#8EC1FF` → `#A9BFD9` |
+| Extended FAB | `secondaryContainer` → `inverseSurface` `#E4E7EC` on `inverseOnSurface` `#1C2128` | `secondaryContainer` → `inverseSurface` `#2A3038` on `inverseOnSurface` `#EEF1F5` |
+
+Saturation (HSL) of the accent fills drops from 0.65–1.0 to 0.15–0.24; `primary` from 0.8–1.0 to 0.34–0.39. Surfaces, outlines, `secondary`, `tertiary` and `error` are unchanged.
+
+- [x] **Contrast (WCAG AA), measured:** `primary` as text 7.0–9.9:1 dark, 5.5–7.1:1 light on every surface it sits on; `onPrimary` on `primary` 7.7 / 7.1. Selected half: label 7.5 / 12.3; its fill against the ground 2.21:1 dark (was 2.14, so the value step is kept, not lost), 1.29:1 light (was 1.19). Selected chip: label 12.2 / 10.6; against the unselected chip 10.7:1 dark (was 9.0), 1.37:1 light (was 1.18). FAB: label 13.1 / 11.7; the pill against the ground 15.0:1 dark, 12.2:1 light, where it was 1.29:1 in light. In light, selection still leans on the ✓, glyph and weight first, as before; it never rests on colour.
+- [x] **Colourblind check:** every selected state differs from its unselected one in lightness and in shape; no pair relies on a hue difference.
+- [x] **Brand untouched.** The launcher mark, its navy disc and the splash lockup (`ic_launcher_*`, `splash_*` in `colors.xml`) keep their colours: a saturated mark on a calm, near-neutral app is the usual relationship and nothing clashes. The keyboard (`KeyboardPalette`) has its own palettes and is unchanged.
+- Renders: `PASTILLE_RENDERS=<dir> ./gradlew :app:testGithubDebugUnitTest --tests 'app.pastille.redesign.List*' --tests 'app.pastille.redesign.Stickers*' --tests 'app.pastille.redesign.Settings*'`.

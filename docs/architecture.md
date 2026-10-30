@@ -4,6 +4,10 @@
 
 Read against `kud/pastille` at `194fd72` (dev.2 + settings screen). The design spec (`design-spec.md`) owns every visual and interaction detail; this file owns schema, storage, mechanics and build order. Where this file answers one of the design spec's "Engineering to confirm" lines, it says so.
 
+## Builds and in-app updates
+
+Two product flavours ([ADR 0001](adr/0001-in-app-updates.md)): `github` adds `INTERNET`, `REQUEST_INSTALL_PACKAGES` and the updater (`src/github/`), `fdroid` is Pastille with no network (`src/fdroid/` stubs). Same applicationId and key. `checkNoNetwork<Variant>` fails any fdroid variant whose merged manifest asks for a network or install permission. Updater rules: `src/github/java/app/pastille/update/Updates.kt` (no Android, shared verbatim with other apps; `UpdatesTest`); Android shell: `Updater.kt` (a singleton, `HttpsURLConnection`, prefs file `updates`), `UpdateInstallReceiver.kt`. The checks every other section says "no `INTERNET`" about apply to both flavours: the updater is the only network code.
+
 ## 0. What the code is today (the facts the decisions rest on)
 
 - Room 2.6.1 via KSP. `PastilleDatabase` is **version 1, `exportSchema = false`**, one entity `SnippetEntity(id, title, text, pinned, createdAt, updatedAt, lastUsedAt)`. No migrations, no schema JSON, no `room-testing`.
@@ -320,7 +324,7 @@ Version bumps and the release go through `/k-release`, not hand-edited `versionC
 
 ## 2.5 Backup archive, sharing and automatic backup (2026-10-28)
 
-Pastille keeps no `INTERNET` permission and no Play-services dependency: everything below goes through Android's own components (the Storage Access Framework, the share sheet, the FileProvider).
+The fdroid build keeps no `INTERNET` permission (the github build has it for its updater only, [ADR 0001](adr/0001-in-app-updates.md)), and neither has a Play-services dependency: everything below goes through Android's own components (the Storage Access Framework, the share sheet, the FileProvider).
 
 **Format: backup v4, a plain ZIP** (`backup/BackupArchive.kt`).
 

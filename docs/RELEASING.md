@@ -21,9 +21,16 @@ The run then:
 1. Refuses unless the tag is new, `X.Y.Z` is above the current `versionName`, and the changelog is there and short enough (`.github/scripts/release-version.sh`).
 2. Bumps `versionName` to X.Y.Z and `versionCode` by one in `app/build.gradle.kts`, adds the build to `docs/fdroid/app.beansontoast.pastille.yml` and moves its `CurrentVersion*`, and commits `🏷️ release(pastille): bump version to X.Y.Z` as Erwann Mest.
 3. Builds the signed release. The keystore is written for that one step and removed after it.
-4. Checks the APK carries Pastille's certificate (the recipe's `AllowedAPKSigningKeys`) and the new version.
+4. Checks both APKs carry Pastille's certificate (the recipe's `AllowedAPKSigningKeys`) and the new version, that the fdroid one asks for no network and the github one does.
 5. Proves it reproducible: rebuilds the unsigned release from a `git archive` of the bump commit in another directory, without `.git`, and runs `apksigcopier compare` against the signed APK. Any difference fails the release, since F-Droid would reject it.
-6. Pushes the bump to `main` and the tag `vX.Y.Z` on it in one atomic push (if `main` moved during the run, neither lands: run it again), then creates the GitHub release with `pastille-X.Y.Z.apk` and the changelog as notes.
+6. Pushes the bump to `main` and the tag `vX.Y.Z` on it in one atomic push (if `main` moved during the run, neither lands: run it again), then creates the GitHub release with the changelog as notes.
+7. Checks that the `digest` GitHub reports for each APK is the SHA-256 the run computed: the github build's updater installs nothing else.
+
+Every release, final or dev, carries three files ([ADR 0001](adr/0001-in-app-updates.md)):
+
+- `pastille-X.Y.Z.apk`: the **github** flavour, with the in-app updater. What Erwann installs, and what the updater fetches.
+- `pastille-X.Y.Z-fdroid.apk`: the **fdroid** flavour, no network. The recipe's `Binaries`; step 5 proves it reproducible.
+- `SHA256SUMS` for both. Both are signed with the same key at the same version.
 
 F-Droid then finds the tag (`UpdateCheckMode: Tags ^v[0-9]+\.[0-9]+\.[0-9]+$`), builds it, and publishes our APK once it matches. See `docs/fdroid/README.md`.
 

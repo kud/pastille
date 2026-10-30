@@ -59,7 +59,9 @@ The Pastille Quick Settings tile opens a sheet of your snippets and recent image
 
 ## Privacy
 
-- Pastille requests no `INTERNET` permission and has no analytics or network libraries. Your snippets, stickers and images stay on your phone unless you export, share or back them up yourself.
+- Your snippets, stickers, images and clipboard stay on your phone unless you export, share or back them up yourself. Pastille has no analytics, no account and no network library.
+- **The F-Droid build** (`pastille-X.Y.Z-fdroid.apk`, and what F-Droid installs) requests no `INTERNET` permission at all; F-Droid updates it. A build check fails if it ever asks for one.
+- **The GitHub build** (`pastille-X.Y.Z.apk` on GitHub Releases) has `INTERNET` and "install apps" for one thing: updating itself. It asks GitHub's API for the list of Pastille releases when you open the app (at most hourly on a test build, daily otherwise) or tap Check, and downloads a new APK from GitHub only when you tap Download. It talks to GitHub's hosts and no others, sends nothing but that request, checks the file's SHA-256 against GitHub's, and Android asks you before installing. Details: [docs/adr/0001-in-app-updates.md](docs/adr/0001-in-app-updates.md).
 - Snippets live in a local Room database on your device.
 - Pastille opts out of Android's cloud backup, so nothing goes to Google's backup servers. Moving to a new phone with Android's device-to-device transfer (by cable or over Wi-Fi) still brings your snippets, stickers, images and settings.
 - Backups only move when you ask: export, import and automatic backup go through the system file picker (Storage Access Framework), and sharing through the system share sheet, so you choose where every file goes. If that place is Google Drive, Drive's own app does the uploading, not Pastille.

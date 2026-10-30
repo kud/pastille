@@ -16,4 +16,7 @@ internal fun UpdatesOnOpen(
 internal fun UpdateAboutRow() = Unit
 
 @Composable
-internal fun UpdateMenuItem(onOpenSettings: () -> Unit, onDismissMenu: () -> Unit) = Unit
+internal fun UpdateMenuItem(onOpenUpdate: () -> Unit, onDismissMenu: () -> Unit) = Unit
+
+@Composable
+internal fun UpdateNowSheet(onDismiss: () -> Unit) = Unit

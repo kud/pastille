@@ -1,16 +1,12 @@
 package app.pastille.ui
 
 import android.content.ActivityNotFoundException
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.relocation.BringIntoViewRequester
-import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
@@ -18,15 +14,11 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleStartEffect
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.filterNotNull
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.SystemUpdate
@@ -60,8 +52,8 @@ import kotlinx.coroutines.launch
 /**
  * The automatic check, when the list comes up: 3 s after it starts, at most every 15 minutes on a
  * test build, daily otherwise. A build found for the first time says so once (Erwann, 2026-10-30,
- * after tutti; copy Iris): "Version X is out" with Install, which opens Settings › About and starts
- * the download there. Skipped when [canAnnounce] says the list is busy or another message is up;
+ * after tutti; copy Iris): "Version X is out" with Install, which opens the update sheet over the
+ * list, and the sheet starts the download at once. Skipped when [canAnnounce] says the list is busy or another message is up;
  * the ⋮ item carries it after that. Never an install by itself: Android still asks.
  */
 @Composable
@@ -81,10 +73,7 @@ internal fun UpdatesOnOpen(snackbar: SnackbarHostState, canAnnounce: () -> Boole
                 actionLabel = "Install",
                 duration = SnackbarDuration.Long,
             )
-            if (result == SnackbarResult.ActionPerformed) {
-                updater.ask(Updater.Request.INSTALL)
-                currentOnInstall()
-            }
+            if (result == SnackbarResult.ActionPerformed) currentOnInstall()
         }
         onStopOrDispose { job.cancel() }
     }
@@ -117,7 +106,6 @@ private val SlotWidth = 112.dp
  * holds two lines and the trailing slot one width, a spinner while working; only an available build
  * adds a line of buttons. Below it, the Test builds switch.
  */
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun UpdateAboutRow() {
     val context = LocalContext.current
@@ -128,8 +116,6 @@ internal fun UpdateAboutRow() {
     val cue by updater.cue.collectAsStateWithLifecycle()
     val found by updater.found.collectAsStateWithLifecycle()
     val lastCheck by updater.lastCheck.collectAsStateWithLifecycle()
-    val bringIntoView = remember { BringIntoViewRequester() }
-    val focus = remember { FocusRequester() }
 
     // Coming back from "Install unknown apps" with the permission now given: install straight away.
     LifecycleResumeEffect(state) {
@@ -137,17 +123,6 @@ internal fun UpdateAboutRow() {
             if (context.packageManager.canRequestPackageInstalls()) updater.install(it.update)
         }
         onPauseOrDispose { }
-    }
-
-    // Sent here by the list's message or ⋮ item: come into view, take focus so TalkBack lands on
-    // the progress, and on Install start the download. Collected, not keyed, so taking the request
-    // doesn't cancel the download it starts.
-    LaunchedEffect(updater) {
-        updater.request.filterNotNull().collect {
-            bringIntoView.bringIntoView()
-            runCatching { focus.requestFocus() }
-            updater.takeRequest()
-        }
     }
 
     if (!updater.isAvailable) {
@@ -204,7 +179,6 @@ internal fun UpdateAboutRow() {
         slot = slot,
         onAction = onAction,
         onLater = available?.takeIf { cue == UpdateCue.NOTICE }?.let { { updater.setAside(it.update.version) } },
-        modifier = Modifier.bringIntoViewRequester(bringIntoView).focusRequester(focus).focusable(),
     )
     SettingsHairline()
     val testBuilds = channel == Channel.DEV
@@ -275,10 +249,11 @@ internal fun failureText(problem: UpdateProblem): String = when (problem) {
 
 /**
  * The list's ⋮ item while a newer build is known and not set aside (Iris, 2026-10-30): last, under
- * a divider, so Reorder, Bin and Settings never move. No dot on ⋮.
+ * a divider, so Reorder, Bin and Settings never move. No dot on ⋮. A tap opens the update sheet,
+ * which installs.
  */
 @Composable
-internal fun UpdateMenuItem(onOpenSettings: () -> Unit, onDismissMenu: () -> Unit) {
+internal fun UpdateMenuItem(onOpenUpdate: () -> Unit, onDismissMenu: () -> Unit) {
     val context = LocalContext.current
     val updater = remember { Updater.forContext(context) }
     val cue by updater.cue.collectAsStateWithLifecycle()
@@ -292,8 +267,7 @@ internal fun UpdateMenuItem(onOpenSettings: () -> Unit, onDismissMenu: () -> Uni
         colors = MenuDefaults.itemColors(leadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant),
         onClick = {
             onDismissMenu()
-            updater.ask(Updater.Request.REVEAL)
-            onOpenSettings()
+            onOpenUpdate()
         },
     )
 }

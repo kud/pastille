@@ -398,16 +398,19 @@ fun SnippetListScreen(
     var reordering by rememberSaveable { mutableStateOf(false) }
     var renamingFolder by remember { mutableStateOf<CategoryRecord?>(null) }
     var deletingFolder by remember { mutableStateOf<CategoryRecord?>(null) }
+    // The github build's update sheet, from the message's Install or the ⋮ item.
+    var updating by rememberSaveable { mutableStateOf(false) }
     // A newly found build says so once, only on the plain list (Iris, 2026-10-30): never over a
     // search, a reorder, a sheet or another snackbar; skipped then, the ⋮ item is the way back.
     UpdatesOnOpen(
         snackbar = snackbarHostState,
         canAnnounce = {
             !searching && !reordering && organisingId == null && !showCreateFolder &&
-                renamingFolder == null && deletingFolder == null && !showMenu
+                renamingFolder == null && deletingFolder == null && !showMenu && !updating
         },
-        onInstall = onOpenSettings,
+        onInstall = { updating = true },
     )
+    if (updating) UpdateNowSheet(onDismiss = { updating = false })
     val orderedFolders = remember(categories) { categories.sortedBy { it.position } }
     LaunchedEffect(loadedCategories) {
         if (isMissingFolder(loadedCategories, selectedTab.takeIf { it >= 0 })) selectedTab = ALL_TAB
@@ -624,7 +627,7 @@ fun SnippetListScreen(
                                 )
                             }
                             // The github build only: last, under a divider, while a newer build is known.
-                            UpdateMenuItem(onOpenSettings = onOpenSettings, onDismissMenu = { showMenu = false })
+                            UpdateMenuItem(onOpenUpdate = { updating = true }, onDismissMenu = { showMenu = false })
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(

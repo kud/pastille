@@ -16,15 +16,18 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
 import javax.net.ssl.HttpsURLConnection
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
-/** Why a step failed, each said in words by Settings › About (never colour alone). */
+/** Why a step failed, each said in words by Settings › About and the update sheet (never colour alone). */
 enum class UpdateProblem { NETWORK, FEED, DOWNLOAD, DIGEST, PACKAGE, INSTALL }
 
 sealed interface UpdateState {
@@ -97,26 +100,29 @@ class Updater private constructor(private val context: Context) {
         return update.takeIf { UpdateCue.announces(it.version, before) }
     }
 
-    /** What Settings › About should do when it next shows: just come into view, or also install. */
-    enum class Request { REVEAL, INSTALL }
+    /** Outlives any screen, so closing the update sheet never abandons a download halfway. */
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
-    private val _request = MutableStateFlow<Request?>(null)
-    val request: StateFlow<Request?> = _request.asStateFlow()
-
-    /** Asked from the list (the message's Install, the ⋮ item); Settings › About takes it up. */
-    fun ask(request: Request) {
-        _request.value = request
+    /**
+     * One tap means install (the list's message and ⋮ item, through the update sheet): downloads
+     * the known build, asking GitHub first if this run doesn't hold one, then installs; Android
+     * still asks to confirm. After a failure it resumes at the step that failed.
+     */
+    fun startInstall() {
+        scope.launch { installNow() }
     }
 
-    /** About's side: takes the pending request; an Install downloads the known build, or asks GitHub for it first. */
-    suspend fun takeRequest() {
-        val request = _request.value ?: return
-        _request.value = null
-        if (request != Request.INSTALL) return
+    internal suspend fun installNow() {
         val update = when (val now = _state.value) {
             is UpdateState.Available -> now.update
-            UpdateState.Idle, UpdateState.UpToDate, is UpdateState.Failed -> check()
-            else -> null
+            is UpdateState.NeedsPermission -> return install(now.update)
+            is UpdateState.Failed -> when {
+                now.update != null && now.problem == UpdateProblem.INSTALL -> return install(now.update)
+                now.update != null -> now.update
+                else -> check()
+            }
+            UpdateState.Idle, UpdateState.UpToDate -> check()
+            UpdateState.Checking, is UpdateState.Downloading, is UpdateState.Installing -> null
         }
         update?.let { downloadAndInstall(it) }
     }
@@ -163,6 +169,8 @@ class Updater private constructor(private val context: Context) {
 
     /** Installs the verified file, or says Android's permission is needed first. */
     fun install(update: Update) {
+        // The sheet and About may both come back from Android's permission page: one session only.
+        if (_state.value is UpdateState.Installing) return
         val file = apkFile()
         if (!file.isFile) {
             _state.value = UpdateState.Failed(UpdateProblem.DOWNLOAD, update)

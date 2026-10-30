@@ -42,12 +42,14 @@ jobs:
           distribution: temurin
           java-version: "17"
       - uses: gradle/actions/setup-gradle@v4
-      # Unsigned: the release key is only ever written by the release job below.
-      - run: ./gradlew --no-daemon assembleDebug assembleRelease testDebugUnitTest lintDebug
+      # Unsigned: the release key is only ever written by the release job below. Two flavours
+      # (docs/adr/0001-in-app-updates.md): every assemble and lint first runs checkNoNetwork*, which
+      # fails if the fdroid build's merged manifest asks for INTERNET or any network permission.
+      - run: ./gradlew --no-daemon assembleDebug assembleRelease testGithubDebugUnitTest testFdroidDebugUnitTest lintGithubDebug lintFdroidDebug
       - uses: actions/upload-artifact@v4
         with:
           name: pastille-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          path: app/build/outputs/apk/*/debug/*.apk
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
         if: always()
@@ -128,9 +130,11 @@ jobs:
           trap 'rm -f "$keystore"' EXIT
           echo "$KEYSTORE_BASE64" | base64 --decode > "$keystore"
           if [ "$PRERELEASE" = "true" ]; then export PASTILLE_VERSION_NAME="$VERSION_NAME"; fi
-          PASTILLE_KEYSTORE_PATH="$keystore" ./gradlew --no-daemon assembleRelease
-          apk=app/build/outputs/apk/release/app-release.apk
-          [ -f "$apk" ] || { echo "::error::$apk not found: the release build came out unsigned"; exit 1; }
+          PASTILLE_KEYSTORE_PATH="$keystore" ./gradlew --no-daemon assembleGithubRelease assembleFdroidRelease
+          for flavour in github fdroid; do
+            apk=app/build/outputs/apk/$flavour/release/app-$flavour-release.apk
+            [ -f "$apk" ] || { echo "::error::$apk not found: the release build came out unsigned"; exit 1; }
+          done
 
       - name: Remove the keystore
         if: always()
@@ -140,34 +144,47 @@ jobs:
         run: |
           apksigner=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n 1)
           echo "$(dirname "$apksigner")" >> "$GITHUB_PATH"
-          apk=app/build/outputs/apk/release/app-release.apk
-          "$apksigner" verify "$apk"
-          # Public certificate digests only. The signer label varies with the scheme and build-tools.
-          "$apksigner" verify --print-certs "$apk" | grep 'SHA-256 digest'
-          got=$("$apksigner" verify --print-certs "$apk" | sed -n 's/^.*Signer.* certificate SHA-256 digest: //p' | sort -u)
           want=$(sed -n 's/^AllowedAPKSigningKeys: //p' docs/fdroid/app.beansontoast.pastille.yml)
-          [ -n "$got" ] && [ "$got" = "$want" ] \
-            || { echo "::error::Signing certificate $got is not the recipe's AllowedAPKSigningKeys $want"; exit 1; }
-          badging=$("$(dirname "$apksigner")/aapt2" dump badging "$apk" | head -n 1)
-          echo "$badging"
-          grep -q "versionCode='$VERSION_CODE' versionName='$VERSION_NAME'" <<<"$badging" \
-            || { echo "::error::The APK is not versionCode $VERSION_CODE / versionName $VERSION_NAME"; exit 1; }
           mkdir -p "$RUNNER_TEMP/out"
-          cp "$apk" "$RUNNER_TEMP/out/pastille-$VERSION_NAME.apk"
+          # github: pastille-X.apk, the one the in-app updater installs. fdroid: pastille-X-fdroid.apk,
+          # no network, the recipe's Binaries. Same key and version for both.
+          for flavour in github fdroid; do
+            apk=app/build/outputs/apk/$flavour/release/app-$flavour-release.apk
+            "$apksigner" verify "$apk"
+            # Public certificate digests only. The signer label varies with the scheme and build-tools.
+            "$apksigner" verify --print-certs "$apk" | grep 'SHA-256 digest'
+            got=$("$apksigner" verify --print-certs "$apk" | sed -n 's/^.*Signer.* certificate SHA-256 digest: //p' | sort -u)
+            [ -n "$got" ] && [ "$got" = "$want" ] \
+              || { echo "::error::$flavour: signing certificate $got is not the recipe's AllowedAPKSigningKeys $want"; exit 1; }
+            badging=$("$(dirname "$apksigner")/aapt2" dump badging "$apk")
+            head -n 1 <<<"$badging"
+            grep -q "versionCode='$VERSION_CODE' versionName='$VERSION_NAME'" <<<"$badging" \
+              || { echo "::error::$flavour: the APK is not versionCode $VERSION_CODE / versionName $VERSION_NAME"; exit 1; }
+            if [ "$flavour" = fdroid ]; then
+              ! grep -qE "uses-permission: name='android.permission.(INTERNET|REQUEST_INSTALL_PACKAGES)'" <<<"$badging" \
+                || { echo "::error::The fdroid APK asks for the network or installs"; exit 1; }
+              cp "$apk" "$RUNNER_TEMP/out/pastille-$VERSION_NAME-fdroid.apk"
+            else
+              grep -q "uses-permission: name='android.permission.INTERNET'" <<<"$badging" \
+                || { echo "::error::The github APK lost INTERNET: its updater could not work"; exit 1; }
+              cp "$apk" "$RUNNER_TEMP/out/pastille-$VERSION_NAME.apk"
+            fi
+          done
+          (cd "$RUNNER_TEMP/out" && sha256sum *.apk | tee SHA256SUMS)
 
-      # F-Droid rebuilds the tag from source and publishes our APK only if the two match apart from
-      # the signature. Rebuild unsigned from a clean `git archive` (no .git, another path) and compare.
+      # F-Droid rebuilds the tag's fdroid flavour from source and publishes our pastille-X-fdroid.apk
+      # only if the two match apart from the signature. Rebuild unsigned from a clean `git archive` (no .git, another path) and compare.
       - name: The release is reproducible
         if: env.PRERELEASE == 'false'
         run: |
           src="$RUNNER_TEMP/repro/elsewhere/pastille"
           mkdir -p "$src"
           git archive HEAD | tar -x -C "$src"
-          (cd "$src" && ./gradlew --no-daemon assembleRelease)
-          unsigned="$src/app/build/outputs/apk/release/app-release-unsigned.apk"
+          (cd "$src" && ./gradlew --no-daemon assembleFdroidRelease)
+          unsigned="$src/app/build/outputs/apk/fdroid/release/app-fdroid-release-unsigned.apk"
           [ -f "$unsigned" ] || { echo "::error::$unsigned not found"; exit 1; }
           pipx install apksigcopier==1.1.1
-          apksigcopier compare "$RUNNER_TEMP/out/pastille-$VERSION_NAME.apk" --unsigned "$unsigned" \
+          apksigcopier compare "$RUNNER_TEMP/out/pastille-$VERSION_NAME-fdroid.apk" --unsigned "$unsigned" \
             || { echo "::error::The signed APK and a clean unsigned rebuild differ: F-Droid would reject this release"; exit 1; }
           echo "Reproducible: a clean rebuild matches the signed APK apart from the signature."
 
@@ -195,7 +212,7 @@ jobs:
           git fetch -q origin main
           {
             echo "### Dry run: $TAG"
-            echo "Would push \`${{ steps.commit.outputs.sha }}\` as tag \`$TAG\`, release \`pastille-$VERSION_NAME.apk\` (prerelease: $PRERELEASE)."
+            echo "Would push \`${{ steps.commit.outputs.sha }}\` as tag \`$TAG\`, release \`pastille-$VERSION_NAME.apk\` and \`pastille-$VERSION_NAME-fdroid.apk\` (prerelease: $PRERELEASE)."
             if [ "$PRERELEASE" = "false" ]; then
               if git merge-base --is-ancestor origin/main HEAD; then echo "main would fast-forward to the bump commit."
               else echo "main has moved: a real run from here would be refused (non-fast-forward)."; fi
@@ -248,7 +265,26 @@ jobs:
           version="${TAG#v}"
           flags=(--verify-tag --title "$TAG" --notes-file "$RUNNER_TEMP/out/notes.md")
           [ "$PRERELEASE" = "false" ] || flags+=(--prerelease)
-          gh release create "$TAG" "$RUNNER_TEMP/out/pastille-$version.apk" "${flags[@]}"
+          out="$RUNNER_TEMP/out"
+          (cd "$out" && sha256sum -c SHA256SUMS)
+          gh release create "$TAG" "$out/pastille-$version.apk" "$out/pastille-$version-fdroid.apk" "$out/SHA256SUMS" "${flags[@]}"
+
+      # The github build's updater installs only an APK whose SHA-256 matches the `digest` GitHub
+      # reports for the asset (docs/adr/0001-in-app-updates.md). Check GitHub reports exactly ours.
+      - name: GitHub reports the APKs' digests
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          out="$RUNNER_TEMP/out"
+          for attempt in 1 2 3 4 5 6; do
+            reported=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '.assets[] | select(.name | endswith(".apk")) | "\(.digest // "none")  \(.name)"' | sed 's/^sha256://' | sort)
+            expected=$(cd "$out" && sha256sum *.apk | sort)
+            [ "$reported" = "$expected" ] && { echo "$reported"; exit 0; }
+            sleep 10
+          done
+          echo "::error::GitHub's asset digests differ from ours: the updater would refuse this release"
+          printf 'reported:\n%s\nexpected:\n%s\n' "$reported" "$expected"
+          exit 1
 
   # Every update of main gets the next vX.Y.Z-dev.N pre-release (Erwann, 2026-10-29), through the
   # same manual path above: once the checks pass, this asks for a run with the tag, which a

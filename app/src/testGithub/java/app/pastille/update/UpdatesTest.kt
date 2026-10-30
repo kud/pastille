@@ -97,8 +97,11 @@ class UpdatesTest {
         assertFalse(accepts(name = null))
     }
 
-    @Test fun `the automatic check is hourly on a test build, daily on a final release`() {
-        assertEquals(CheckSchedule.HOUR_MS, CheckSchedule.intervalFor(v("0.1.6-dev.1")))
+    @Test fun `the automatic check is every 15 minutes on a test build, daily on a final release`() {
+        assertEquals(15 * 60 * 1000L, CheckSchedule.intervalFor(v("0.1.6-dev.1")))
+        // dev.10 published minutes after dev.9 last asked is seen within the quarter hour.
+        assertTrue(CheckSchedule.isDue(0, 15 * 60 * 1000L, CheckSchedule.intervalFor(v("0.1.6-dev.9"))))
+        assertFalse(CheckSchedule.isDue(0, 14 * 60 * 1000L, CheckSchedule.intervalFor(v("0.1.6-dev.9"))))
         assertEquals(CheckSchedule.DAY_MS, CheckSchedule.intervalFor(v("0.1.6")))
         assertTrue(CheckSchedule.isDue(null, 0))
         assertFalse(CheckSchedule.isDue(1000, 2000, CheckSchedule.HOUR_MS))
@@ -110,5 +113,12 @@ class UpdatesTest {
         assertEquals(UpdateCue.NOTICE, UpdateCue.of(v("0.1.5"), v("0.1.6"), null))
         assertEquals(UpdateCue.QUIET, UpdateCue.of(v("0.1.5"), v("0.1.6"), v("0.1.6")))
         assertEquals(UpdateCue.NOTICE, UpdateCue.of(v("0.1.5"), v("0.1.7"), v("0.1.6")))
+    }
+
+    @Test fun `a build announces itself once, the first time it is found`() {
+        assertTrue(UpdateCue.announces(v("0.1.6-dev.10"), null))
+        assertTrue(UpdateCue.announces(v("0.1.6-dev.10"), v("0.1.6-dev.9")))
+        assertFalse(UpdateCue.announces(v("0.1.6-dev.10"), v("0.1.6-dev.10")))
+        assertFalse(UpdateCue.announces(v("0.1.6-dev.10"), v("0.1.6-dev.11")))
     }
 }

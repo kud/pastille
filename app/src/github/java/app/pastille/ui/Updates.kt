@@ -1,6 +1,31 @@
 package app.pastille.ui
 
 import android.content.ActivityNotFoundException
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleStartEffect
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.filterNotNull
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material.icons.Icons
@@ -32,23 +57,67 @@ import app.pastille.update.UpdateState
 import app.pastille.update.Updater
 import kotlinx.coroutines.launch
 
-/** The automatic check, when the list comes up: at most hourly on a test build, daily otherwise. */
+/**
+ * The automatic check, when the list comes up: 3 s after it starts, at most every 15 minutes on a
+ * test build, daily otherwise. A build found for the first time says so once (Erwann, 2026-10-30,
+ * after tutti; copy Iris): "Version X is out" with Install, which opens Settings › About and starts
+ * the download there. Skipped when [canAnnounce] says the list is busy or another message is up;
+ * the ⋮ item carries it after that. Never an install by itself: Android still asks.
+ */
 @Composable
-internal fun UpdatesOnOpen() {
+internal fun UpdatesOnOpen(snackbar: SnackbarHostState, canAnnounce: () -> Boolean, onInstall: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val updater = remember { Updater.forContext(context) }
-    LifecycleResumeEffect(Unit) {
-        scope.launch { updater.checkIfDue() }
-        onPauseOrDispose { }
+    val currentCanAnnounce by rememberUpdatedState(canAnnounce)
+    val currentOnInstall by rememberUpdatedState(onInstall)
+    LifecycleStartEffect(updater) {
+        val job = scope.launch {
+            delay(ANNOUNCE_DELAY_MS)
+            val update = updater.checkIfDue() ?: return@launch
+            if (!currentCanAnnounce() || snackbar.currentSnackbarData != null) return@launch
+            val result = snackbar.showSnackbar(
+                announcement(update.version.toString()),
+                actionLabel = "Install",
+                duration = SnackbarDuration.Long,
+            )
+            if (result == SnackbarResult.ActionPerformed) {
+                updater.ask(Updater.Request.INSTALL)
+                currentOnInstall()
+            }
+        }
+        onStopOrDispose { job.cancel() }
     }
 }
+
+private const val ANNOUNCE_DELAY_MS = 3_000L
+
+/** The once-per-build message (Iris, 2026-10-30). */
+internal fun announcement(version: String): String = "Version $version is out"
+
+/** What the Updates row keeps at its end: a word to tap, the work in progress, or room only. */
+internal sealed interface UpdateSlot {
+    data class Action(val label: String) : UpdateSlot
+    /** [percent] null: indeterminate (asking GitHub, waiting for Android). */
+    data class Busy(val percent: Int?) : UpdateSlot
+    /** Available: Later and Download sit under the subtitle; the slot keeps its width, empty. */
+    data object Reserved : UpdateSlot
+}
+
+/**
+ * The trailing slot's one width (Iris, 2026-10-30), sized to the widest single action, "Allow
+ * installs", so the text column never changes width between states.
+ */
+private val SlotWidth = 112.dp
 
 /**
  * Settings › About › Updates (Iris, 2026-10-30): where the updater stands, in words, with the next
  * step as a word ("Check", "Download", "Install", "Allow installs", "Try again"), never a colour
- * alone. Failures read "what: do this". Below it, the Test builds switch.
+ * alone. Failures read "what: try again". The row keeps one height across states: the subtitle
+ * holds two lines and the trailing slot one width, a spinner while working; only an available build
+ * adds a line of buttons. Below it, the Test builds switch.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun UpdateAboutRow() {
     val context = LocalContext.current
@@ -59,6 +128,8 @@ internal fun UpdateAboutRow() {
     val cue by updater.cue.collectAsStateWithLifecycle()
     val found by updater.found.collectAsStateWithLifecycle()
     val lastCheck by updater.lastCheck.collectAsStateWithLifecycle()
+    val bringIntoView = remember { BringIntoViewRequester() }
+    val focus = remember { FocusRequester() }
 
     // Coming back from "Install unknown apps" with the permission now given: install straight away.
     LifecycleResumeEffect(state) {
@@ -66,6 +137,17 @@ internal fun UpdateAboutRow() {
             if (context.packageManager.canRequestPackageInstalls()) updater.install(it.update)
         }
         onPauseOrDispose { }
+    }
+
+    // Sent here by the list's message or ⋮ item: come into view, take focus so TalkBack lands on
+    // the progress, and on Install start the download. Collected, not keyed, so taking the request
+    // doesn't cancel the download it starts.
+    LaunchedEffect(updater) {
+        updater.request.filterNotNull().collect {
+            bringIntoView.bringIntoView()
+            runCatching { focus.requestFocus() }
+            updater.takeRequest()
+        }
     }
 
     if (!updater.isAvailable) {
@@ -80,22 +162,22 @@ internal fun UpdateAboutRow() {
     }
 
     val checked = lastCheck?.let { " · checked ${relativeTime(it, System.currentTimeMillis()).replaceFirstChar(Char::lowercase)}" }.orEmpty()
-    val (subtitle, action) = when (val s = state) {
+    val (subtitle, slot) = when (val s = state) {
         UpdateState.Idle -> {
             val known = found?.takeIf { it > updater.current }
             when {
                 known != null -> "Version $known is out$checked"
                 lastCheck == null -> "Not checked yet"
                 else -> "Up to date$checked"
-            } to "Check"
+            } to UpdateSlot.Action("Check")
         }
-        UpdateState.Checking -> "Asking GitHub…" to null
-        UpdateState.UpToDate -> "Up to date$checked" to "Check"
-        is UpdateState.Available -> "Version ${s.update.version} is ready" to "Download"
-        is UpdateState.Downloading -> (s.percent?.let { "Downloading ${s.update.version} · $it%" } ?: "Downloading ${s.update.version}…") to null
-        is UpdateState.NeedsPermission -> "Downloaded. Allow Pastille to install apps to finish" to "Allow installs"
-        is UpdateState.Installing -> "Waiting for Android to confirm" to null
-        is UpdateState.Failed -> failureText(s.problem) to "Try again"
+        UpdateState.Checking -> "Asking GitHub…" to UpdateSlot.Busy(null)
+        UpdateState.UpToDate -> "Up to date$checked" to UpdateSlot.Action("Check")
+        is UpdateState.Available -> "Version ${s.update.version} is ready" to UpdateSlot.Reserved
+        is UpdateState.Downloading -> (s.percent?.let { "Downloading ${s.update.version} · $it%" } ?: "Downloading ${s.update.version}…") to UpdateSlot.Busy(s.percent)
+        is UpdateState.NeedsPermission -> "Downloaded: allow installs to finish" to UpdateSlot.Action("Allow installs")
+        is UpdateState.Installing -> "Installing…" to UpdateSlot.Busy(null)
+        is UpdateState.Failed -> failureText(s.problem) to UpdateSlot.Action("Try again")
     }
 
     val onAction: () -> Unit = {
@@ -114,22 +196,15 @@ internal fun UpdateAboutRow() {
             else -> scope.launch { updater.check() }
         }
     }
+    val available = state as? UpdateState.Available
 
     SettingsHairline()
-    SettingsRow(
-        title = "Updates",
+    UpdateRowContent(
         subtitle = subtitle,
-        icon = Icons.Rounded.SystemUpdate,
-        modifier = Modifier.semantics(mergeDescendants = true) {},
-        trailing = {
-            Row {
-                val available = state as? UpdateState.Available
-                if (available != null && cue == UpdateCue.NOTICE) {
-                    TextButton(onClick = { updater.setAside(available.update.version) }) { Text("Later") }
-                }
-                if (action != null) TextButton(onClick = onAction) { Text(action) }
-            }
-        },
+        slot = slot,
+        onAction = onAction,
+        onLater = available?.takeIf { cue == UpdateCue.NOTICE }?.let { { updater.setAside(it.update.version) } },
+        modifier = Modifier.bringIntoViewRequester(bringIntoView).focusRequester(focus).focusable(),
     )
     SettingsHairline()
     val testBuilds = channel == Channel.DEV
@@ -146,13 +221,55 @@ internal fun UpdateAboutRow() {
     )
 }
 
-/** "What: do this", at most 14 words (Iris, 2026-10-30). */
+/** The Updates row itself, stateless, so the renders can show every state. */
+@Composable
+internal fun UpdateRowContent(
+    subtitle: String,
+    slot: UpdateSlot,
+    onAction: () -> Unit,
+    onLater: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier) {
+        SettingsRow(
+            title = "Updates",
+            subtitle = subtitle,
+            subtitleMinLines = 2,
+            icon = Icons.Rounded.SystemUpdate,
+            // TalkBack says "Asking GitHub…", "Up to date", a failure, as they come.
+            modifier = Modifier.semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
+            trailing = {
+                Box(Modifier.width(SlotWidth), contentAlignment = Alignment.Center) {
+                    when (slot) {
+                        is UpdateSlot.Action -> TextButton(onClick = onAction) { Text(slot.label, maxLines = 1) }
+                        is UpdateSlot.Busy -> if (slot.percent != null) {
+                            CircularProgressIndicator(progress = { slot.percent / 100f }, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        } else {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        }
+                        UpdateSlot.Reserved -> Unit
+                    }
+                }
+            },
+        )
+        if (slot == UpdateSlot.Reserved) {
+            SettingsRowDetail(atText = true) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    if (onLater != null) TextButton(onClick = onLater) { Text("Later") }
+                    TextButton(onClick = onAction) { Text("Download") }
+                }
+            }
+        }
+    }
+}
+
+/** "What: try again", two lines at most beside the slot at 360dp (Iris, 2026-10-30). */
 internal fun failureText(problem: UpdateProblem): String = when (problem) {
-    UpdateProblem.NETWORK -> "Couldn't reach GitHub: check the connection and try again"
-    UpdateProblem.FEED -> "GitHub's answer made no sense: try again later"
-    UpdateProblem.DOWNLOAD -> "Download stopped: try again on a steadier connection"
-    UpdateProblem.DIGEST -> "Download didn't match GitHub's checksum, so it was deleted: try again"
-    UpdateProblem.PACKAGE -> "That file isn't a newer Pastille, so it was deleted: try again"
+    UpdateProblem.NETWORK -> "Couldn't reach GitHub: try again"
+    UpdateProblem.FEED -> "GitHub's answer was garbled: try again"
+    UpdateProblem.DOWNLOAD -> "Download stopped: try again"
+    UpdateProblem.DIGEST -> "Checksum didn't match: try again"
+    UpdateProblem.PACKAGE -> "Not a newer Pastille, deleted: try again"
     UpdateProblem.INSTALL -> "Android didn't install it: try again"
 }
 
@@ -175,6 +292,7 @@ internal fun UpdateMenuItem(onOpenSettings: () -> Unit, onDismissMenu: () -> Uni
         colors = MenuDefaults.itemColors(leadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant),
         onClick = {
             onDismissMenu()
+            updater.ask(Updater.Request.REVEAL)
             onOpenSettings()
         },
     )

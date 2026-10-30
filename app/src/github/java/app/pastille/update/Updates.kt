@@ -196,11 +196,19 @@ object Hosts {
 }
 
 object CheckSchedule {
-    const val HOUR_MS = 60L * 60 * 1000
+    const val MINUTE_MS = 60L * 1000
+    const val HOUR_MS = 60 * MINUTE_MS
     const val DAY_MS = 24 * HOUR_MS
 
-    /** A dev build, replaced several times a day, is checked at most hourly; a final release daily. */
-    fun intervalFor(installed: AppVersion): Long = if (installed.isDev) HOUR_MS else DAY_MS
+    /** How often a dev build may ask: 4 requests an hour per app, against GitHub's 60 per IP unauthenticated. */
+    const val DEV_INTERVAL_MS = 15 * MINUTE_MS
+
+    /**
+     * A dev build, replaced several times a day and often minutes after the last one, is checked at
+     * most every 15 minutes (Maya, 2026-10-30; it was hourly, which hid a build published right after
+     * the app last asked); a final release daily.
+     */
+    fun intervalFor(installed: AppVersion): Long = if (installed.isDev) DEV_INTERVAL_MS else DAY_MS
 
     /** The automatic check runs at most once per [intervalMs]; a clock moved backwards counts as due. */
     fun isDue(lastCheckMs: Long?, nowMs: Long, intervalMs: Long = DAY_MS): Boolean =
@@ -221,5 +229,9 @@ enum class UpdateCue {
             setAside != null && found <= setAside -> QUIET
             else -> NOTICE
         }
+
+        /** The once-per-build message: only a build newer than any found before announces itself. */
+        fun announces(found: AppVersion, previouslyFound: AppVersion?): Boolean =
+            previouslyFound == null || found > previouslyFound
     }
 }

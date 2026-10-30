@@ -6,7 +6,11 @@ import androidx.compose.runtime.Composable
 // it. These stand in for the github build's versions in src/github, and draw nothing.
 
 @Composable
-internal fun UpdatesOnOpen() = Unit
+internal fun UpdatesOnOpen(
+    snackbar: androidx.compose.material3.SnackbarHostState,
+    canAnnounce: () -> Boolean,
+    onInstall: () -> Unit,
+) = Unit
 
 @Composable
 internal fun UpdateAboutRow() = Unit

@@ -230,7 +230,6 @@ fun SnippetListScreen(
     var showMenu by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
     val scrollBehavior = rememberListDrivenScrollBehavior()
-    UpdatesOnOpen()
     val binned by remember { repository.observeBin() }
         .collectAsStateWithLifecycle(initialValue = emptyList())
     val binCount = binned.size
@@ -399,6 +398,16 @@ fun SnippetListScreen(
     var reordering by rememberSaveable { mutableStateOf(false) }
     var renamingFolder by remember { mutableStateOf<CategoryRecord?>(null) }
     var deletingFolder by remember { mutableStateOf<CategoryRecord?>(null) }
+    // A newly found build says so once, only on the plain list (Iris, 2026-10-30): never over a
+    // search, a reorder, a sheet or another snackbar; skipped then, the ⋮ item is the way back.
+    UpdatesOnOpen(
+        snackbar = snackbarHostState,
+        canAnnounce = {
+            !searching && !reordering && organisingId == null && !showCreateFolder &&
+                renamingFolder == null && deletingFolder == null && !showMenu
+        },
+        onInstall = onOpenSettings,
+    )
     val orderedFolders = remember(categories) { categories.sortedBy { it.position } }
     LaunchedEffect(loadedCategories) {
         if (isMissingFolder(loadedCategories, selectedTab.takeIf { it >= 0 })) selectedTab = ALL_TAB

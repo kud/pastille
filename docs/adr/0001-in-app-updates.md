@@ -67,6 +67,13 @@ Pastille's copy is now the reference: it generalises tutti's (`UpdateSource`, `C
 `ArchiveCheck`). The next time tutti's updater is touched, port this file back over its
 `protocol/update/Updates.kt` (only the package line differs) and drop its `Flavour` enum.
 
+Since 2026-10-30 the copies also differ in one rule, on purpose until that port: Pastille checks a
+test build at most every 15 minutes (`CheckSchedule.DEV_INTERVAL_MS`), tutti still hourly (Maya).
+Hourly hid a build published minutes after the app last asked (Erwann installed dev.9, dev.10
+came out, nothing showed). 15 minutes is 4 requests an hour per app at most, against GitHub's 60
+an hour per IP unauthenticated, so both apps on one phone stay far below it. The port brings tutti
+to 15 minutes with it. `UpdateCue.announces` came the other way, from tutti, and is identical.
+
 **Revisit** when a third app takes the updater, or the copies drift twice: then extract a small
 `kud/updater` library (needs Erwann's go for the new repository).
 

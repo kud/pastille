@@ -114,6 +114,7 @@ fun SettingsRow(
     destructive: Boolean = false,
     enabled: Boolean = true,
     unavailable: String? = null,
+    subtitleMinLines: Int = 1,
     trailing: (@Composable RowScope.() -> Unit)? = null,
 ) {
     // Disabled with a reason (Iris, 2026-10-28): the title and subtitle dim, the reason never does,
@@ -148,6 +149,7 @@ fun SettingsRow(
                     text = subtitle,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha),
+                    minLines = subtitleMinLines,
                 )
             }
             if (unavailable != null) {

@@ -42,8 +42,8 @@ sealed interface UpdateState {
 
 /**
  * The github build's updater (docs/adr/0001-in-app-updates.md). Asks GitHub's releases API on a
- * tap, and when the app opens at most hourly (dev build) or daily (final release); downloads only
- * on a tap, only from GitHub's hosts; installs only a file whose SHA-256 matches GitHub's digest
+ * tap, and when the app opens at most every 15 minutes (dev build) or daily (final release);
+ * downloads only on a tap, only from GitHub's hosts; installs only a file whose SHA-256 matches GitHub's digest
  * and that is a newer build of this very app, through PackageInstaller, which asks for
  * confirmation. It sends nothing but the request itself: no snippet, no clipboard, no identifier.
  */
@@ -84,10 +84,41 @@ class Updater private constructor(private val context: Context) {
         refreshCue()
     }
 
-    /** The automatic check, when the app opens. */
-    suspend fun checkIfDue() {
-        if (!isAvailable) return
-        if (CheckSchedule.isDue(_lastCheck.value, System.currentTimeMillis(), CheckSchedule.intervalFor(current))) check()
+    /**
+     * The automatic check, when the list comes up: at most every 15 minutes on a dev build, daily
+     * otherwise ([CheckSchedule.intervalFor]). Returns a newer build only the first time it is found
+     * ([UpdateCue.announces]), so its message shows once; after that the ⋮ item carries it.
+     */
+    suspend fun checkIfDue(): Update? {
+        if (!isAvailable) return null
+        if (!CheckSchedule.isDue(_lastCheck.value, System.currentTimeMillis(), CheckSchedule.intervalFor(current))) return null
+        val before = _found.value
+        val update = check() ?: return null
+        return update.takeIf { UpdateCue.announces(it.version, before) }
+    }
+
+    /** What Settings › About should do when it next shows: just come into view, or also install. */
+    enum class Request { REVEAL, INSTALL }
+
+    private val _request = MutableStateFlow<Request?>(null)
+    val request: StateFlow<Request?> = _request.asStateFlow()
+
+    /** Asked from the list (the message's Install, the ⋮ item); Settings › About takes it up. */
+    fun ask(request: Request) {
+        _request.value = request
+    }
+
+    /** About's side: takes the pending request; an Install downloads the known build, or asks GitHub for it first. */
+    suspend fun takeRequest() {
+        val request = _request.value ?: return
+        _request.value = null
+        if (request != Request.INSTALL) return
+        val update = when (val now = _state.value) {
+            is UpdateState.Available -> now.update
+            UpdateState.Idle, UpdateState.UpToDate, is UpdateState.Failed -> check()
+            else -> null
+        }
+        update?.let { downloadAndInstall(it) }
     }
 
     /** Asks GitHub now. Leaves a download or install in progress alone. */

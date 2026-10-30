@@ -634,18 +634,18 @@ fun SnippetListScreen(
                         onClick = ::pickStickers,
                         icon = { Icon(Icons.Rounded.Add, contentDescription = null) },
                         text = { Text("Add stickers") },
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                        containerColor = MaterialTheme.colorScheme.inverseSurface,
+                        contentColor = MaterialTheme.colorScheme.inverseOnSurface,
                         elevation = FloatingActionButtonDefaults.loweredElevation(),
                     )
                 } else if (!reordering) {
-                    // Sacha: an extended "+ New snippet", light tonal fill with dark text.
+                    // Sacha's extended "+ New snippet", in ink rather than colour (spec §25).
                     ExtendedFloatingActionButton(
                         onClick = { onCreate(selectedFolderId) },
                         icon = { Icon(Icons.Rounded.Add, contentDescription = null) },
                         text = { Text("New snippet") },
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                        containerColor = MaterialTheme.colorScheme.inverseSurface,
+                        contentColor = MaterialTheme.colorScheme.inverseOnSurface,
                         elevation = FloatingActionButtonDefaults.loweredElevation(),
                     )
                 }

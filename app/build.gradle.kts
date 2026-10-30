@@ -35,6 +35,20 @@ android {
         }
     }
 
+    // Two builds from one codebase (docs/adr/0001-in-app-updates.md). Same applicationId and key for
+    // both, so a phone moves between them in place. `github` is what GitHub Releases carry: it adds
+    // INTERNET and REQUEST_INSTALL_PACKAGES for the in-app updater, which talks only to GitHub.
+    // `fdroid` is Pastille as it always was, with no network at all; checkNoNetwork* enforces it.
+    flavorDimensions += "distribution"
+    productFlavors {
+        create("github") {
+            dimension = "distribution"
+        }
+        create("fdroid") {
+            dimension = "distribution"
+        }
+    }
+
     buildTypes {
         // Installs beside the release build: a different signing key can never update it in place.
         debug {
@@ -100,6 +114,55 @@ android {
     sourceSets {
         // MigrationTestHelper reads the exported Room schemas as assets.
         getByName("debug").assets.srcDir("$projectDir/schemas")
+    }
+}
+
+// The fdroid build must never be able to reach the network, whatever a library's manifest adds:
+// every variant's merged manifest is read after the build merges it, and an fdroid one asking for a
+// network or install permission fails the build. The github variants must ask for INTERNET, which
+// proves the check reads the right file (a check that cannot fail is not a check).
+androidComponents {
+    onVariants { variant ->
+        val name = variant.name.replaceFirstChar { it.uppercase() }
+        val check = tasks.register<NoNetworkCheck>("checkNoNetwork$name") {
+            manifest.set(variant.artifacts.get(com.android.build.api.artifact.SingleArtifact.MERGED_MANIFEST))
+            offline.set(variant.flavorName == "fdroid")
+        }
+        afterEvaluate {
+            tasks.named("assemble$name") { dependsOn(check) }
+            tasks.findByName("lint$name")?.dependsOn(check)
+        }
+    }
+}
+
+abstract class NoNetworkCheck : DefaultTask() {
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.NONE)
+    abstract val manifest: RegularFileProperty
+
+    @get:Input
+    abstract val offline: Property<Boolean>
+
+    @TaskAction
+    fun check() {
+        val text = manifest.get().asFile.readText()
+        val asked = Regex("""<uses-permission[^>]*android:name="([^"]+)"""").findAll(text).map { it.groupValues[1] }.toSet()
+        if (offline.get()) {
+            val forbidden = asked.filter { it in NETWORK_PERMISSIONS }
+            check(forbidden.isEmpty()) { "The fdroid build must not ask for $forbidden (${manifest.get().asFile})" }
+        } else {
+            check("android.permission.INTERNET" in asked) { "The github build lost INTERNET: the updater can't work (${manifest.get().asFile})" }
+        }
+    }
+
+    private companion object {
+        val NETWORK_PERMISSIONS = setOf(
+            "android.permission.INTERNET",
+            "android.permission.ACCESS_NETWORK_STATE",
+            "android.permission.ACCESS_WIFI_STATE",
+            "android.permission.CHANGE_NETWORK_STATE",
+            "android.permission.REQUEST_INSTALL_PACKAGES",
+        )
     }
 }
 

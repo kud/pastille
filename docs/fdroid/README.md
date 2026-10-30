@@ -4,7 +4,7 @@
 
 ## How it publishes
 
-F-Droid builds each tag from source and compares the result with the APK the release workflow attaches to the GitHub release (`Binaries`). When they match apart from the signature, it publishes the GitHub APK, signed with Pastille's own key (`AllowedAPKSigningKeys`, the SHA-256 of the release certificate). One key everywhere: a phone can move between GitHub and F-Droid builds without reinstalling.
+F-Droid builds each tag's `fdroid` flavour from source (no `INTERNET`, no updater; [ADR 0001](../adr/0001-in-app-updates.md)) and compares the result with `pastille-X.Y.Z-fdroid.apk`, which the release workflow attaches to the GitHub release (`Binaries`). The release's plain `pastille-X.Y.Z.apk` is the github flavour, which updates itself; F-Droid never ships it. When they match apart from the signature, it publishes the GitHub APK, signed with Pastille's own key (`AllowedAPKSigningKeys`, the SHA-256 of the release certificate). One key everywhere: a phone can move between GitHub and F-Droid builds without reinstalling.
 
 New releases are picked up from `vX.Y.Z` tags (`UpdateCheckMode`); pre-release tags (`vX.Y.Z-…`) are skipped. The version comes from `versionCode` and `versionName` in `app/build.gradle.kts`.
 
@@ -22,8 +22,8 @@ To check a release by hand, build the tag's unsigned release and compare it with
 
 ```sh
 git checkout vX.Y.Z
-./gradlew clean assembleRelease
-apksigcopier compare pastille-X.Y.Z.apk --unsigned app/build/outputs/apk/release/app-release-unsigned.apk
+./gradlew clean assembleFdroidRelease
+apksigcopier compare pastille-X.Y.Z-fdroid.apk --unsigned app/build/outputs/apk/fdroid/release/app-fdroid-release-unsigned.apk
 ```
 
 `apksigcopier` (from PyPI) needs `apksigner` from the Android build-tools on the `PATH`. Silence means the two match.

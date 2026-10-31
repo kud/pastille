@@ -11,7 +11,12 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
+import android.os.Build
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
@@ -103,16 +108,26 @@ private val PastilleTypography = Typography().let {
 }
 
 /**
- * The brand palette by default: the redesign gives Pastille its own look, so the wallpaper no
- * longer recolours it. `dynamicColor` stays as a parameter for callers that still pass it.
+ * Prototype (proto-android, 2026-10-31): closer to Android's own interface, so the wallpaper's
+ * Material You scheme leads again on Android 12+, as Gboard and the system do. The slate palette
+ * above is the fallback below 12. [colorScheme] lets the renders stand in a scheme Robolectric
+ * cannot read from a wallpaper.
  */
 @Composable
 fun PastilleTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    @Suppress("UNUSED_PARAMETER") dynamicColor: Boolean = false,
+    dynamicColor: Boolean = true,
+    colorScheme: ColorScheme? = null,
     content: @Composable () -> Unit,
 ) {
-    val colors = if (darkTheme) Dark else Light
+    val context = LocalContext.current
+    val colors = when {
+        colorScheme != null -> colorScheme
+        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
+            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+        darkTheme -> Dark
+        else -> Light
+    }
     MaterialTheme(
         colorScheme = colors,
         typography = PastilleTypography,

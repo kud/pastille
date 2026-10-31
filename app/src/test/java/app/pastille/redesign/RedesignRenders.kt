@@ -168,7 +168,7 @@ abstract class RedesignRenders(private val dark: Boolean, private val screen: St
 
     private fun list() {
         seed(); PastilleSettings.forContext(app).appStickersMode = false
-        compose.setContent { PastilleTheme(darkTheme = dark) { SnippetListScreen(repository = repository, onCreate = {}, onEdit = {}, onOpenSettings = {}) } }
+        compose.setContent { PastilleTheme(darkTheme = dark, colorScheme = protoBlueScheme(dark)) { SnippetListScreen(repository = repository, onCreate = {}, onEdit = {}, onOpenSettings = {}) } }
         val wide = compose.activity.resources.configuration.screenWidthDp >= 400
         wait("Running late"); capture(if (wide) "list-wide" else "list")
         if (wide) {
@@ -179,14 +179,14 @@ abstract class RedesignRenders(private val dark: Boolean, private val screen: St
     }
     private fun listMenu() {
         seed(); PastilleSettings.forContext(app).appStickersMode = false
-        compose.setContent { PastilleTheme(darkTheme = dark) { SnippetListScreen(repository = repository, onCreate = {}, onEdit = {}, onOpenSettings = {}) } }
+        compose.setContent { PastilleTheme(darkTheme = dark, colorScheme = protoBlueScheme(dark)) { SnippetListScreen(repository = repository, onCreate = {}, onEdit = {}, onOpenSettings = {}) } }
         wait("Running late")
         compose.onNodeWithContentDescription("More options").performClick()
         wait("Reorder"); captureWindows("list-menu")
     }
     private fun reorder() {
         seed(); PastilleSettings.forContext(app).appStickersMode = false
-        compose.setContent { PastilleTheme(darkTheme = dark) { SnippetListScreen(repository = repository, onCreate = {}, onEdit = {}, onOpenSettings = {}) } }
+        compose.setContent { PastilleTheme(darkTheme = dark, colorScheme = protoBlueScheme(dark)) { SnippetListScreen(repository = repository, onCreate = {}, onEdit = {}, onOpenSettings = {}) } }
         wait("Running late")
         compose.onNodeWithContentDescription("More options").performClick()
         wait("Reorder"); compose.onNodeWithText("Reorder").performClick()
@@ -194,16 +194,16 @@ abstract class RedesignRenders(private val dark: Boolean, private val screen: St
     }
     private fun editor() {
         val ids = seed()
-        compose.setContent { PastilleTheme(darkTheme = dark) { SnippetEditorScreen(snippetId = ids.getValue("Wi-Fi at the cottage"), repository = repository, onDone = {}, onDeleted = {}) } }
+        compose.setContent { PastilleTheme(darkTheme = dark, colorScheme = protoBlueScheme(dark)) { SnippetEditorScreen(snippetId = ids.getValue("Wi-Fi at the cottage"), repository = repository, onDone = {}, onDeleted = {}) } }
         wait("Wi-Fi at the cottage"); capture("editor")
     }
     private fun settings(name: String = "settings") {
-        compose.setContent { PastilleTheme(darkTheme = dark) { SettingsScreen(onBack = {}) } }
+        compose.setContent { PastilleTheme(darkTheme = dark, colorScheme = protoBlueScheme(dark)) { SettingsScreen(onBack = {}) } }
         settle(); capture(name)
         compose.onNodeWithText("Licence").performScrollTo(); settle(); capture("$name-lower")
     }
     private fun settingsHeight(name: String) {
-        compose.setContent { PastilleTheme(darkTheme = dark) { SettingsScreen(onBack = {}) } }
+        compose.setContent { PastilleTheme(darkTheme = dark, colorScheme = protoBlueScheme(dark)) { SettingsScreen(onBack = {}) } }
         settle(); compose.onNodeWithText("Height").performClick(); settle(); capture(name)
         // The landscape row drives the preview: change it to see the preview turn sideways.
         compose.onAllNodesWithText("Tall")[1].performClick(); settle(); capture("$name-landscape")
@@ -244,7 +244,7 @@ abstract class RedesignRenders(private val dark: Boolean, private val screen: St
         // java/nio/FloatBuffer"): run here, the JNI class table is set up from a thread that can load it.
         stickers.indices.forEach { ImageStore.forContext(app).loadThumbnail("sticker-$it.png", 512) }
         PastilleSettings.forContext(app).appStickersMode = true
-        compose.setContent { PastilleTheme(darkTheme = dark) { SnippetListScreen(repository = repository, onCreate = {}, onEdit = {}, onOpenSettings = {}) } }
+        compose.setContent { PastilleTheme(darkTheme = dark, colorScheme = protoBlueScheme(dark)) { SnippetListScreen(repository = repository, onCreate = {}, onEdit = {}, onOpenSettings = {}) } }
         repeat(4) { settle() }; capture("stickers")
     }
     private fun keyboard(clipboard: Boolean = false, settingsPanel: Boolean = false, host: Boolean = false) {
@@ -275,7 +275,7 @@ abstract class RedesignRenders(private val dark: Boolean, private val screen: St
             stickersEnabled = !settingsPanel,
         )
         compose.setContent {
-            PastilleTheme(darkTheme = dark) {
+            PastilleTheme(darkTheme = dark, colorScheme = protoBlueScheme(dark)) {
                 val palette = keyboardPalette(compose.activity, KeyboardStyle.Auto, dark)
                 if (host) {
                     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
@@ -322,7 +322,7 @@ abstract class RedesignRenders(private val dark: Boolean, private val screen: St
         )
         val folders = listOf("Work", "Travel", "Replies").mapIndexed { i, n -> CategoryRecord(id = i + 1L, name = n) }
         compose.setContent {
-            PastilleTheme(darkTheme = dark) {
+            PastilleTheme(darkTheme = dark, colorScheme = protoBlueScheme(dark)) {
                 androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color(0xFF7A8794)))
                 ShareSheet(state, folders, {}, {}, {}, {}, {}, {})
             }
@@ -331,12 +331,12 @@ abstract class RedesignRenders(private val dark: Boolean, private val screen: St
     }
     private fun qr() {
         val code = SnippetQr.encode("Network: Cottage-Guest · Password: blue-heron-42")!!
-        compose.setContent { PastilleTheme(darkTheme = dark) { QrScreen(title = "Wi-Fi at the cottage", code = code, onClose = {}) } }
+        compose.setContent { PastilleTheme(darkTheme = dark, colorScheme = protoBlueScheme(dark)) { QrScreen(title = "Wi-Fi at the cottage", code = code, onClose = {}) } }
         wait("Wi-Fi at the cottage"); capture("qr")
     }
     private fun importOne() {
         compose.setContent {
-            PastilleTheme(darkTheme = dark) {
+            PastilleTheme(darkTheme = dark, colorScheme = protoBlueScheme(dark)) {
                 androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize().background(androidx.compose.material3.MaterialTheme.colorScheme.surface))
                 AddOneDialog(
                     phrase = itemPhrase("Wi-Fi at the cottage", "", false, false),
@@ -349,7 +349,7 @@ abstract class RedesignRenders(private val dark: Boolean, private val screen: St
     }
     private fun importBackup() {
         compose.setContent {
-            PastilleTheme(darkTheme = dark) {
+            PastilleTheme(darkTheme = dark, colorScheme = protoBlueScheme(dark)) {
                 androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize().background(androidx.compose.material3.MaterialTheme.colorScheme.surface))
                 ImportConfirmDialog(counts = BackupArchive.Counts(24, 3, 6), onImport = {}, onCancel = {})
             }

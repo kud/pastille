@@ -37,7 +37,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
-private val GroupShape = RoundedCornerShape(20.dp)
+private val GroupShape = RoundedCornerShape(28.dp)
 private val SideMargin = 16.dp
 private val TileSize = 36.dp
 private val TileIconSize = 24.dp

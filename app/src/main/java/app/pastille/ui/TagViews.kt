@@ -1,6 +1,5 @@
 package app.pastille.ui
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -59,7 +58,7 @@ import app.pastille.model.splitTagInput
 import app.pastille.model.tagSuggestions
 
 private val PillHeight = 18.dp
-private val PillShape = RoundedCornerShape(6.dp)
+private val PillShape = RoundedCornerShape(50)
 
 /** A row's folder, shown in "All": filled, the same colours as the selected filter pill. */
 @Composable
@@ -92,9 +91,9 @@ fun FolderPill(name: String) {
 fun TagPill(label: String) {
     Surface(
         shape = PillShape,
-        color = Color.Transparent,
+        // Prototype: a tonal fill instead of an outline.
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
         contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Row(modifier = Modifier.height(PillHeight).padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(text = label, style = MaterialTheme.typography.labelSmall, maxLines = 1)

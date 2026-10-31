@@ -646,18 +646,20 @@ fun SnippetListScreen(
                         onClick = ::pickStickers,
                         icon = { Icon(Icons.Rounded.Add, contentDescription = null) },
                         text = { Text("Add stickers") },
-                        containerColor = MaterialTheme.colorScheme.inverseSurface,
-                        contentColor = MaterialTheme.colorScheme.inverseOnSurface,
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        shape = CircleShape,
                         elevation = FloatingActionButtonDefaults.loweredElevation(),
                     )
                 } else if (!reordering) {
-                    // Sacha's extended "+ New snippet", in ink rather than colour (spec §25).
+                    // Prototype: the one strong thing as a tonal pill (primaryContainer), as Android draws it.
                     ExtendedFloatingActionButton(
                         onClick = { onCreate(selectedFolderId) },
                         icon = { Icon(Icons.Rounded.Add, contentDescription = null) },
                         text = { Text("New snippet") },
-                        containerColor = MaterialTheme.colorScheme.inverseSurface,
-                        contentColor = MaterialTheme.colorScheme.inverseOnSurface,
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        shape = CircleShape,
                         elevation = FloatingActionButtonDefaults.loweredElevation(),
                     )
                 }
@@ -973,7 +975,7 @@ internal fun SnippetRow(
     folders: List<CategoryRecord> = emptyList(),
     onMove: ((Long?) -> Unit)? = null,
     containerColor: Color = MaterialTheme.colorScheme.surfaceContainer,
-    shape: Shape = RoundedCornerShape(16.dp),
+    shape: Shape = RoundedCornerShape(24.dp),
 ) {
     val context = LocalContext.current
     val rowScope = rememberCoroutineScope()
@@ -1512,12 +1514,13 @@ private fun ModeSwitch(stickers: Boolean, enabled: Boolean, onSelect: (Boolean) 
                 enabled = enabled,
                 shape = SegmentedButtonDefaults.itemShape(index, 2),
                 colors = SegmentedButtonDefaults.colors(
-                    activeContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                    activeContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    activeBorderColor = MaterialTheme.colorScheme.outline,
-                    inactiveContainerColor = Color.Transparent,
-                    inactiveContentColor = MaterialTheme.colorScheme.onSurface,
-                    inactiveBorderColor = MaterialTheme.colorScheme.outline,
+                    // Prototype: tonal halves, no outline, as Android's own toggles.
+                    activeContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    activeContentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                    activeBorderColor = Color.Transparent,
+                    inactiveContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    inactiveContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    inactiveBorderColor = Color.Transparent,
                 ),
                 modifier = Modifier.heightIn(min = 48.dp),
                 // The keyboard tab's glyph; the selected half swaps it for the check, as in the share sheet.

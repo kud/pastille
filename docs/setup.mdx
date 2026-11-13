@@ -1,0 +1,43 @@
+---
+title: 🚀 Setup
+description: How to turn Pastille on as a keyboard, grant photo access and add the Quick Settings tile.
+---
+
+## The setup card
+
+Open the Pastille app. Until everything is in place, the top of the list shows a **Set up Pastille** card with one row per missing step:
+
+- **Turn on Pastille in your keyboards** with an **Enable** button, which opens Android's on-screen keyboard settings. Switch Pastille on there.
+- **Allow photos, so your images show in the keyboard** with an **Allow** button, which shows the system photo prompt.
+
+The photo row is asked once. Declining, or choosing "Select photos", counts as an answer, and from then on the place to change it is **Settings › Photos › Photo access**. Until Pastille is an enabled keyboard, the app's overflow menu also has a **Keyboard setup** entry.
+
+## Turning the keyboard on by hand
+
+1. Open Android's settings, then **System › Keyboard › On-screen keyboard** (the exact path varies by phone).
+2. Switch **Pastille** on.
+3. In any text field, open the keyboard switcher and pick Pastille.
+
+Pastille is a keyboard for pasting only: the keyboard button in its toolbar takes you back to the keyboard you type with.
+
+## Photo access
+
+Photo access is optional. It is only used by the **Images** tab, which shows recent images from the folders you choose. On Android 13 and later Pastille asks for `READ_MEDIA_IMAGES`; on earlier versions, `READ_EXTERNAL_STORAGE`.
+
+If you grant access to selected photos only, the keyboard can't see your latest screenshot; **Settings › Photos › Photo access** says so and offers to allow all. Once access has been granted or refused, tapping that row opens Pastille's page in Android's app settings, since the system may not show the prompt again.
+
+## Matching your usual keyboard
+
+The first time the keyboard opens, before a style has been chosen, it shows **Match your keyboard**: pick the look closest to the keyboard you normally use (Gboard dark, light, or Material You on Android 12 and later), or tap **Not now**. You can change it later under **Settings › Keyboard › Style**.
+
+## Quick Settings tile
+
+Pastille also ships a Quick Settings tile, labelled **Pastille**. Edit your Quick Settings panel and drag the tile in.
+
+The tile opens a sheet of your snippets and recent images over whatever app is open, so you can use them without switching keyboards. If the phone is locked, it asks you to unlock first. See [Using the keyboard](/projects/pastille/docs/using-the-keyboard#the-quick-settings-sheet) for what the sheet does.
+
+## Saving from other apps
+
+Pastille appears in Android's share sheet as **Save to Pastille**. Share text, an image or several images to it to keep them as snippets; for images you choose whether they are saved as snippets or as stickers, and Pastille remembers your last choice. Very long text is cut to its first 50,000 characters.
+
+A Pastille backup file opened from a file manager, or shared to Pastille, goes to **Import to Pastille**, which adds what you don't already have.

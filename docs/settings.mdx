@@ -1,0 +1,98 @@
+---
+title: ⚙️ Settings
+description: Every setting in Pastille's app, from keyboard style and height to clipboard clearing, photos, backup and sync.
+---
+
+Open the app's settings from the overflow menu, or from **All settings** in the keyboard's own panel. The settings are grouped as **Keyboard**, **Clipboard**, **Photos**, **Backup** and **About**.
+
+## Keyboard
+
+### Style
+
+Opens a page with a live preview. The choices:
+
+| Style | Notes |
+| --- | --- |
+| **Auto** | Gboard's default for this Android version (the default) |
+| **Match Gboard: Dark** | |
+| **Match Gboard: Light** | |
+| **Match Gboard: Material You** | Your wallpaper's colours; needs Android 12 or later |
+
+### Height
+
+Opens a page with a preview and separate choices for **Portrait** and **Landscape**. The default is **Roomy** for both.
+
+| Height | Portrait | Landscape |
+| --- | --- | --- |
+| **Compact** | 272 dp | 38% of the window |
+| **Standard** | 320 dp | 44% of the window |
+| **Roomy** | 368 dp | 50% of the window |
+| **Tall** | 432 dp | 55% of the window |
+
+In portrait the panel never takes more than half the window, whichever height you choose.
+
+### Show in the keyboard
+
+Four cells, one per tab, any number on: **Clipboard**, **Snippets**, **Stickers** and **Images**. One of Snippets, Stickers and Images always stays on; the last one refuses to go. Turning **Clipboard** off also clears the clips kept in memory.
+
+### Return after a snippet
+
+Switch back to the keyboard you were using once a snippet goes in. On by default.
+
+### Switch back to
+
+Which keyboard Pastille returns to after a snippet or image goes in:
+
+- **Previous keyboard**: whichever you used before Pastille.
+- Any other enabled keyboard, typing keyboards alphabetically and voice input last. Under a keyboard with two or more languages, you can pick "Whichever language it had last" or one language.
+- Installed keyboards that aren't enabled are listed as **Not enabled**, with an **Enable keyboards** button that opens Android's keyboard settings.
+
+With no choice made, or if the chosen keyboard has since been disabled, Pastille goes to the first typing keyboard.
+
+## Clipboard
+
+### Clear after copying
+
+Clears the clipboard a set time after Pastille copies something: **Off** (the default), **5 s**, **10 s**, **30 s** or **1 min**. It only clears when Pastille can confirm the clipboard still holds its own copy, so something you copied afterwards is never wiped.
+
+## Photos
+
+### Photo access
+
+Shows where access stands and opens the one place that changes it: the system prompt if it hasn't been answered (or only some photos are allowed), otherwise Pastille's page in Android's app settings. When the Images tab is hidden, the row says access is only used by that tab.
+
+### Return after an image
+
+Switch back to your usual keyboard once an image goes in. Off by default, so you can paste several images in a row.
+
+### Image folders
+
+Which folders the Images tab shows is chosen from the keyboard: gear, then **Image folders**.
+
+## Backup
+
+Everything here goes through Android's file picker or share sheet, so you choose where every file goes. Backups are zip files, suggested as `pastille-backup.zip`, holding snippets, stickers and images.
+
+### Sync automatically
+
+Turning it on asks you to choose a folder, or, where the storage app offers no folders, an existing file or a new one. Pastille then reads that file and updates it after every change, so two phones that choose the same file keep the same collection. In a folder, it merges with the file it finds there by name, or creates it.
+
+Once syncing is on, three more rows appear:
+
+- **Sync now**: syncs immediately.
+- **Restore from the synced file**: adds what isn't already in Pastille.
+- **Change where it syncs**: another file or folder, or fix access to this one. This is also where a problem that needs a new choice shows up, such as Pastille losing access to the file.
+
+Turning the switch off forgets the file and leaves the file itself alone.
+
+### Import, export and share
+
+- **Import a backup**: adds what isn't already in Pastille. Older JSON exports still import.
+- **Export a backup**: writes a backup file wherever you choose.
+- **Share a backup**: sends one through Android's share sheet.
+
+Pastille opts out of Android's cloud backup. A device-to-device transfer to a new phone, by cable or over Wi-Fi, still brings your snippets, stickers, images and settings across.
+
+## About
+
+The app version (tap to copy it), the source code link, the licence (GPL-3.0-or-later), third-party notices and, after a crash, the last crash report to copy into a bug report. The GitHub build also has its update check here; the F-Droid build has none.

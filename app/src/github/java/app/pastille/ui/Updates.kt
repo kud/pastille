@@ -48,6 +48,13 @@ import app.pastille.update.UpdateProblem
 import app.pastille.update.UpdateState
 import app.pastille.update.Updater
 import kotlinx.coroutines.launch
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.material.icons.automirrored.rounded.OpenInNew
+import app.pastille.update.PastilleSource
 
 /**
  * The automatic check, when the list comes up: 3 s after it starts, at most every 15 minutes on a
@@ -154,6 +161,7 @@ internal fun UpdateAboutRow() {
         is UpdateState.Installing -> "Installing…" to UpdateSlot.Busy(null)
         is UpdateState.Failed -> failureText(s.problem) to UpdateSlot.Action("Try again")
     }
+    val failed = state as? UpdateState.Failed
 
     val onAction: () -> Unit = {
         when (val s = state) {
@@ -179,6 +187,7 @@ internal fun UpdateAboutRow() {
         slot = slot,
         onAction = onAction,
         onLater = available?.takeIf { cue == UpdateCue.NOTICE }?.let { { updater.setAside(it.update.version) } },
+        onReleases = failed?.takeIf { it.problem.offersReleasesPage }?.let { { openReleasesPage(context) } },
     )
     SettingsHairline()
     val testBuilds = channel == Channel.DEV
@@ -203,6 +212,7 @@ internal fun UpdateRowContent(
     onAction: () -> Unit,
     onLater: (() -> Unit)?,
     modifier: Modifier = Modifier,
+    onReleases: (() -> Unit)? = null,
 ) {
     Column(modifier) {
         SettingsRow(
@@ -234,12 +244,23 @@ internal fun UpdateRowContent(
                 }
             }
         }
+        // A check GitHub didn't answer: the releases page, to look and download by hand (Erwann,
+        // 2026-11-15), marked as leaving the app like the Source code row.
+        if (onReleases != null) {
+            SettingsRowDetail(atText = true) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    ReleasesButton(onReleases)
+                }
+            }
+        }
     }
 }
 
 /** "What: try again", two lines at most beside the slot at 360dp (Iris, 2026-10-30). */
 internal fun failureText(problem: UpdateProblem): String = when (problem) {
     UpdateProblem.NETWORK -> "Couldn't reach GitHub: try again"
+    UpdateProblem.RATE_LIMITED -> "GitHub asks to wait: try again later"
+    UpdateProblem.GITHUB_ERROR -> "GitHub answered with an error: try again later"
     UpdateProblem.FEED -> "GitHub's answer was garbled: try again"
     UpdateProblem.DOWNLOAD -> "Download stopped: try again"
     UpdateProblem.DIGEST -> "Checksum didn't match: try again"
@@ -270,4 +291,23 @@ internal fun UpdateMenuItem(onOpenUpdate: () -> Unit, onDismissMenu: () -> Unit)
             onOpenUpdate()
         },
     )
+}
+
+/** "See releases on GitHub" with the open-in-browser mark: the way out of a failed check. */
+@Composable
+internal fun ReleasesButton(onClick: () -> Unit) {
+    TextButton(onClick = onClick) {
+        Text("See releases on GitHub", maxLines = 1)
+        Spacer(Modifier.width(8.dp))
+        Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp))
+    }
+}
+
+/** The releases page in the browser; the app itself fetches nothing more. */
+internal fun openReleasesPage(context: Context) {
+    try {
+        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(PastilleSource.releasesPage)))
+    } catch (_: ActivityNotFoundException) {
+        Toast.makeText(context, "No app here can open links", Toast.LENGTH_SHORT).show()
+    }
 }

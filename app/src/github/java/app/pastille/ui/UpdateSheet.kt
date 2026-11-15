@@ -89,6 +89,7 @@ internal fun UpdateNowSheet(onDismiss: () -> Unit) {
             state = state,
             canUpdate = updater.isAvailable,
             onInstall = updater::startInstall,
+            onReleases = { openReleasesPage(context) },
             onLater = { update ->
                 updater.setAside(update.version)
                 close()
@@ -121,6 +122,7 @@ internal fun UpdateSheetContent(
     onAllow: (app.pastille.update.Update) -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
+    onReleases: () -> Unit = {},
 ) {
     val status = if (canUpdate) sheetStatus(state) else "The debug build doesn't update itself"
     val spoken = if (canUpdate) spokenStatus(state) else status
@@ -179,6 +181,9 @@ internal fun UpdateSheetContent(
             maxLines = 2,
         )
         Spacer(Modifier.height(16.dp))
+        if (canUpdate && state is UpdateState.Failed && state.problem.offersReleasesPage) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { ReleasesButton(onReleases) }
+        }
         Row(
             Modifier.fillMaxWidth().heightIn(min = 48.dp),
             horizontalArrangement = Arrangement.SpaceBetween,

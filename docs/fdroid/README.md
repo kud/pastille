@@ -8,7 +8,20 @@ F-Droid builds each tag's `fdroid` flavour from source (no `INTERNET`, no update
 
 New releases are picked up from `vX.Y.Z` tags (`UpdateCheckMode`); pre-release tags (`vX.Y.Z-…`) are skipped. The version comes from `versionCode` and `versionName` in `app/build.gradle.kts`.
 
-The release workflow (`docs/RELEASING.md`) keeps this copy in sync: each final release adds its build (`commit: vX.Y.Z`, since the bump commit cannot hold its own hash) and moves `CurrentVersion` and `CurrentVersionCode`. Once the app is in fdroiddata, its own `AutoUpdateMode: Version` does the same there from the tag, so nobody edits fdroiddata per release; this copy is then a mirror, worth keeping for review and for the first submission.
+The release workflow (`docs/RELEASING.md`) keeps this copy in sync: each final release replaces the build with its own (`commit: vX.Y.Z`, since the bump commit cannot hold its own hash) and moves `CurrentVersion` and `CurrentVersionCode`. Once the app is in fdroiddata, its own `AutoUpdateMode: Version` adds each new tag's build there, so nobody edits fdroiddata per release; this copy is then a mirror, worth keeping for review and for the first submission.
+
+## Submitting to fdroiddata
+
+The 0.1.5 build in this copy cannot be built: `v0.1.5` predates the two flavours, so it has no `fdroid` flavour to assemble and its release has no `pastille-0.1.5-fdroid.apk` for `Binaries`. The first version F-Droid can take is the next final release, 0.1.6 (`versionCode` 17, whose changelog is already written); its bump replaces the 0.1.5 build here.
+
+fdroiddata's merge request template asks for the full commit hash rather than a tag, only the latest build, and no disabled builds. Once `vX.Y.Z` is released, print the recipe as fdroiddata wants it:
+
+```sh
+git fetch --tags
+./scripts/fdroid-recipe.sh vX.Y.Z > ../fdroiddata/metadata/app.beansontoast.pastille.yml
+```
+
+It refuses a tag whose recipe holds anything but that one build. The merge request itself must follow fdroiddata's template (`.gitlab/merge_request_templates/Default.md`) section by section, ticked: a first attempt (fdroiddata!51195, October 2026) was closed for not following it. The template asks to pay special attention to the inclusion policy's quality point 6, three months of active development, which Pastille reaches on 2027-01-04 (first commit 2026-10-04).
 
 ## Keeping the build reproducible
 

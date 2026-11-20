@@ -19,7 +19,7 @@ Before running it, commit `fastlane/metadata/android/en-US/changelogs/<code>.txt
 The run then:
 
 1. Refuses unless the tag is new, `X.Y.Z` is above the current `versionName`, and the changelog is there and short enough (`.github/scripts/release-version.sh`).
-2. Bumps `versionName` to X.Y.Z and `versionCode` by one in `app/build.gradle.kts`, adds the build to `docs/fdroid/app.beansontoast.pastille.yml` and moves its `CurrentVersion*`, and commits `🏷️ release(pastille): bump version to X.Y.Z` as Erwann Mest.
+2. Bumps `versionName` to X.Y.Z and `versionCode` by one in `app/build.gradle.kts`, replaces the build in `docs/fdroid/app.beansontoast.pastille.yml` with this one and moves its `CurrentVersion*`, and commits `🏷️ release(pastille): bump version to X.Y.Z` as Erwann Mest.
 3. Builds the signed release. The keystore is written for that one step and removed after it.
 4. Checks both APKs carry Pastille's certificate (the recipe's `AllowedAPKSigningKeys`) and the new version, that the fdroid one asks for no network and the github one does.
 5. Proves it reproducible: rebuilds the unsigned release from a `git archive` of the bump commit in another directory, without `.git`, and runs `apksigcopier compare` against the signed APK. Any difference fails the release, since F-Droid would reject it.

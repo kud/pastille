@@ -53,7 +53,8 @@ echo "VERSION_CODE=$next_code"
 echo "CHANGELOG=$changelog"
 [ "$mode" = bump ] || exit 0
 
-# The recipe's new build points at the tag: the bump commit cannot hold its own hash.
+# The recipe's new build replaces the last one and points at the tag: the bump commit cannot hold
+# its own hash. scripts/fdroid-recipe.sh swaps in the full hash for fdroiddata, which asks for one.
 python3 - "$recipe" "$version" "$next_code" <<'PY'
 import re, sys
 path, name, code = sys.argv[1], sys.argv[2], sys.argv[3]
@@ -68,7 +69,9 @@ if re.search(rf"(?m)^    versionCode: {code}$", builds.group(1)):
 entry = re.sub(r"(?m)^(  - versionName: ).*$", rf"\g<1>{name}", last)
 entry = re.sub(r"(?m)^(    versionCode: ).*$", rf"\g<1>{code}", entry)
 entry = re.sub(r"(?m)^(    commit: ).*$", rf"\g<1>v{name}", entry)
-text = text[: builds.end()].rstrip("\n") + "\n\n" + entry + "\n" + text[builds.end():].lstrip("\n")
+# fdroiddata keeps only the latest build in a new app's recipe, and once the app is in, its own
+# AutoUpdateMode adds builds there; this copy carries the one build being released.
+text = text[: builds.start(1)] + entry + "\n" + text[builds.end():].lstrip("\n")
 for key, value in (("CurrentVersion", name), ("CurrentVersionCode", code)):
     text, n = re.subn(rf"(?m)^{key}: .*$", f"{key}: {value}", text)
     if n != 1:

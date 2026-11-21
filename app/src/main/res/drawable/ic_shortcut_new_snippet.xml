@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The "New snippet" app shortcut: the launcher's cream and ink, with the same rounded plus as the
+     list's "+ New snippet" button (Icons.Rounded.Add), sized inside the adaptive icon's safe zone. -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/ic_launcher_front" />
+    <foreground android:drawable="@drawable/ic_shortcut_new_snippet_foreground" />
+</adaptive-icon>

@@ -58,6 +58,7 @@ class PastilleApplication : Application() {
             previous?.uncaughtException(thread, throwable)
         }
         autoBackup.start()
+        backgroundScope.launch { AppShortcuts.publish(this@PastilleApplication) }
         backgroundScope.launch {
             runCatching { SnippetRepository.forContext(this@PastilleApplication).backfillTitles() }
         }

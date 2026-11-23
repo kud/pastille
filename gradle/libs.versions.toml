@@ -16,6 +16,16 @@ robolectric = "4.14.1"
 androidx-test-core = "1.6.1"
 coroutines-test = "1.8.1"
 reorderable = "2.4.3"
+# Floors for vulnerable libraries that AGP, KSP and Robolectric bring in transitively; see the
+# security-floors bundle below. They never lower a version, and nothing in the APK uses them.
+floor-netty = "4.1.141.Final"
+floor-protobuf = "3.25.9"
+floor-commons-compress = "1.28.0"
+floor-commons-io = "2.22.0"
+floor-bouncycastle = "1.87"
+floor-jose4j = "0.9.7"
+floor-jdom2 = "2.0.6.1"
+floor-guava = "32.0.1-jre"
 
 [libraries]
 compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "compose-bom" }
@@ -43,6 +53,53 @@ robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "
 androidx-test-core = { group = "androidx.test", name = "core", version.ref = "androidx-test-core" }
 coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines-test" }
 reorderable = { group = "sh.calvin.reorderable", name = "reorderable", version.ref = "reorderable" }
+
+floor-netty-buffer = { group = "io.netty", name = "netty-buffer", version.ref = "floor-netty" }
+floor-netty-codec = { group = "io.netty", name = "netty-codec", version.ref = "floor-netty" }
+floor-netty-codec-http = { group = "io.netty", name = "netty-codec-http", version.ref = "floor-netty" }
+floor-netty-codec-http2 = { group = "io.netty", name = "netty-codec-http2", version.ref = "floor-netty" }
+floor-netty-codec-socks = { group = "io.netty", name = "netty-codec-socks", version.ref = "floor-netty" }
+floor-netty-common = { group = "io.netty", name = "netty-common", version.ref = "floor-netty" }
+floor-netty-handler = { group = "io.netty", name = "netty-handler", version.ref = "floor-netty" }
+floor-netty-handler-proxy = { group = "io.netty", name = "netty-handler-proxy", version.ref = "floor-netty" }
+floor-netty-resolver = { group = "io.netty", name = "netty-resolver", version.ref = "floor-netty" }
+floor-netty-transport = { group = "io.netty", name = "netty-transport", version.ref = "floor-netty" }
+floor-netty-transport-native-unix-common = { group = "io.netty", name = "netty-transport-native-unix-common", version.ref = "floor-netty" }
+floor-protobuf-java = { group = "com.google.protobuf", name = "protobuf-java", version.ref = "floor-protobuf" }
+floor-protobuf-java-util = { group = "com.google.protobuf", name = "protobuf-java-util", version.ref = "floor-protobuf" }
+floor-commons-compress = { group = "org.apache.commons", name = "commons-compress", version.ref = "floor-commons-compress" }
+floor-commons-io = { group = "commons-io", name = "commons-io", version.ref = "floor-commons-io" }
+floor-bcprov = { group = "org.bouncycastle", name = "bcprov-jdk18on", version.ref = "floor-bouncycastle" }
+floor-bcpkix = { group = "org.bouncycastle", name = "bcpkix-jdk18on", version.ref = "floor-bouncycastle" }
+floor-bcutil = { group = "org.bouncycastle", name = "bcutil-jdk18on", version.ref = "floor-bouncycastle" }
+floor-jose4j = { group = "org.bitbucket.b_c", name = "jose4j", version.ref = "floor-jose4j" }
+floor-jdom2 = { group = "org.jdom", name = "jdom2", version.ref = "floor-jdom2" }
+floor-guava = { group = "com.google.guava", name = "guava", version.ref = "floor-guava" }
+
+[bundles]
+security-floors = [
+    "floor-netty-buffer",
+    "floor-netty-codec",
+    "floor-netty-codec-http",
+    "floor-netty-codec-http2",
+    "floor-netty-codec-socks",
+    "floor-netty-common",
+    "floor-netty-handler",
+    "floor-netty-handler-proxy",
+    "floor-netty-resolver",
+    "floor-netty-transport",
+    "floor-netty-transport-native-unix-common",
+    "floor-protobuf-java",
+    "floor-protobuf-java-util",
+    "floor-commons-compress",
+    "floor-commons-io",
+    "floor-bcprov",
+    "floor-bcpkix",
+    "floor-bcutil",
+    "floor-jose4j",
+    "floor-jdom2",
+    "floor-guava",
+]
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

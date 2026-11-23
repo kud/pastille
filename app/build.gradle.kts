@@ -170,6 +170,17 @@ ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
 }
 
+// The same floors as the plugin classpath (root build.gradle.kts), for what KSP, Robolectric and
+// AGP's test platform resolve here. A constraint only applies where the library is already in the
+// graph, so the APKs' own classpaths are unchanged.
+configurations.configureEach {
+    if (isCanBeResolved) {
+        libs.bundles.security.floors.get().forEach {
+            dependencyConstraints.add(project.dependencies.constraints.create(it))
+        }
+    }
+}
+
 dependencies {
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)

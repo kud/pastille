@@ -45,6 +45,8 @@ fun Intent?.toLaunchRequest(): LaunchRequest? {
     if (this == null) return null
     if (getBooleanExtra(MainActivity.EXTRA_OPEN_SETTINGS, false)) return LaunchRequest.Settings
     if (getBooleanExtra(MainActivity.EXTRA_ADD_STICKERS, false)) return LaunchRequest.AddStickers
+    // The launcher's "New snippet" shortcut (AppShortcuts.kt) says it with an action, not an extra.
+    if (action == MainActivity.ACTION_NEW_SNIPPET) return LaunchRequest.NewSnippet()
     if (getBooleanExtra(MainActivity.EXTRA_NEW_SNIPPET, false)) {
         val categoryId = if (hasExtra(MainActivity.EXTRA_CATEGORY_ID)) {
             getLongExtra(MainActivity.EXTRA_CATEGORY_ID, -1).takeIf { it >= 0 }
@@ -173,6 +175,7 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_OPEN_SETTINGS = "app.pastille.EXTRA_OPEN_SETTINGS"
         const val EXTRA_FROM_KEYBOARD = "app.pastille.EXTRA_FROM_KEYBOARD"
         const val EXTRA_ADD_STICKERS = "app.pastille.EXTRA_ADD_STICKERS"
+        const val ACTION_NEW_SNIPPET = "app.pastille.action.NEW_SNIPPET"
         val LAUNCH_FLAGS = Intent.FLAG_ACTIVITY_NEW_TASK or
             Intent.FLAG_ACTIVITY_CLEAR_TOP or
             Intent.FLAG_ACTIVITY_SINGLE_TOP
